@@ -80,54 +80,17 @@ chown -R 999:999 "$DATA_MOUNT/postgres"
 mkdir -p "$APP_DIR"
 
 APP_IMAGE="$(meta tomb-image)"
-TOMB_DOMAIN="$(meta tomb-domain)"
-PUBLIC_URL="$(meta tomb-public-url)"
-BNET_REGION="$(meta tomb-bnet-region)"
-BNET_CLIENT_ID="$(meta tomb-bnet-client-id)"
-TOMB_GUILD_NAME="$(meta tomb-guild-name)"
-TOMB_GUILD_REALM="$(meta tomb-guild-realm)"
-ACME_EMAIL="$(meta tomb-acme-email)"
-DB_SECRET="$(meta tomb-db-secret)"
-BNET_SECRET="$(meta tomb-bnet-secret)"
+if [ -z "$APP_IMAGE" ]; then
+  log "ERROR: instance metadata has no tomb-image; cannot start the stack"
+  exit 1
+fi
 
+# Only needed to authenticate the registry pull below. configure.sh mints its
+# own token for Secret Manager.
 TOKEN="$(curl -fsS -H 'Metadata-Flavor: Google' \
   'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token' |
   python3 -c 'import json,sys; print(json.load(sys.stdin)["access_token"])')"
-PROJECT="$(curl -fsS -H 'Metadata-Flavor: Google' \
-  'http://metadata.google.internal/computeMetadata/v1/project/project-id')"
 
-fetch_secret() {
-  curl -fsS -H "Authorization: Bearer $TOKEN" \
-    "https://secretmanager.googleapis.com/v1/projects/$PROJECT/secrets/$1/versions/latest:access" |
-    python3 -c 'import json,sys,base64; print(base64.b64decode(json.load(sys.stdin)["payload"]["data"]).decode(), end="")'
-}
-
-log "fetching secrets"
-DB_PASSWORD="$(fetch_secret "$DB_SECRET")"
-
-# The Battle.net secret is added by hand after the first apply, so no version
-# on the very first boot is expected rather than fatal.
-if ! BNET_CLIENT_SECRET="$(fetch_secret "$BNET_SECRET" 2>/dev/null)"; then
-  log "WARNING: secret $BNET_SECRET has no version yet; sign-in will fail until one is added"
-  BNET_CLIENT_SECRET="unset"
-fi
-
-# This file holds the database password and the client secret.
-umask 077
-{
-  echo "APP_IMAGE=$APP_IMAGE"
-  echo "TOMB_DOMAIN=$TOMB_DOMAIN"
-  echo "PUBLIC_URL=$PUBLIC_URL"
-  echo "ACME_EMAIL=$ACME_EMAIL"
-  echo "BNET_REGION=$BNET_REGION"
-  echo "BNET_CLIENT_ID=$BNET_CLIENT_ID"
-  echo "BNET_CLIENT_SECRET=$BNET_CLIENT_SECRET"
-  echo "TOMB_GUILD_NAME=$TOMB_GUILD_NAME"
-  echo "TOMB_GUILD_REALM=$TOMB_GUILD_REALM"
-  echo "DB_PASSWORD=$DB_PASSWORD"
-} >"$APP_DIR/.env"
-chmod 600 "$APP_DIR/.env"
-umask 022
 
 # ---------------------------------------------------------------------------
 # Compose project, extracted from the app image so the VM needs no checkout of
@@ -144,18 +107,15 @@ cid="$(docker create "$APP_IMAGE")"
 docker cp "$cid:/deploy/compose.yaml" "$APP_DIR/compose.yaml"
 docker cp "$cid:/deploy/Caddyfile" "$APP_DIR/Caddyfile"
 docker cp "$cid:/deploy/deploy.sh" "$APP_DIR/deploy.sh"
+docker cp "$cid:/deploy/configure.sh" "$APP_DIR/configure.sh"
 docker rm -f "$cid" >/dev/null
-chmod +x "$APP_DIR/deploy.sh"
+chmod +x "$APP_DIR/deploy.sh" "$APP_DIR/configure.sh"
 
-# An `email` directive with no argument is a Caddyfile parse error, so Caddy
-# would crash-loop and nothing would listen on 443. Drop the line when no
-# address is configured; Caddy then registers with ACME anonymously.
-if [ -z "${ACME_EMAIL:-}" ]; then
-  sed -i '/{\$ACME_EMAIL}/d' "$APP_DIR/Caddyfile"
-fi
+# Shared with deploy.sh, so a metadata change takes effect on either path.
+"$APP_DIR/configure.sh" "$APP_IMAGE"
 
 log "starting the stack"
 cd "$APP_DIR"
 docker compose --env-file "$APP_DIR/.env" up -d --remove-orphans
 
-log "done; the site should answer on https://$TOMB_DOMAIN"
+log "done; the site should answer on https://$(meta tomb-domain)"
