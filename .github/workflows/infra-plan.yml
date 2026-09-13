@@ -50,6 +50,43 @@ jobs:
       - name: Init
         run: tofu init -backend-config="bucket=${{ vars.GCP_STATE_BUCKET }}"
 
+      - name: Select the workspace for this pull request's target
+        id: ws
+        # A plan is only worth reading if it is the plan for the environment the
+        # pull request actually changes. A PR into `develop` that showed a
+        # production diff would be worse than no plan at all -- it would invite
+        # someone to approve production changes they are not making.
+        #
+        # `-or-create` so a PR into develop can be planned before that
+        # environment has ever been applied; the workspace is then empty and the
+        # plan correctly reads "create everything".
+        env:
+          BASE: ${{ github.base_ref }}
+          PROD_DOMAIN: ${{ vars.TOMB_DOMAIN }}
+          DEV_DOMAIN: ${{ vars.TOMB_DEVELOP_DOMAIN }}
+        run: |
+          set -euo pipefail
+
+          if [ "$BASE" = "develop" ]; then
+            workspace="develop"; environment="develop"; snapshots="false"
+            domain="${DEV_DOMAIN:-}"
+            if [ -z "$domain" ] && [ -n "$PROD_DOMAIN" ]; then
+              domain="dev.$PROD_DOMAIN"
+            fi
+          else
+            workspace="default"; environment="production"; snapshots="true"
+            domain="$PROD_DOMAIN"
+          fi
+
+          tofu workspace select -or-create "$workspace"
+          echo "planning $environment (workspace $workspace)"
+
+          {
+            echo "environment=$environment"
+            echo "domain=$domain"
+            echo "snapshots=$snapshots"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Validate
         run: tofu validate -no-color
 
@@ -62,7 +99,8 @@ jobs:
             -var="project_id=${{ vars.GCP_PROJECT_ID }}" \
             -var="guild_realm=${{ vars.TOMB_GUILD_REALM }}" \
             -var="bnet_client_id=${{ vars.BNET_CLIENT_ID }}" \
-            -var="domain=${{ vars.TOMB_DOMAIN }}" \
+            -var="domain=${{ steps.ws.outputs.domain }}" \
+            -var="enable_snapshots=${{ steps.ws.outputs.snapshots }}" \
             -var="acme_email=${{ vars.ACME_EMAIL }}" \
             -var="image=${{ vars.GCP_CURRENT_IMAGE || 'gcr.io/google-containers/pause:3.9' }}" \
             > plan.txt 2>&1
@@ -104,6 +142,7 @@ jobs:
         env:
           HAS_CHANGES: ${{ steps.plan.outputs.changes }}
           PLAN_SUMMARY: ${{ steps.plan.outputs.summary }}
+          PLAN_ENVIRONMENT: ${{ steps.ws.outputs.environment }}
         with:
           script: |
             const fs = require('fs');
@@ -120,9 +159,13 @@ jobs:
 
             const changes = process.env.HAS_CHANGES === 'true';
             const summary = process.env.PLAN_SUMMARY || '';
+            // Name the environment in the heading. With two of them, a plan
+            // that does not say which one it is for is a plan nobody can
+            // safely approve.
+            const environment = process.env.PLAN_ENVIRONMENT || 'production';
             const heading = changes
-              ? '### Infrastructure plan — changes to apply'
-              : '### Infrastructure plan — no changes';
+              ? `### Infrastructure plan (${environment}) — changes to apply`
+              : `### Infrastructure plan (${environment}) — no changes`;
 
             const body = [
               heading,

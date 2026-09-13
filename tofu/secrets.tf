@@ -14,7 +14,7 @@
 # ---------------------------------------------------------------------------
 
 resource "google_secret_manager_secret" "bnet_client_secret" {
-  secret_id = "${var.service_name}-bnet-client-secret"
+  secret_id = "${local.name}-bnet-client-secret"
 
   replication {
     auto {}
@@ -46,7 +46,7 @@ resource "random_password" "db" {
 }
 
 resource "google_secret_manager_secret" "db_password" {
-  secret_id = "${var.service_name}-db-password"
+  secret_id = "${local.name}-db-password"
 
   replication {
     auto {}
