@@ -8,3 +8,13 @@ image          = "us-central1-docker.pkg.dev/your-gcp-project-id/tomb/platform:l
 
 # Push images with:
 #   docker tag tomb-platform "$IMAGE" && docker push "$IMAGE"
+
+# --- Sizing (see tofu/README.md for costs) ---
+# Defaults are a moderate production posture: db-custom-1-3840 (1 vCPU,
+# 3.75 GB) and Cloud Run at 2 vCPU / 1 GiB. Uncomment to change.
+# db_tier              = "db-g1-small"   # ~$27/mo instead of ~$52/mo
+# db_disk_size         = 20
+# db_availability_type = "ZONAL"         # REGIONAL roughly doubles DB cost
+# run_cpu              = "2"
+# run_memory           = "1Gi"
+# run_max_instances    = 10

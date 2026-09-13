@@ -10,9 +10,10 @@ resource "google_sql_database_instance" "main" {
 
   settings {
     tier              = var.db_tier
-    availability_type = "ZONAL"
-    disk_size         = 10
+    availability_type = var.db_availability_type
+    disk_size         = var.db_disk_size
     disk_autoresize   = true
+    disk_type         = "PD_SSD"
 
     backup_configuration {
       enabled                        = true
