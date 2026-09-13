@@ -183,6 +183,25 @@ real public DNS pointing at the VM, so Let's Encrypt can validate it. Set
 `tofu output -raw public_ip`; that address is reserved and survives VM
 recreation.
 
+## When you change `tofu/bootstrap`
+
+The bootstrap is applied **by hand**, so editing it changes nothing until you
+re-apply it:
+
+```sh
+cd tofu/bootstrap && tofu plan -out=tfplan && tofu apply tfplan
+```
+
+This bit once already: the VM change added `compute.admin`,
+`compute.osAdminLogin` and `iap.tunnelResourceAccessor` to the deployer, and
+without a re-apply the next deploy failed with a series of `403 ... permission
+... forbidden` errors *partway through* the apply, after it had already
+destroyed a resource.
+
+`deploy.yml` now runs a preflight that checks the deployer holds every
+permission the apply needs and fails early with the command above, rather than
+discovering the gap halfway through.
+
 ## Everyday deploys
 
 Merging to `main` builds and pushes an image tagged with the commit SHA, so the
