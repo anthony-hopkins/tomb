@@ -1,0 +1,24 @@
+{
+  "_links": { "self": { "href": "https://us.api.blizzard.com/profile/wow/character/area-52/maintank" } },
+  "id": 1001,
+  "name": "Maintank",
+  "gender": { "type": "MALE", "name": "Male" },
+  "faction": { "type": "ALLIANCE", "name": "Alliance" },
+  "race": { "id": 3, "name": "Dwarf" },
+  "character_class": { "id": 1, "name": "Warrior" },
+  "active_spec": { "id": 73, "name": "Protection" },
+  "realm": { "id": 3676, "slug": "area-52", "name": "Area 52" },
+  "guild": {
+    "key": { "href": "https://us.api.blizzard.com/data/wow/guild/area-52/tomb" },
+    "name": "TOMB",
+    "id": 55555,
+    "realm": { "id": 3676, "slug": "area-52", "name": "Area 52" },
+    "faction": { "type": "ALLIANCE", "name": "Alliance" }
+  },
+  "level": 80,
+  "experience": 0,
+  "achievement_points": 14230,
+  "last_login_timestamp": 1789000000000,
+  "average_item_level": 631,
+  "equipped_item_level": 628
+}

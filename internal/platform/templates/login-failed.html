@@ -1,0 +1,10 @@
+{{define "content"}}
+<section class="panel">
+  <h1>Sign-in not completed</h1>
+  <p>{{.Message}}</p>
+  <form method="post" action="/auth/login">
+    <button class="primary" type="submit">Try signing in again</button>
+  </form>
+  <p class="fineprint"><a href="/">Back to the landing page</a></p>
+</section>
+{{end}}

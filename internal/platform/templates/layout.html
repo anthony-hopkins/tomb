@@ -1,0 +1,38 @@
+{{define "layout"}}<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{if .Title}}{{.Title}} · TOMB{{else}}TOMB{{end}}</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="/">TOMB</a>
+    {{if .Nav}}
+    <nav aria-label="Apps">
+      <ul>
+        {{range .Nav}}<li><a href="{{.Href}}">{{.Label}}</a></li>{{end}}
+      </ul>
+    </nav>
+    {{end}}
+    {{if .SignedIn}}
+    <form class="logout" method="post" action="/auth/logout">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      <span class="battletag">{{.BattleTag}}</span>
+      <button type="submit">Log out</button>
+    </form>
+    {{end}}
+  </header>
+
+  <main>
+    {{/* An app supplies a pre-rendered body in .Content; core pages define a
+         "content" template instead. */}}
+    {{if .Content}}{{.Content}}{{else}}{{block "content" .}}{{end}}{{end}}
+  </main>
+
+  <footer class="site-footer">
+    <p>Character data from Blizzard's World of Warcraft Profile API. Sign-in by Battle.net.</p>
+  </footer>
+</body>
+</html>{{end}}

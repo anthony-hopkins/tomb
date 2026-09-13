@@ -1,0 +1,10 @@
+# Copy to terraform.tfvars (gitignored) and fill in.
+project_id     = "your-gcp-project-id"
+region         = "us-central1"
+guild_realm    = "your-realm-slug"
+bnet_client_id = "your-battlenet-client-id"
+public_url     = "https://tomb-platform-xxxxx.run.app"
+image          = "us-central1-docker.pkg.dev/your-gcp-project-id/tomb/platform:latest"
+
+# Push images with:
+#   docker tag tomb-platform "$IMAGE" && docker push "$IMAGE"

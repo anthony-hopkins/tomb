@@ -9,3 +9,25 @@
 *.swp
 .DS_Store
 Thumbs.db
+
+# Go build output
+*.exe
+*.exe~
+*.test
+*.out
+/tomb
+/bin/
+vendor/
+
+# Local environment — never commit real credentials
+.env
+.env.local
+
+# OpenTofu / Terraform state and local plugin cache
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+.terraform.lock.hcl
+crash.log
