@@ -10,7 +10,7 @@ service-account JSON key anywhere, in GitHub secrets or otherwise.
 |---|---|---|
 | `ci.yml` | every PR and push to `main` | gofmt, build, vet, `go test -race`, Docker build |
 | `infra-plan.yml` | PR touching `tofu/**` | `tofu plan`, posted as a PR comment. Never applies. |
-| `deploy.yml` | push to `main`, or manual | test → build and push image → `tofu apply` → verify the live service |
+| `deploy.yml` | push to `main` builds only; **manual run applies** | test → build and push image → `tofu apply` → verify the live service |
 | `infra-destroy.yml` | manual only | guarded teardown, dry-run by default |
 
 Deploy and upgrade are the same path: an application change and an
