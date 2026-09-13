@@ -1,0 +1,94 @@
+name: CI
+
+# The merge gate from the constitution's Development Workflow: go build, go vet,
+# go test ./..., and a successful Docker image build. Changes under tofu/ must
+# additionally produce a plan for review before any apply.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  go:
+    name: Build, vet and test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.27"
+          cache: true
+
+      - name: gofmt
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "These files are not gofmt-clean:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: go build
+        run: go build ./...
+
+      - name: go vet
+        run: go vet ./...
+
+      # -race catches data races in the bounded character fan-out, which is the
+      # one genuinely concurrent piece of this codebase (research.md D9).
+      - name: go test
+        run: go test -race ./...
+
+  docker:
+    name: Docker image builds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: docker build
+        run: docker build -t tomb-platform .
+
+  tofu:
+    name: OpenTofu plan
+    runs-on: ubuntu-latest
+    # Only relevant when infrastructure changed.
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Detect infrastructure changes
+        id: changed
+        run: |
+          git fetch --depth=1 origin "${{ github.base_ref }}"
+          if git diff --name-only "origin/${{ github.base_ref }}"...HEAD | grep -q '^tofu/'; then
+            echo "infra=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "infra=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: opentofu/setup-opentofu@v1
+        if: steps.changed.outputs.infra == 'true'
+        with:
+          tofu_version: 1.12.6
+
+      - name: tofu fmt and validate
+        if: steps.changed.outputs.infra == 'true'
+        working-directory: tofu
+        run: |
+          tofu fmt -check -diff
+          tofu init -backend=false
+          tofu validate
+
+      # A real `tofu plan` needs Google Cloud credentials, which this workflow
+      # deliberately does not hold. Wire up Workload Identity Federation and
+      # then add the plan step here, posting its output to the PR for the review
+      # the constitution requires before any apply.
+      - name: Plan reminder
+        if: steps.changed.outputs.infra == 'true'
+        run: |
+          echo "::notice::Infrastructure changed. Attach 'tofu plan' output to this PR before applying (Principle V)."
