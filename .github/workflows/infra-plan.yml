@@ -68,13 +68,13 @@ jobs:
           set -euo pipefail
 
           if [ "$BASE" = "develop" ]; then
-            workspace="develop"; environment="develop"; snapshots="false"
+            workspace="develop"; environment="develop"; snapshots="false"; auto_stop="true"
             domain="${DEV_DOMAIN:-}"
             if [ -z "$domain" ] && [ -n "$PROD_DOMAIN" ]; then
               domain="dev.$PROD_DOMAIN"
             fi
           else
-            workspace="default"; environment="production"; snapshots="true"
+            workspace="default"; environment="production"; snapshots="true"; auto_stop="false"
             domain="$PROD_DOMAIN"
           fi
 
@@ -85,6 +85,7 @@ jobs:
             echo "environment=$environment"
             echo "domain=$domain"
             echo "snapshots=$snapshots"
+            echo "auto_stop=$auto_stop"
           } >> "$GITHUB_OUTPUT"
 
       - name: Validate
@@ -101,6 +102,7 @@ jobs:
             -var="bnet_client_id=${{ vars.BNET_CLIENT_ID }}" \
             -var="domain=${{ steps.ws.outputs.domain }}" \
             -var="enable_snapshots=${{ steps.ws.outputs.snapshots }}" \
+            -var="enable_auto_stop=${{ steps.ws.outputs.auto_stop }}" \
             -var="acme_email=${{ vars.ACME_EMAIL }}" \
             -var="image=${{ vars.GCP_CURRENT_IMAGE || 'gcr.io/google-containers/pause:3.9' }}" \
             > plan.txt 2>&1
