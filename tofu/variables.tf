@@ -47,8 +47,16 @@ variable "bnet_client_id" {
 }
 
 variable "public_url" {
-  description = "Public base URL, used to build the OAuth redirect URL."
+  description = <<-EOT
+    Public base URL, used to build the Battle.net OAuth redirect URL.
+
+    Empty is allowed for the very first apply, because the Cloud Run URL does
+    not exist until Cloud Run does. The deploy workflow reads the URL from the
+    service_url output and applies a second time to close the loop; after that
+    it stays set.
+  EOT
   type        = string
+  default     = ""
 }
 
 variable "db_tier" {
@@ -112,3 +120,15 @@ variable "run_max_instances" {
 # NOTE: there is deliberately no variable for the Battle.net client secret.
 # Principle V forbids secrets in OpenTofu files or state; it lives in Secret
 # Manager and is referenced by version. See README.md.
+
+variable "db_deletion_protection" {
+  description = <<-EOT
+    Guards the Cloud SQL instance against `tofu destroy`.
+
+    Leave true. The destroy workflow flips it to false in a first apply before
+    tearing down, which makes deleting the database an explicit, auditable step
+    rather than a side effect of a destroy command.
+  EOT
+  type        = bool
+  default     = true
+}

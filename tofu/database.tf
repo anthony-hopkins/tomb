@@ -35,7 +35,7 @@ resource "google_sql_database_instance" "main" {
   }
 
   # A guild site is not worth an accidental `tofu destroy` of member records.
-  deletion_protection = true
+  deletion_protection = var.db_deletion_protection
 
   depends_on = [google_service_networking_connection.main]
 }

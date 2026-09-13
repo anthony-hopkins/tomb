@@ -37,7 +37,7 @@ cannot do for itself, which is exactly the exception Principle V allows.
    redirect URI. The URL comes from the `service_url` output, so the first apply
    uses a placeholder and the redirect URI is added afterwards.
 
-3. **Store the client secret.** OpenTofu creates the secret *container*; the
+2. **Store the client secret.** OpenTofu creates the secret *container*; the
    value is added out of band so it never enters a `.tf` file or state:
 
    ```sh
@@ -53,7 +53,21 @@ gcloud services enable run.googleapis.com sqladmin.googleapis.com \
   servicenetworking.googleapis.com compute.googleapis.com --project PROJECT_ID
 ```
 
-## First deployment
+## Deployed by GitHub Actions
+
+Day to day you should not run these commands at all — `deploy.yml` does it,
+gated on an approval. See [../docs/deployment.md](../docs/deployment.md). The
+manual sequence below is the fallback, and what the pipeline is doing under the
+hood.
+
+Note the backend is a *partial* configuration, so every `tofu init` needs the
+bucket:
+
+```sh
+tofu init -backend-config="bucket=YOUR_STATE_BUCKET"
+```
+
+## First deployment, by hand
 
 The first apply has two circular dependencies, so it cannot be a single
 `tofu apply`. Both resolve on a second pass.

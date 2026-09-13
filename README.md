@@ -62,7 +62,7 @@ internal/auth/       Battle.net OAuth2 and session management
 internal/blizzard/   Blizzard API client (behind one narrow interface)
 internal/apps/       One directory per app; dashboard is the first
 tofu/                OpenTofu: Cloud Run, Cloud SQL, Artifact Registry, Secret Manager
-docs/                How to add an app; docs/assets/ holds project art
+docs/                Adding an app, the deployment pipeline, project art
 ```
 
 Templates, the stylesheet and SQL migrations are embedded with `go:embed`, so
@@ -103,6 +103,15 @@ which means someone who leaves TOMB loses access on their next page view.
   database disclosure yields no usable cookies.
 - `HttpOnly`, `Secure`, `SameSite=Lax` cookies; CSRF protection on logout; a
   strict Content-Security-Policy; and `no-store` on authenticated pages.
+
+## Deployment
+
+GitHub Actions deploys to Google Cloud with OpenTofu, authenticating keylessly
+via Workload Identity Federation — there is no service-account key anywhere.
+Deploys are gated on an environment approval and verified against the live
+service afterwards; teardown is a separate, guarded, dry-run-by-default
+workflow. See [docs/deployment.md](docs/deployment.md) for the setup, and
+[tofu/README.md](tofu/README.md) for what gets created and what it costs.
 
 ## Specification
 
