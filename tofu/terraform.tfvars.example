@@ -22,3 +22,8 @@ acme_email = ""
 
 # CIDRs allowed to reach port 22 directly. Empty means SSH via IAP only.
 # ssh_source_ranges = ["203.0.113.4/32"]
+
+# --- Backups -------------------------------------------------------------
+# Daily snapshots of the Postgres data disk, kept 14 days by default.
+# snapshot_retention_days = 14
+# snapshot_start_time     = "09:00"   # UTC, 15-minute boundary

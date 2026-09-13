@@ -26,6 +26,16 @@ output "zone" {
   value       = var.zone
 }
 
+output "data_disk_name" {
+  description = "Postgres data disk. Snapshots of this are the backups."
+  value       = google_compute_disk.data.name
+}
+
+output "snapshot_policy" {
+  description = "Resource policy taking the daily snapshots of the data disk."
+  value       = google_compute_resource_policy.data_snapshots.name
+}
+
 output "artifact_registry" {
   description = <<-EOT
     Docker repository images are pushed to. Created by tofu/bootstrap, not by

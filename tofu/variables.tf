@@ -87,6 +87,42 @@ variable "disk_type" {
 }
 
 # ---------------------------------------------------------------------------
+# Backups
+# ---------------------------------------------------------------------------
+
+variable "snapshot_retention_days" {
+  description = <<-EOT
+    How long automated snapshots of the Postgres data disk are kept.
+
+    Fourteen days is deliberately longer than a weekend plus a holiday: the
+    realistic failure is a bad migration or a wrong DELETE noticed days later,
+    not a disk dying. Snapshots are incremental, and the disk holds two small
+    tables, so the storage cost of a fortnight is cents per month.
+  EOT
+  type        = number
+  default     = 14
+
+  validation {
+    condition     = var.snapshot_retention_days >= 1 && var.snapshot_retention_days <= 365
+    error_message = "snapshot_retention_days must be between 1 and 365."
+  }
+}
+
+variable "snapshot_start_time" {
+  description = <<-EOT
+    UTC time of the daily snapshot, "HH:MM" on a 15-minute boundary. Default
+    09:00 UTC is the quiet early morning for a US guild.
+  EOT
+  type        = string
+  default     = "09:00"
+
+  validation {
+    condition     = can(regex("^([01][0-9]|2[0-3]):(00|15|30|45)$", var.snapshot_start_time))
+    error_message = "snapshot_start_time must be HH:MM in UTC on a 15-minute boundary, e.g. \"09:00\"."
+  }
+}
+
+# ---------------------------------------------------------------------------
 # Networking and TLS
 # ---------------------------------------------------------------------------
 

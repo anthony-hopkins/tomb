@@ -162,15 +162,89 @@ and Caddy (`shared_buffers=128MB`, `max_connections=25`). Raise those when you
 raise the machine type; the defaults assume a dedicated database host and will
 get something OOM-killed here.
 
+## Backups and restore
+
+The data disk is snapshotted daily by a Google-managed resource policy
+(`backup.tf`). Nothing runs on the VM, so there is no cron job to rot.
+
+| | |
+|---|---|
+| Schedule | daily at `snapshot_start_time` (default 09:00 UTC) |
+| Retention | `snapshot_retention_days` (default 14) |
+| On disk deletion | snapshots are **kept** |
+| Storage | same region as the disk |
+| Cost | cents per month -- incremental, on two small tables |
+
+Snapshots of a running Postgres are *crash-consistent*, not
+application-consistent. That is genuinely restorable: Postgres treats the
+snapshot exactly as it treats recovering from a power cut and replays its WAL
+on start. Application-consistent snapshots would need a guest agent and
+pre-freeze hooks, which is more machinery than this earns.
+
+### Check the snapshots exist
+
+Worth doing once, a day after the first apply. A backup you have never looked
+at is a hope, not a backup.
+
+```sh
+gcloud compute snapshots list --filter="sourceDisk~tomb-platform-data"   --format="table(name,creationTimestamp,diskSizeGb,storageBytes)"
+```
+
+### Restore
+
+Snapshots restore to a **new disk**; you then swap it in. The original is left
+untouched, so a failed restore costs nothing.
+
+```sh
+ZONE=us-central1-a
+
+# 1. Stop the stack so Postgres is not writing during the swap.
+gcloud compute ssh tomb-platform --zone "$ZONE" --tunnel-through-iap   --command "cd /opt/tomb && sudo docker compose --env-file .env down"
+
+# 2. Build a disk from the chosen snapshot.
+gcloud compute disks create tomb-platform-data-restored   --source-snapshot SNAPSHOT_NAME --zone "$ZONE" --type pd-standard
+
+# 3. Swap the disks on the instance.
+gcloud compute instances detach-disk tomb-platform --disk tomb-platform-data --zone "$ZONE"
+gcloud compute instances attach-disk tomb-platform   --disk tomb-platform-data-restored --device-name tomb-data --zone "$ZONE"
+
+# 4. Remount and bring the stack back. The startup script is idempotent and
+#    will not reformat a disk that already has a filesystem.
+gcloud compute ssh tomb-platform --zone "$ZONE" --tunnel-through-iap   --command "sudo google_metadata_script_runner startup"
+```
+
+Then confirm the site is healthy and the data is there:
+
+```sh
+curl -fsS "$(tofu output -raw service_url)/readyz"
+
+gcloud compute ssh tomb-platform --zone "$ZONE" --tunnel-through-iap   --command "cd /opt/tomb && sudo docker compose --env-file .env exec -T db psql -U tomb -d tomb -c 'SELECT count(*) FROM users;'"
+```
+
+Once satisfied, reconcile OpenTofu with reality -- state still references the
+old disk:
+
+```sh
+tofu state rm google_compute_disk.data
+tofu import google_compute_disk.data   projects/PROJECT/zones/us-central1-a/disks/tomb-platform-data-restored
+```
+
+`device_name` must stay `tomb-data`: the startup script looks the disk up at
+`/dev/disk/by-id/google-tomb-data`, so attaching it under a different name
+leaves Postgres writing to the boot disk instead.
+
 ## What you now own
 
 Self-hosting trades money for responsibility. On this design you are
 responsible for OS patching (`unattended-upgrades` is on by default in Ubuntu
-but reboots are yours), Postgres backups, and the fact that this is a single
-machine with no failover. The data disk carries `prevent_destroy` and is
-separate from the boot disk, so the VM can be rebuilt without touching member
-records -- but nothing here takes a backup for you yet. A `gcloud compute disks
-snapshot` on a schedule is the obvious next step.
+but reboots are yours) and for the fact that this is a single machine with no
+failover. A VM or zone outage is downtime, not data loss.
+
+Backups are handled: the data disk is snapshotted daily and survives disk
+deletion (see above). It is also separate from the boot disk and marked
+`prevent_destroy`, so the VM can be rebuilt without touching member records.
+What is still on you is *verifying* a restore occasionally -- the procedure is
+written down above, which is most of the work, but it has not been rehearsed.
 
 ## What gets created
 
