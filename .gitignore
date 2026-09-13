@@ -23,7 +23,7 @@ vendor/
 .env
 .env.local
 
-# OpenTofu / Terraform state and local plugin cache
+# OpenTofu / Terraform state, plans and local plugin cache
 .terraform/
 *.tfstate
 *.tfstate.*
@@ -31,3 +31,11 @@ vendor/
 !*.tfvars.example
 .terraform.lock.hcl
 crash.log
+
+# Saved plan files. These are build artifacts, and they embed resource
+# attribute values in cleartext -- a plan of tofu/ contains the generated
+# Postgres password, verified by inspecting one. Never commit them.
+tfplan
+tfplan.*
+*.tfplan
+*.tfplan.json
