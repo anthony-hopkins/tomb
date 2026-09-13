@@ -1,0 +1,13 @@
+# The working tree is edited from Windows but built in Linux containers, and
+# `tofu` runs from WSL over /mnt/c. Force LF so neither side sees churn.
+*        text=auto eol=lf
+*.go     text eol=lf
+*.tf     text eol=lf
+*.sql    text eol=lf
+*.sh     text eol=lf
+*.html   text eol=lf
+*.yaml   text eol=lf
+*.yml    text eol=lf
+*.png    binary
+*.jpg    binary
+*.ico    binary

@@ -1,0 +1,15 @@
+{{define "content"}}
+<section class="panel">
+  <h1>TOMB members only</h1>
+  <p>{{.Message}}</p>
+  <p class="fineprint">
+    Membership is checked against the guild data on Blizzard's side, so if you
+    have just joined TOMB it may take a short while to show up. Nothing here is
+    maintained by hand.
+  </p>
+  <form method="post" action="/auth/logout">
+    <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+    <button type="submit">Log out</button>
+  </form>
+</section>
+{{end}}

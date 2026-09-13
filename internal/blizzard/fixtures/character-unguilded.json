@@ -1,0 +1,17 @@
+{
+  "_links": { "self": { "href": "https://us.api.blizzard.com/profile/wow/character/area-52/loner" } },
+  "id": 1003,
+  "name": "Loner",
+  "gender": { "type": "MALE", "name": "Male" },
+  "faction": { "type": "HORDE", "name": "Horde" },
+  "race": { "id": 5, "name": "Undead" },
+  "character_class": { "id": 9, "name": "Warlock" },
+  "active_spec": { "id": 265, "name": "Affliction" },
+  "realm": { "id": 3676, "slug": "area-52", "name": "Area 52" },
+  "level": 42,
+  "experience": 18320,
+  "achievement_points": 120,
+  "last_login_timestamp": 1788000000000,
+  "average_item_level": 180,
+  "equipped_item_level": 176
+}

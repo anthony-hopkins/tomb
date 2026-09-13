@@ -1,0 +1,30 @@
+{{define "dashboard.html"}}
+{{if .Partial}}
+<p class="notice" role="status">
+  Some of your characters could not be loaded from Blizzard just now, so this
+  may not be your very latest character.
+</p>
+{{end}}
+
+{{with .Character}}
+<section class="character-card">
+  <h1>{{.Name}}</h1>
+  <p class="realm">{{.RealmName}}</p>
+  <dl>
+    <dt>Class</dt>
+    <dd>{{.Class}}{{if .ActiveSpec}} <span class="spec">({{.ActiveSpec}})</span>{{end}}</dd>
+    <dt>Level</dt>
+    <dd>{{.Level}}</dd>
+    <dt>Average item level</dt>
+    <dd>{{.AverageItemLevel}}</dd>
+    <dt>Last played</dt>
+    <dd>{{.LastLogin}}</dd>
+  </dl>
+</section>
+{{else}}
+<section class="panel">
+  <h1>No characters found</h1>
+  <p>Blizzard did not return any World of Warcraft characters for this account.</p>
+</section>
+{{end}}
+{{end}}

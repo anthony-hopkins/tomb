@@ -1,0 +1,44 @@
+{
+  "_links": { "self": { "href": "https://us.api.blizzard.com/profile/user/wow" } },
+  "id": 123456789,
+  "wow_accounts": [
+    {
+      "id": 987654,
+      "characters": [
+        {
+          "character": { "href": "https://us.api.blizzard.com/profile/wow/character/area-52/maintank" },
+          "name": "Maintank",
+          "id": 1001,
+          "realm": { "id": 3676, "slug": "area-52", "name": "Area 52" },
+          "playable_class": { "id": 1, "name": "Warrior" },
+          "playable_race": { "id": 3, "name": "Dwarf" },
+          "gender": { "type": "MALE", "name": "Male" },
+          "faction": { "type": "ALLIANCE", "name": "Alliance" },
+          "level": 80
+        },
+        {
+          "character": { "href": "https://us.api.blizzard.com/profile/wow/character/area-52/altsy" },
+          "name": "Altsy",
+          "id": 1002,
+          "realm": { "id": 3676, "slug": "area-52", "name": "Area 52" },
+          "playable_class": { "id": 5, "name": "Priest" },
+          "playable_race": { "id": 1, "name": "Human" },
+          "gender": { "type": "FEMALE", "name": "Female" },
+          "faction": { "type": "ALLIANCE", "name": "Alliance" },
+          "level": 71
+        },
+        {
+          "character": { "href": "https://us.api.blizzard.com/profile/wow/character/area-52/loner" },
+          "name": "Loner",
+          "id": 1003,
+          "realm": { "id": 3676, "slug": "area-52", "name": "Area 52" },
+          "playable_class": { "id": 9, "name": "Warlock" },
+          "playable_race": { "id": 5, "name": "Undead" },
+          "gender": { "type": "MALE", "name": "Male" },
+          "faction": { "type": "HORDE", "name": "Horde" },
+          "level": 42
+        }
+      ]
+    }
+  ]
+}

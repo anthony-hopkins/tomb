@@ -1,0 +1,16 @@
+{{define "content"}}
+<section class="hero">
+  <h1>TOMB</h1>
+  <p class="tagline">The guild hub. Sign in with Battle.net to see who you are playing right now.</p>
+
+  {{if .Message}}<p class="notice" role="status">{{.Message}}</p>{{end}}
+
+  <form method="post" action="/auth/login">
+    <button class="primary" type="submit">Sign in with Battle.net</button>
+  </form>
+  <p class="fineprint">
+    You will be sent to Blizzard's official Battle.net page to approve access.
+    TOMB never sees or stores your Blizzard password.
+  </p>
+</section>
+{{end}}

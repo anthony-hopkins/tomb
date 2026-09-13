@@ -1,0 +1,15 @@
+.git/
+.gitignore
+.github/
+.specify/
+.claude/
+docs/
+tofu/
+Dockerfile
+.dockerignore
+compose.yaml
+*.md
+*.log
+.env
+.env.*
+!.env.example

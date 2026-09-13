@@ -1,0 +1,22 @@
+{
+  "_links": { "self": { "href": "https://us.api.blizzard.com/profile/wow/character/area-52/altsy" } },
+  "id": 1002,
+  "name": "Altsy",
+  "gender": { "type": "FEMALE", "name": "Female" },
+  "faction": { "type": "ALLIANCE", "name": "Alliance" },
+  "race": { "id": 1, "name": "Human" },
+  "character_class": { "id": 5, "name": "Priest" },
+  "realm": { "id": 3676, "slug": "area-52", "name": "Area 52" },
+  "guild": {
+    "key": { "href": "https://us.api.blizzard.com/data/wow/guild/area-52/tomb" },
+    "name": "TOMB",
+    "id": 55555,
+    "realm": { "id": 3676, "slug": "area-52", "name": "Area 52" },
+    "faction": { "type": "ALLIANCE", "name": "Alliance" }
+  },
+  "level": 71,
+  "experience": 4200,
+  "achievement_points": 3100,
+  "last_login_timestamp": 1788500000000,
+  "equipped_item_level": 402
+}
