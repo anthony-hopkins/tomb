@@ -88,18 +88,42 @@ and the trust is enforced on Google's side. The only actual secret is the
 Battle.net client secret, which lives in Secret Manager and never touches
 GitHub.
 
-### 4. Create the GitHub environments
+### 4. The production gate
 
-This is where the human approval Principle V requires for production actually
-happens. In **Settings → Environments**, create:
+Both environments (`production`, `production-destroy`) already exist, so
+deploys and teardowns appear in the repository's deployment history.
 
-- **`production`** — add yourself as a required reviewer. Gates every `apply`.
-- **`production-destroy`** — add required reviewers. Gates teardown, separately,
-  so destroying can demand more scrutiny than deploying.
+**They carry no protection rules, and on this account they cannot.** GitHub does
+not offer environment protection rules — required reviewers among them — on
+private repositories on the free plan. Attempting it returns:
 
-Without these, `deploy.yml` and `infra-destroy.yml` will run unattended. The
-workflows reference the environments already; creating them is what turns the
-gate on.
+```
+Failed to create the environment protection rule. Please ensure the billing
+plan supports the required reviewers protection rule. (HTTP 422)
+```
+
+So the approval Principle V requires takes a different shape: **the trigger is
+the approval.**
+
+- A push to `main` runs the tests, builds the image and pushes it. It does
+  **not** apply.
+- Applying requires someone to run **Deploy** from the Actions tab with
+  `apply` checked. That is a deliberate human action, attributed and logged.
+- Destroying additionally requires typing the project id and the word `DESTROY`,
+  and defaults to a dry run.
+
+That is weaker than a second pair of eyes but stronger than unattended
+auto-apply, and it is the best available without changing plan or visibility.
+
+**To get a true approval gate**, either make the repository public or move the
+account to a paid plan, then:
+
+1. add yourself as a required reviewer on both environments
+2. delete the `github.event_name == 'workflow_dispatch' && inputs.apply`
+   condition on the `apply` job in `deploy.yml`
+
+That restores auto-deploy on merge with an approval prompt, which is the
+arrangement the workflows were originally shaped for.
 
 ### 5. Battle.net application
 
@@ -113,12 +137,12 @@ printf '%s' "$BNET_CLIENT_SECRET" | gcloud secrets versions add tomb-platform-bn
 
 ## The first deploy
 
-Merge to `main`, or run **Deploy** manually. Expect:
+Run **Deploy** from the Actions tab with `apply` checked — a merge to `main`
+alone builds the image but deliberately stops short of applying. Expect:
 
 1. `test` — the Go suite
 2. `build` — image built and pushed, tagged with the commit SHA
-3. `apply` — **pauses for your approval**, then applies. Cloud SQL takes 10–15
-   minutes to create the first time.
+3. `apply` — applies. Cloud SQL takes 10–15 minutes to create the first time.
 4. `apply` again, automatically: the Battle.net redirect URL needs the Cloud Run
    URL, which does not exist until Cloud Run does. The workflow notices the
    mismatch and re-applies with the real URL.
@@ -132,12 +156,15 @@ Then finish two things the pipeline cannot do for you:
 
 ## Everyday deploys
 
-Push to `main`. `deploy.yml` builds a fresh image tagged with the commit,
-applies, and verifies. Approve the `production` gate when prompted.
+Merging to `main` builds and pushes an image tagged with the commit SHA, so the
+artifact is always ready. To ship it, run **Deploy** with `apply` checked.
 
 For an infrastructure-only change where you do not want a new image, run
-**Deploy** manually with **skip_build** checked; it reuses whatever image Cloud
-Run is already serving, read from the `deployed_image` output.
+**Deploy** with **skip_build** checked; it reuses whatever image Cloud Run is
+already serving, read from the `deployed_image` output.
+
+Leaving `apply` unchecked runs the tests and build only — useful for confirming
+a change is deployable without deploying it.
 
 ## Destroying
 
@@ -145,7 +172,7 @@ Run **Infra destroy** manually. It requires:
 
 1. `confirm_project` — the project id, typed exactly
 2. `confirm_phrase` — `DESTROY`
-3. approval of the `production-destroy` environment
+3. `dry_run` unchecked, which it is not by default
 
 `dry_run` is **checked by default**: the first run produces a destroy plan and
 deletes nothing. Uncheck it only when you have read that plan.

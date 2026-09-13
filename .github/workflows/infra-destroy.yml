@@ -3,10 +3,16 @@ name: Infra destroy
 # Tears down the Google Cloud infrastructure. Manual only, and deliberately
 # awkward: this deletes the Cloud SQL instance holding every member record.
 #
-# Three independent guards must all be satisfied:
-#   1. you type the project id into `confirm_project`
-#   2. you type DESTROY into `confirm_phrase`
-#   3. a reviewer approves the `production-destroy` environment
+# Guards, all of which must be satisfied:
+#   1. it is manual only -- nothing triggers this automatically
+#   2. you type the project id into `confirm_project`
+#   3. you type DESTROY into `confirm_phrase`
+#   4. dry_run defaults to true, so the first run only ever produces a plan
+#
+# A required reviewer on the `production-destroy` environment would be a fifth,
+# and is the right thing to add if this repository goes public or the account
+# moves to a paid plan -- GitHub does not offer environment protection rules on
+# private repositories on the free plan.
 #
 # The state bucket is NOT destroyed, and neither is anything in tofu/bootstrap.
 # Those are removed by hand if you genuinely mean it.
@@ -70,8 +76,8 @@ jobs:
     name: Destroy
     needs: guard
     runs-on: ubuntu-latest
-    # A separate environment from `production`, so you can require different
-    # (or more) reviewers for destruction than for a deploy.
+    # Declared so teardown shows in the repository's deployment history as a
+    # distinct environment. Add a required reviewer here when the plan allows.
     environment:
       name: production-destroy
     defaults:

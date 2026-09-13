@@ -4,9 +4,22 @@ name: Deploy
 # This is both "deploy" and "upgrade": an application change and an
 # infrastructure change take exactly the same path.
 #
-# Runs on a push to main, or on demand. The apply is gated by the `production`
-# GitHub environment, which is where the human approval that Principle V
-# requires for production actually happens.
+# HOW THE PRODUCTION GATE WORKS
+#
+# Principle V requires human approval before a production apply. The obvious
+# mechanism -- a required reviewer on the `production` environment -- is not
+# available here: GitHub does not offer environment protection rules on private
+# repositories on the free plan.
+#
+# So the approval is the trigger itself. A push to main runs the tests and
+# builds and pushes the image, but does NOT apply. Applying requires someone to
+# deliberately run this workflow from the Actions tab, which is a human
+# decision with an audit trail, just a different shape.
+#
+# If the repository ever goes public, or the account moves to a paid plan, add a
+# required reviewer to the `production` environment and delete the
+# `github.event_name == workflow_dispatch` condition on the apply job to get
+# auto-deploy-on-merge with an approval prompt.
 
 on:
   push:
@@ -21,6 +34,10 @@ on:
         description: "Reuse the image already deployed (infrastructure-only change)"
         type: boolean
         default: false
+      apply:
+        description: "Apply to production. Unchecked runs test and build only."
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -105,9 +122,16 @@ jobs:
   apply:
     name: Apply infrastructure
     needs: [test, build]
-    # `always()` so an infrastructure-only dispatch (build skipped) still runs,
-    # but only when nothing actually failed.
-    if: ${{ always() && needs.test.result == 'success' && needs.build.result != 'failure' && needs.build.result != 'cancelled' }}
+    # Two conditions. `always()` so an infrastructure-only dispatch (build
+    # skipped) still runs, but only when nothing failed; and the run must be a
+    # deliberate manual dispatch with apply checked -- a push to main builds
+    # the image and stops. See the note at the top of this file.
+    if: ${{ always()
+      && github.event_name == 'workflow_dispatch'
+      && inputs.apply
+      && needs.test.result == 'success'
+      && needs.build.result != 'failure'
+      && needs.build.result != 'cancelled' }}
     runs-on: ubuntu-latest
     environment:
       name: production
