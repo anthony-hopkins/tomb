@@ -10,7 +10,8 @@ on:
       - "tofu/**"
       - ".github/workflows/infra-plan.yml"
 
-# Only ever reads. Apply lives in deploy.yml behind an environment gate.
+# Only ever reads. Applying is a separate, manually dispatched workflow
+# (deploy.yml); this one holds no apply path at all.
 permissions:
   contents: read
   id-token: write # required to mint the OIDC token for GCP
@@ -67,22 +68,41 @@ jobs:
           code=$?
           set -e
 
-          echo "exitcode=$code" >> "$GITHUB_OUTPUT"
-          if [ $code -eq 1 ]; then
+          if [ "$code" -eq 1 ]; then
             echo "::error::tofu plan failed"
             tail -50 plan.txt
             exit 1
           fi
-          if [ $code -eq 2 ]; then
-            echo "changes=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "changes=false" >> "$GITHUB_OUTPUT"
+
+          # Read the change summary out of the plan itself rather than trusting
+          # the exit code alone. Reporting "no changes" on a plan that creates
+          # seventeen resources is worse than reporting nothing, so the plan
+          # text is the authority and the exit code is only a fallback.
+          summary=$(grep -E '^(Plan: |No changes)' plan.txt | tail -1 || true)
+          if [ -z "$summary" ]; then
+            summary="(no summary line found - read the full plan)"
           fi
+
+          if printf '%s' "$summary" | grep -q '^Plan: '; then
+            changes=true
+          elif [ "$code" -eq 2 ]; then
+            changes=true
+          else
+            changes=false
+          fi
+
+          echo "exitcode=$code"   >> "$GITHUB_OUTPUT"
+          echo "changes=$changes" >> "$GITHUB_OUTPUT"
+          echo "summary=$summary" >> "$GITHUB_OUTPUT"
+
+          echo "::notice::$summary"
+          printf '### Infrastructure plan\n\n`%s`\n' "$summary" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Post plan to the pull request
         uses: actions/github-script@v7
         env:
           HAS_CHANGES: ${{ steps.plan.outputs.changes }}
+          PLAN_SUMMARY: ${{ steps.plan.outputs.summary }}
         with:
           script: |
             const fs = require('fs');
@@ -98,6 +118,7 @@ jobs:
             }
 
             const changes = process.env.HAS_CHANGES === 'true';
+            const summary = process.env.PLAN_SUMMARY || '';
             const heading = changes
               ? '### Infrastructure plan — changes to apply'
               : '### Infrastructure plan — no changes';
@@ -105,6 +126,7 @@ jobs:
             const body = [
               heading,
               '',
+              summary ? '`' + summary + '`' : '',
               truncated ? '_Output truncated; showing the tail. Full log in the workflow run._\n' : '',
               '<details><summary>Show plan</summary>',
               '',
@@ -115,7 +137,7 @@ jobs:
               '</details>',
               '',
               changes
-                ? '_Merging this PR will apply these changes. Production requires an approval in the `production` environment._'
+                ? '_Merging does **not** apply this. Run the **Deploy** workflow manually with `apply` checked._'
                 : '_Nothing to apply._',
             ].join('\n');
 
