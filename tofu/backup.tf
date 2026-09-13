@@ -12,7 +12,12 @@
 # replays its WAL on start. See the restore procedure in README.md.
 
 resource "google_compute_resource_policy" "data_snapshots" {
-  name   = "${var.service_name}-data-snapshots"
+  # Parameterised rather than hardcoded to production: develop's database holds
+  # throwaway rows re-created by the next sign-in, so paying to snapshot it
+  # daily buys nothing. The policy is identical wherever it IS enabled.
+  count = var.enable_snapshots ? 1 : 0
+
+  name   = "${local.name}-data-snapshots"
   region = var.region
 
   snapshot_schedule_policy {
@@ -46,15 +51,18 @@ resource "google_compute_resource_policy" "data_snapshots" {
       guest_flush = false
 
       labels = {
-        component = "tomb-platform"
-        contents  = "postgres-data"
+        component   = "tomb-platform"
+        contents    = "postgres-data"
+        environment = local.environment
       }
     }
   }
 }
 
 resource "google_compute_disk_resource_policy_attachment" "data" {
-  name = google_compute_resource_policy.data_snapshots.name
+  count = var.enable_snapshots ? 1 : 0
+
+  name = google_compute_resource_policy.data_snapshots[0].name
   disk = google_compute_disk.data.name
   zone = var.zone
 }

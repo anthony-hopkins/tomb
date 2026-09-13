@@ -6,12 +6,12 @@
 # Compose network and never leaves the VM.
 
 resource "google_compute_network" "main" {
-  name                    = "${var.service_name}-net"
+  name                    = "${local.name}-net"
   auto_create_subnetworks = false
 }
 
 resource "google_compute_subnetwork" "main" {
-  name          = "${var.service_name}-subnet"
+  name          = "${local.name}-subnet"
   network       = google_compute_network.main.id
   region        = var.region
   ip_cidr_range = "10.10.0.0/24"
@@ -24,7 +24,7 @@ resource "google_compute_subnetwork" "main" {
 # HTTP is open only so Caddy can answer the ACME HTTP-01 challenge and redirect
 # everything else to HTTPS.
 resource "google_compute_firewall" "web" {
-  name    = "${var.service_name}-allow-web"
+  name    = "${local.name}-allow-web"
   network = google_compute_network.main.name
 
   allow {
@@ -40,7 +40,7 @@ resource "google_compute_firewall" "web" {
 # range, so the VM exposes no SSH to the internet and the deploy pipeline
 # tunnels in with its own credentials.
 resource "google_compute_firewall" "ssh_iap" {
-  name    = "${var.service_name}-allow-ssh-iap"
+  name    = "${local.name}-allow-ssh-iap"
   network = google_compute_network.main.name
 
   allow {
@@ -56,7 +56,7 @@ resource "google_compute_firewall" "ssh_iap" {
 resource "google_compute_firewall" "ssh_direct" {
   count = length(var.ssh_source_ranges) > 0 ? 1 : 0
 
-  name    = "${var.service_name}-allow-ssh-direct"
+  name    = "${local.name}-allow-ssh-direct"
   network = google_compute_network.main.name
 
   allow {
@@ -72,6 +72,6 @@ resource "google_compute_firewall" "ssh_direct" {
 # across VM recreation. Without this, replacing the VM changes the public IP and
 # silently breaks both DNS and the registered OAuth redirect URI.
 resource "google_compute_address" "main" {
-  name   = "${var.service_name}-ip"
+  name   = "${local.name}-ip"
   region = var.region
 }

@@ -1,16 +1,27 @@
 <!--
 Sync Impact Report
-- Version change: N/A (initial) → 1.0.0
-- Modified principles: none (initial ratification)
-- Added sections: Core Principles (I–VII), Technology Constraints, Development Workflow, Governance
+- Version change: 1.0.0 → 2.0.0 (MAJOR — a principle was redefined, per the amendment procedure)
+- Modified principles: IV. Container-First Delivery → IV. Container-First Delivery and Environment
+  Promotion. The mandated local development stack (`docker compose up` on a workstation) is REMOVED and
+  replaced with an explicit prohibition on a supported local runtime environment; testing of running
+  software moves to a deployed Google Cloud environment. V gains a concrete rule for lower environments
+  in place of the "if the constitution is amended to say so" placeholder it carried.
+- Modified sections: Technology Constraints (datastore, containerization, cloud); Development Workflow
+  (adds the develop → main branch promotion model and an environment-parity requirement)
+- Added sections: Development Workflow → Transitional exception, recording that the develop environment
+  does not exist yet and production is currently the only deployed environment
 - Removed sections: none
-- Templates requiring updates: .specify/templates/plan-template.md (⚠ pending — align "Constitution Check"
-  gate with Principles I, III, V once template is generated), .specify/templates/spec-template.md (✅ no
-  conflicts), .specify/templates/tasks-template.md (⚠ pending — add task categories for app-registration,
-  IaC plan/apply, container build)
-- Follow-up TODOs: TODO(DB_ENGINE) — confirm PostgreSQL is the chosen datastore before /plan for the first
-  feature; TODO(GUILD_VERIFICATION) — decide how TOMB membership is verified (Blizzard guild roster API vs.
-  manual allow-list) before implementation of guild-gated apps.
+- Resolved TODOs: TODO(DB_ENGINE) — PostgreSQL 18, self-hosted on the VM (f8b374d), now stated outright in
+  Technology Constraints. TODO(GUILD_VERIFICATION) — settled by the shipped implementation: membership is
+  read from the `guild` object already present on the character profile response, re-derived per request
+  and never cached.
+- Repository changes this amendment requires: DELETE root `compose.yaml` and `.env.example`; remove the
+  `run` target from `Makefile`; update `README.md` and `docs/deployment.md`.
+- Follow-up TODOs: TODO(DEVELOP_ENV) — the configuration for the develop environment now exists
+  (`tofu/environments.tf` selects it by OpenTofu workspace; `deploy.yml` applies it on a push to
+  `develop`), but it has not been APPLIED yet, so the Transitional exception below still stands.
+  Delete that exception once develop's first deploy has completed and DNS for its hostname resolves.
+  Procedure: docs/deployment.md, "Standing up the develop environment".
 -->
 
 # TOMB Guild Platform Constitution
@@ -55,15 +66,27 @@ hand-entered on the user's behalf.
 **Rationale**: this is a guild identity platform; trust in "who is this person" must rest
 entirely on Blizzard's own identity provider, not a homegrown credential store.
 
-### IV. Container-First Delivery
-Every deployable component MUST ship with a `Dockerfile`, and the full local development
-stack MUST come up with a single `docker compose up` — no undocumented host-machine
-dependencies (no "install Go 1.x and Postgres locally first"). The same images built for
-local development are the images promoted to production; environment-specific behavior is
-controlled by configuration (env vars), never by rebuilding with different source.
+### IV. Container-First Delivery and Environment Promotion
+Every deployable component MUST ship with a `Dockerfile`. The image built from a commit is
+the artifact promoted to every environment, byte for byte; environment-specific behaviour
+MUST come from configuration (environment variables and instance metadata), never from
+rebuilding with different source, a different Dockerfile, or a different Compose file.
 
-**Rationale**: guarantees "works on my machine" parity and makes the deployment pipeline
-testable before it ever touches Google Cloud.
+**There is no supported local runtime environment.** A stack assembled on a workstation
+cannot be 1:1 with production — it terminates no TLS, runs no reverse proxy, performs no
+ACME, and answers a different OAuth callback — and a lower environment that quietly differs
+from production manufactures false confidence, which is worse than having no lower
+environment at all. Testing of *running software* therefore happens in a deployed Google
+Cloud environment, never on a developer machine.
+
+This constrains environments, not tooling. Compiling, `go vet`, `go test`, and building the
+image on a workstation are not environments and are unrestricted; Principle VI still
+requires those tests to exist and to pass.
+
+**Rationale**: the divergence between a convenient local stack and the real thing is
+precisely where deploy-time surprises come from. Promoting one immutable image through
+environments that are genuinely alike makes a deploy predictable, and makes the lower
+environment's verdict worth something.
 
 ### V. Infrastructure as Code via OpenTofu (NON-NEGOTIABLE)
 All Google Cloud resources MUST be defined and changed exclusively through OpenTofu
@@ -71,8 +94,9 @@ configuration checked into the repository. Manual changes made directly in the G
 Cloud Console ("ClickOps") are forbidden except for one-time, documented bootstrap steps
 that OpenTofu itself cannot perform (e.g., initial billing account linkage). Deployments to
 any environment MUST occur through an automated pipeline that runs `tofu plan` for review
-and `tofu apply` only after that plan is approved (human approval for production; may be
-automatic for lower environments if the constitution is amended to say so). Secrets MUST
+and `tofu apply` only after that plan is approved. Production requires human approval; the
+develop environment MAY apply automatically on a push to `develop`, since its whole purpose
+is to be deployed to without ceremony. Secrets MUST
 NOT be committed to the repository or hardcoded in OpenTofu files; they are injected via a
 secrets manager or CI-provided variables.
 
@@ -116,22 +140,44 @@ guild need, not a hypothetical future one.
   is out of scope unless a future amendment says otherwise.
 - **Identity provider**: Battle.net OAuth2/OIDC (Blizzard Developer Portal application),
   scoped to the WoW profile API.
-- **Datastore**: TODO(DB_ENGINE) — to be confirmed in the first implementation plan;
-  whatever is chosen MUST be reachable only via a driver that fits the Principle I
-  exception, and MUST run as a container in the compose stack for local development.
-- **Containerization**: Docker + Docker Compose for all environments below production.
-- **Cloud & IaC**: Google Cloud Platform, provisioned exclusively via OpenTofu.
+- **Datastore**: PostgreSQL 18, self-hosted as a container on the deployment VM with its
+  data on a separate persistent disk. Reachable only via a driver that fits the Principle I
+  exception. The major version MUST be identical in every environment.
+- **Containerization**: Docker + Docker Compose in every deployed environment, production
+  included. The Compose project travels inside the application image so a deployed host
+  needs no checkout of this repository.
+- **Cloud & IaC**: Google Cloud Platform, provisioned exclusively via OpenTofu. Every
+  environment is stood up from the same OpenTofu configuration, parameterised — never from
+  a hand-edited copy.
 
 ## Development Workflow
 
 - Features proceed through the Spec Kit flow: `/constitution` → `/specify` → `/plan` →
   `/tasks` → implementation. No implementation work begins without an approved spec.
+- **Branch promotion.** `develop` is the integration branch; `main` is production. Work
+  lands on a feature branch, opens a pull request into `develop`, and is exercised as
+  running software in the **develop environment** — the only place that testing happens,
+  per Principle IV. Promotion to production is a pull request from `develop` into `main`.
+  Nothing is pushed directly to `main`, and no commit reaches `main` that has not been
+  deployed to and exercised in develop first.
+- The two environments MUST be stood up from the same OpenTofu configuration and run the
+  same Compose project, differing only in parameters (project or hostname, machine size).
+  A difference that cannot be expressed as a parameter is a defect in the configuration,
+  not an acceptable environment quirk.
 - Every pull request MUST pass: `go build`, `go vet`, `go test ./...`, and a successful
   Docker image build before merge.
 - Any change touching Google Cloud infrastructure MUST include the OpenTofu diff (`tofu
   plan` output) in the pull request for review before `tofu apply` runs.
 - New apps (Principle II) MUST include a short note in their spec on how they register
   with the core and what, if any, guild-membership gating they require.
+
+**Transitional exception (from 2026-09-13, until the develop environment exists).** The
+develop environment has not been built yet, so today `main` is the only deployed
+environment and changes are exercised in production. This is a knowingly accepted risk of a
+greenfield project with no users, not a standing permission: it expires the moment the
+develop environment is stood up, and until then production deploys carry the full weight of
+Principle V's human approval. The branch promotion rule above is in force regardless —
+`develop` → `main` is how code moves, whether or not develop has an environment attached.
 
 ## Governance
 
@@ -150,4 +196,4 @@ or clarification fixes are PATCH.
 confirming the proposed design does not violate any principle above, or explicitly
 justifying any exception.
 
-**Version**: 1.0.0 | **Ratified**: 2026-09-13 | **Last Amended**: 2026-09-13
+**Version**: 2.0.0 | **Ratified**: 2026-09-13 | **Last Amended**: 2026-09-13

@@ -149,6 +149,20 @@ Rates below are us-central1 on-demand, taken from the Cloud Billing Catalog API
 | Artifact Registry, Secret Manager | -- | under $1 |
 | | | **~$17-21** |
 
+That is **per environment**. Develop adds a second VM, boot disk, data disk and
+address on the same terms — but it stops itself overnight (`autostop.tf`) and is
+started on demand, so it is only billed for compute while someone is using it:
+
+| develop | Monthly |
+|---|---|
+| Running all month | ~$17 |
+| Stopped, disks and address only | ~$4-8 |
+| The database's share (10 GB data disk) | ~$0.40 |
+
+There is no managed database in either environment — Postgres is a container on
+the VM, so it costs nothing beyond its disk and stops costing compute the moment
+the VM does. Develop takes no snapshots (`enable_snapshots = false`).
+
 Other machine types, if the guild outgrows 2 GiB:
 
 ```hcl

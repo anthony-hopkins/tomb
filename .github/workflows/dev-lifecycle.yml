@@ -1,0 +1,178 @@
+name: Develop lifecycle
+
+# Start, stop, or check the develop environment's VM.
+#
+# The VM is essentially the entire cost of an environment -- roughly $12.23 of a
+# ~$17/month bill, with the database's own disk at 40 cents -- so an idle
+# develop environment is almost pure waste. autostop.tf already stops it on a
+# nightly schedule; this workflow is the manual control for the rest of the day.
+#
+# WHY STOP AND NOT DESTROY
+#
+# Caddy's certificate lives in the caddy-data volume on the boot disk. Destroying
+# the VM discards it, so every rebuild asks Let's Encrypt for a fresh
+# certificate, and LE permits only five duplicate certificates per name per
+# week. Cycle develop harder than that and it returns with no working TLS until
+# the window clears. Stopping keeps the disk, the certificate and the reserved
+# address, so the environment comes back exactly as it was, in about a minute.
+#
+# Stopping also saves the same amount as destroying the VM while keeping its
+# address, because Google bills an unattached static IP at a higher rate than an
+# attached one.
+#
+# PRODUCTION IS NOT REACHABLE FROM HERE, deliberately. There is no environment
+# input: this workflow only ever selects the `develop` workspace. Taking the
+# guild's site offline should not be one wrong dropdown selection away, and
+# tearing anything down remains infra-destroy.yml's job.
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "What to do with the develop VM"
+        type: choice
+        options: [status, start, stop]
+        default: status
+
+permissions:
+  contents: read
+  id-token: write
+
+# Shares a lock with deploys to develop: starting the VM underneath a running
+# deploy, or stopping it mid-roll, is how you get a half-deployed environment.
+concurrency:
+  group: deploy-develop
+  cancel-in-progress: false
+
+jobs:
+  lifecycle:
+    name: ${{ inputs.action }} develop
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: tofu
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOYER_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - uses: opentofu/setup-opentofu@v1
+        with:
+          tofu_version: 1.12.6
+
+      - name: Find the develop VM
+        id: vm
+        # Read the instance out of develop's own state rather than assuming a
+        # name. If the workspace has never been applied there is nothing to act
+        # on, and saying so plainly beats a confusing gcloud 404.
+        run: |
+          set -euo pipefail
+
+          tofu init -backend-config="bucket=${{ vars.GCP_STATE_BUCKET }}"
+          tofu workspace select develop
+
+          selected="$(tofu workspace show)"
+          if [ "$selected" != "develop" ]; then
+            echo "::error::Expected the develop workspace, got '$selected'. Refusing to touch anything."
+            exit 1
+          fi
+
+          instance="$(tofu output -raw instance_name 2>/dev/null || true)"
+          zone="$(tofu output -raw zone 2>/dev/null || true)"
+
+          if [ -z "$instance" ] || [ -z "$zone" ]; then
+            echo "::error::The develop environment has not been applied yet, so there is no VM to $INPUT_ACTION."
+            echo "::error::Push to the develop branch, or run Deploy with environment=develop, first."
+            exit 1
+          fi
+
+          echo "instance=$instance" >> "$GITHUB_OUTPUT"
+          echo "zone=$zone" >> "$GITHUB_OUTPUT"
+        env:
+          INPUT_ACTION: ${{ inputs.action }}
+
+      - name: ${{ inputs.action }}
+        env:
+          ACTION: ${{ inputs.action }}
+          INSTANCE: ${{ steps.vm.outputs.instance }}
+          ZONE: ${{ steps.vm.outputs.zone }}
+        run: |
+          set -euo pipefail
+
+          current() {
+            gcloud compute instances describe "$INSTANCE" --zone "$ZONE" --format='value(status)'
+          }
+
+          wait_for() {
+            want="$1"
+            for i in $(seq 1 20); do
+              now="$(current)"
+              if [ "$now" = "$want" ]; then
+                echo "$INSTANCE is $want after $i check(s)"
+                return 0
+              fi
+              sleep 6
+            done
+            echo "::error::$INSTANCE never reached $want; last status $(current)"
+            return 1
+          }
+
+          before="$(current)"
+          echo "$INSTANCE is currently $before"
+
+          case "$ACTION" in
+            status)
+              ;;
+            start)
+              if [ "$before" = "RUNNING" ]; then
+                echo "::notice::Already running; nothing to do."
+              else
+                gcloud compute instances start "$INSTANCE" --zone "$ZONE" --quiet
+                wait_for RUNNING
+                # startup.sh runs on every boot and is idempotent, so the stack
+                # comes back on its own -- including the image the last deploy
+                # left in /opt/tomb/.env rather than the stale metadata one.
+                echo "::notice::Started. The stack comes back on its own; give it a minute."
+              fi
+              ;;
+            stop)
+              if [ "$before" = "TERMINATED" ]; then
+                echo "::notice::Already stopped; nothing to do."
+              else
+                gcloud compute instances stop "$INSTANCE" --zone "$ZONE" --quiet
+                wait_for TERMINATED
+              fi
+              ;;
+            *)
+              echo "::error::Unknown action '$ACTION'."
+              exit 1
+              ;;
+          esac
+
+          after="$(current)"
+          {
+            echo "### develop: $ACTION"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Instance | $INSTANCE |"
+            echo "| Zone | $ZONE |"
+            echo "| Before | $before |"
+            echo "| After | $after |"
+            echo ""
+            if [ "$after" = "TERMINATED" ]; then
+              echo "Stopped. Compute is no longer billed; the disks and reserved address"
+              echo "still are, at roughly \$4-8/month. Data, DNS and the TLS certificate"
+              echo "are all preserved — start it again, or just deploy, and it returns."
+            else
+              echo "Running, at roughly \$17/month while it stays up. It stops itself"
+              echo "overnight on the schedule in \`tofu/autostop.tf\`."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

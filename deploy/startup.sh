@@ -79,9 +79,35 @@ chown -R 999:999 "$DATA_MOUNT/postgres"
 # ---------------------------------------------------------------------------
 mkdir -p "$APP_DIR"
 
-APP_IMAGE="$(meta tomb-image)"
+# Which image to boot. The .env written by the last deploy wins over instance
+# metadata, and that order matters more than it looks.
+#
+# compute.tf carries `ignore_changes = [metadata["tomb-image"]]`, so that
+# metadata key is frozen at whatever the FIRST apply set and is never updated
+# again -- production's still reads 46cf70b1eeb5 while the VM has long been
+# running a much later build. Booting from metadata therefore rolls the
+# application back to the first image ever deployed, silently, and the deploy
+# that follows reports success because the app is healthy; it is just old.
+#
+# Rebooting was rare enough for that to hide. A develop environment that stops
+# every night would hit it every morning.
+#
+# /opt/tomb/.env is written by configure.sh on every deploy, so APP_IMAGE there
+# is the image actually running. Metadata is the fallback for a genuinely first
+# boot, when no .env exists yet.
+APP_IMAGE=""
+if [ -f "$APP_DIR/.env" ]; then
+  APP_IMAGE="$(sed -n 's/^APP_IMAGE=//p' "$APP_DIR/.env" | head -1)"
+  [ -n "$APP_IMAGE" ] && log "resuming the last deployed image from .env: $APP_IMAGE"
+fi
+
 if [ -z "$APP_IMAGE" ]; then
-  log "ERROR: instance metadata has no tomb-image; cannot start the stack"
+  APP_IMAGE="$(meta tomb-image)"
+  [ -n "$APP_IMAGE" ] && log "first boot; taking the image from instance metadata: $APP_IMAGE"
+fi
+
+if [ -z "$APP_IMAGE" ]; then
+  log "ERROR: no image in $APP_DIR/.env or instance metadata; cannot start the stack"
   exit 1
 fi
 
