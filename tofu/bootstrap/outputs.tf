@@ -17,6 +17,11 @@ output "project_id" {
   value       = var.project_id
 }
 
+output "artifact_registry" {
+  description = "Docker repository the deploy pipeline pushes images to."
+  value       = "${var.region}-docker.pkg.dev/${var.project_id}/${google_artifact_registry_repository.platform.repository_id}"
+}
+
 output "state_bucket" {
   description = "Must match the backend block in ../versions.tf."
   value       = google_storage_bucket.tfstate.name

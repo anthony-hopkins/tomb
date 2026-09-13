@@ -4,8 +4,12 @@ output "service_url" {
 }
 
 output "artifact_registry" {
-  description = "Docker repository to push images to."
-  value       = "${var.region}-docker.pkg.dev/${var.project_id}/${google_artifact_registry_repository.platform.repository_id}"
+  description = <<-EOT
+    Docker repository images are pushed to. Created by tofu/bootstrap, not by
+    this configuration -- see the note in bootstrap/main.tf about the circular
+    dependency that caused.
+  EOT
+  value       = "${var.region}-docker.pkg.dev/${var.project_id}/tomb"
 }
 
 output "sql_instance_name" {

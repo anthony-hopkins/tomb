@@ -88,6 +88,31 @@ resource "google_storage_bucket" "tfstate" {
 }
 
 # ---------------------------------------------------------------------------
+# Container registry.
+#
+# This lives here rather than in the main configuration to break a circular
+# dependency: the deploy pipeline must push an image before it can apply, but
+# the main configuration was the thing creating the repository to push to. The
+# registry is pipeline infrastructure, like the state bucket, so it belongs
+# with the other prerequisites.
+# ---------------------------------------------------------------------------
+
+resource "google_artifact_registry_repository" "platform" {
+  location      = var.region
+  repository_id = "tomb"
+  description   = "Container images for the TOMB guild platform."
+  format        = "DOCKER"
+
+  docker_config {
+    # A tag always means one specific build. Re-running a deploy for the same
+    # commit finds the tag present rather than silently replacing it.
+    immutable_tags = true
+  }
+
+  depends_on = [google_project_service.required]
+}
+
+# ---------------------------------------------------------------------------
 # Workload Identity Federation: GitHub Actions authenticates as a GCP service
 # account by presenting its OIDC token. No service-account keys are ever
 # created, downloaded, or stored in GitHub secrets.
