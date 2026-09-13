@@ -181,14 +181,16 @@ resource "google_service_account_iam_member" "github_impersonation" {
 locals {
   deployer_roles = [
     "roles/run.admin",                       # Cloud Run service
-    "roles/cloudsql.admin",                  # Cloud SQL instance, database, user
     "roles/artifactregistry.admin",          # repository + image push
     "roles/secretmanager.admin",             # secret containers and versions
     "roles/compute.networkAdmin",            # VPC, private IP range
     "roles/servicenetworking.networksAdmin", # private services access
-    "roles/iam.serviceAccountAdmin",         # creates the Cloud Run runtime SA
-    "roles/iam.serviceAccountUser",          # attaches that SA to Cloud Run
-    "roles/resourcemanager.projectIamAdmin", # project-level IAM in secrets.tf
+    "roles/compute.admin",                   # the VM, disks, firewall, address
+    "roles/iam.serviceAccountAdmin",         # creates the VM runtime SA
+    "roles/iam.serviceAccountUser",          # attaches that SA to the VM
+    "roles/resourcemanager.projectIamAdmin", # project-level IAM bindings
+    "roles/iap.tunnelResourceAccessor",      # SSH to the VM through IAP
+    "roles/compute.osAdminLogin",            # run the deploy script with sudo
   ]
 }
 

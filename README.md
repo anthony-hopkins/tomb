@@ -61,7 +61,8 @@ internal/platform/   The thin core — routing, sessions, guild gate, layout, he
 internal/auth/       Battle.net OAuth2 and session management
 internal/blizzard/   Blizzard API client (behind one narrow interface)
 internal/apps/       One directory per app; dashboard is the first
-tofu/                OpenTofu: Cloud Run, Cloud SQL, Artifact Registry, Secret Manager
+deploy/              Production Compose project, Caddyfile, VM startup and deploy scripts
+tofu/                OpenTofu: the VM, network, disks and secrets
 docs/                Adding an app, the deployment pipeline, project art
 ```
 
@@ -108,9 +109,16 @@ which means someone who leaves TOMB loses access on their next page view.
 
 GitHub Actions deploys to Google Cloud with OpenTofu, authenticating keylessly
 via Workload Identity Federation — there is no service-account key anywhere.
-Deploys are gated on an environment approval and verified against the live
-service afterwards; teardown is a separate, guarded, dry-run-by-default
-workflow. See [docs/deployment.md](docs/deployment.md) for the setup, and
+
+The whole stack runs as a Compose project on a single Compute Engine VM: Caddy
+for automatic TLS, the Go app, and self-hosted Postgres on its own persistent
+disk. That is a deliberate choice over managed Cloud Run plus Cloud SQL, which
+cost roughly $55/month for a database holding two small tables; this runs at
+about $17–21. Applying requires a manual workflow run, and every deploy is
+verified against the live site afterwards. Teardown is a separate, guarded,
+dry-run-by-default workflow.
+
+See [docs/deployment.md](docs/deployment.md) for setup and
 [tofu/README.md](tofu/README.md) for what gets created and what it costs.
 
 ## Specification

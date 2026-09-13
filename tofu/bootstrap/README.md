@@ -42,9 +42,9 @@ here is importable or idempotent.
 
 ## Why the deployer is so privileged
 
-The main configuration creates a VPC, a Cloud SQL instance, secrets, a service
-account and project-level IAM bindings. Doing that needs close to project
-administrator. The mitigations are that the identity has no downloadable key,
+The main configuration creates a VPC, a VM, disks, secrets, a service account
+and project-level IAM bindings, and the pipeline SSHes to the VM through IAP to
+roll out images. Doing that needs close to project administrator. The mitigations are that the identity has no downloadable key,
 can only be assumed by OIDC tokens carrying this repository's claim, and is
 additionally constrained by the provider's `attribute_condition`.
 

@@ -67,155 +67,211 @@ bucket:
 tofu init -backend-config="bucket=YOUR_STATE_BUCKET"
 ```
 
+## Architecture
+
+The whole stack runs as a Compose project on **one Compute Engine VM**:
+
+```
+Compute Engine e2-small (Ubuntu 24.04)
+  reserved public IP, ports 80/443 open, SSH via IAP only
+  |
+  +-- caddy     automatic Let's Encrypt TLS, reverse proxy
+  +-- app       the Go binary, from Artifact Registry
+  +-- postgres  18, data on a separate persistent disk
+```
+
+Postgres is self-hosted rather than Cloud SQL. The database holds two small
+tables -- users and sessions -- because FR-016 fetches character data live on
+every view, so a managed instance at roughly $52/month bought very little for a
+guild site.
+
+The VM configures itself. `deploy/startup.sh` runs on every boot: it installs
+Docker, mounts and (only if blank) formats the data disk, reads configuration
+from instance metadata, fetches the two secrets from Secret Manager, writes
+`/opt/tomb/.env`, and starts the stack. The Compose project and Caddyfile travel
+**inside the app image** under `/deploy`, so the VM never needs a checkout of
+this repository and a change to `compose.yaml` ships with the code expecting it.
+
 ## First deployment, by hand
 
-The first apply has two circular dependencies, so it cannot be a single
-`tofu apply`. Both resolve on a second pass.
-
-1. **Cloud Run needs an image, but Artifact Registry does not exist yet.**
-2. **The Battle.net redirect URL needs the Cloud Run URL, which does not exist
-   until Cloud Run is created.**
-
-Run it in this order.
-
-### Phase 1 — authenticate and enable the project
-
 ```sh
-gcloud auth login
-gcloud auth application-default login    # this is what OpenTofu reads
-gcloud config set project PROJECT_ID
-
-gcloud services enable run.googleapis.com sqladmin.googleapis.com secretmanager.googleapis.com artifactregistry.googleapis.com servicenetworking.googleapis.com compute.googleapis.com
-```
-
-### Phase 2 — state bucket, then registry only
-
-```sh
-gcloud storage buckets create gs://tomb-platform-tfstate --location US --uniform-bucket-level-access
-gcloud storage buckets update gs://tomb-platform-tfstate --versioning
-
 cp terraform.tfvars.example terraform.tfvars   # gitignored; fill it in
-tofu init
-
-# Create just the registry, so there is somewhere to push to.
-tofu apply -target=google_artifact_registry_repository.platform
-```
-
-### Phase 3 — build and push the image
-
-Docker runs from **Windows** on this machine, not WSL:
-
-```sh
-IMAGE="us-central1-docker.pkg.dev/PROJECT_ID/tomb/platform:$(git rev-parse --short HEAD)"
-gcloud auth configure-docker us-central1-docker.pkg.dev
-docker build -t "$IMAGE" .
-docker push "$IMAGE"
-```
-
-Put that exact tag in `terraform.tfvars` as `image`. Tags are immutable in this
-registry, so always push a new tag rather than overwriting.
-
-### Phase 4 — full apply
-
-```sh
-tofu plan -out=tfplan      # review this; Principle V requires it
+tofu init -backend-config="bucket=YOUR_STATE_BUCKET"
+tofu plan -out=tfplan
 tofu apply tfplan
 ```
 
-Cloud SQL takes 10-15 minutes to create on the first run.
-
-### Phase 5 — close the redirect-URL loop
+Then push an image and roll the VM onto it:
 
 ```sh
-tofu output service_url
+IMAGE="us-central1-docker.pkg.dev/PROJECT/tomb/platform:$(git rev-parse --short HEAD)"
+gcloud auth configure-docker us-central1-docker.pkg.dev
+docker build -t "$IMAGE" . && docker push "$IMAGE"
+
+gcloud compute ssh "$(tofu output -raw instance_name)"   --zone "$(tofu output -raw zone)" --tunnel-through-iap   --command "sudo /opt/tomb/deploy.sh '$IMAGE'"
 ```
 
-Set that value as `public_url` in `terraform.tfvars`, register
-`<service_url>/auth/callback` as a redirect URI in the Battle.net developer
-portal, store the client secret, and apply once more:
-
-```sh
-printf '%s' "$BNET_CLIENT_SECRET" | gcloud secrets versions add tomb-platform-bnet-client-secret --data-file=-
-
-tofu plan -out=tfplan && tofu apply tfplan
-```
-
-Then check it is alive:
+Check it answers:
 
 ```sh
 curl -fsS "$(tofu output -raw service_url)/healthz"   # -> ok
 curl -fsS "$(tofu output -raw service_url)/readyz"    # -> ok
 ```
 
-`/readyz` returning 503 means the container is up but cannot reach Cloud SQL --
-check the `cloudsql` volume mount and the `roles/cloudsql.client` binding.
+`/readyz` returning 503 means the app is up but cannot reach Postgres. SSH in and
+look at `docker compose logs db`.
 
-## Subsequent deployments
+## TLS and the hostname
 
-```sh
-docker build -t "$IMAGE" . && docker push "$IMAGE"   # new tag
-# update `image` in terraform.tfvars
-tofu plan -out=tfplan
-tofu apply tfplan
-```
+HTTPS is not optional: Blizzard rejects a plain-HTTP OAuth redirect URI, and the
+app issues `Secure` cookies. Caddy gets a certificate automatically.
 
-Per the constitution's Development Workflow, any change under `tofu/` must
-include the `tofu plan` output in the pull request, and `apply` runs only after
-that plan is approved. CI runs `fmt` and `validate` but cannot produce a real
-plan until Workload Identity Federation is configured.
+Without a domain, the stack serves on `<dashed-ip>.sslip.io` -- real public DNS
+pointing at the VM's own address, so Let's Encrypt can validate it. That gets
+you running today. Set `domain` in `terraform.tfvars` (or the `TOMB_DOMAIN`
+repository variable) once you have a real name, since sslip.io is shared
+infrastructure subject to Let's Encrypt's per-registered-domain rate limits.
+
+The public IP is **reserved**, so it survives VM recreation and a DNS record
+pointed at it stays valid.
 
 ## Sizing and what it costs
 
-Defaults are set for a moderate production posture, not the cheapest possible
-one. Every value is a variable, so dial it in `terraform.tfvars`.
+Rates below are us-central1 on-demand, taken from the Cloud Billing Catalog API
+(E2 core $0.021811590/vCPU-hour, E2 RAM $0.002923530/GiB-hour).
 
-| Resource | Default | Monthly, roughly |
+| Resource | Default | Monthly |
 |---|---|---|
-| Cloud SQL `db-custom-1-3840` (1 vCPU, 3.75 GB, zonal) | `db_tier` | **~$52** |
-| Cloud SQL disk, 20 GB PD_SSD | `db_disk_size` | ~$3 |
-| Cloud Run, 2 vCPU / 1 GiB, scales to zero | `run_cpu`, `run_memory` | ~$0-2 |
+| Compute Engine `e2-small` (0.5 vCPU, 2 GiB) | `machine_type` | **~$12.23** |
+| Boot disk, 20 GB `pd-standard` | `boot_disk_size` | ~$0.80 |
+| Data disk, 10 GB `pd-standard` | `data_disk_size` | ~$0.40 |
+| Reserved external IPv4 | -- | ~$3-7 |
 | Artifact Registry, Secret Manager | -- | under $1 |
-| | | **~$55-60** |
+| | | **~$17-21** |
 
-**The database is the entire bill.** Cloud Run scales to zero and bills only
-while serving a request, so 2 vCPU there costs almost nothing at guild traffic;
-Cloud SQL runs 24/7 whether anyone visits or not.
-
-If ~$55/month is more than a guild site should cost, `db_tier` is the one knob
-that matters:
+Other machine types, if the guild outgrows 2 GiB:
 
 ```hcl
-db_tier = "db-g1-small"   # shared core, 1.7 GB, ~$27/month
-db_tier = "db-f1-micro"   # shared core, 0.6 GB, ~$9/month -- dev only
+machine_type = "e2-micro"      # 1 GiB,  ~$6.11/mo, free-tier eligible, tight
+machine_type = "e2-medium"     # 4 GiB,  ~$24.48/mo
+machine_type = "e2-standard-2" # 8 GiB,  ~$48.96/mo
 ```
 
-The shared-core tiers carry no production SLA and cannot be made highly
-available, which is why they are not the default. For two small tables holding
-users and sessions they would work fine in practice.
+Postgres is tuned in `deploy/compose.yaml` for a 2 GiB host shared with the app
+and Caddy (`shared_buffers=128MB`, `max_connections=25`). Raise those when you
+raise the machine type; the defaults assume a dedicated database host and will
+get something OOM-killed here.
+
+## Backups and restore
+
+The data disk is snapshotted daily by a Google-managed resource policy
+(`backup.tf`). Nothing runs on the VM, so there is no cron job to rot.
+
+| | |
+|---|---|
+| Schedule | daily at `snapshot_start_time` (default 09:00 UTC) |
+| Retention | `snapshot_retention_days` (default 14) |
+| On disk deletion | snapshots are **kept** |
+| Storage | same region as the disk |
+| Cost | cents per month -- incremental, on two small tables |
+
+Snapshots of a running Postgres are *crash-consistent*, not
+application-consistent. That is genuinely restorable: Postgres treats the
+snapshot exactly as it treats recovering from a power cut and replays its WAL
+on start. Application-consistent snapshots would need a guest agent and
+pre-freeze hooks, which is more machinery than this earns.
+
+### Check the snapshots exist
+
+Worth doing once, a day after the first apply. A backup you have never looked
+at is a hope, not a backup.
+
+```sh
+gcloud compute snapshots list --filter="sourceDisk~tomb-platform-data"   --format="table(name,creationTimestamp,diskSizeGb,storageBytes)"
+```
+
+### Restore
+
+Snapshots restore to a **new disk**; you then swap it in. The original is left
+untouched, so a failed restore costs nothing.
+
+```sh
+ZONE=us-central1-a
+
+# 1. Stop the stack so Postgres is not writing during the swap.
+gcloud compute ssh tomb-platform --zone "$ZONE" --tunnel-through-iap   --command "cd /opt/tomb && sudo docker compose --env-file .env down"
+
+# 2. Build a disk from the chosen snapshot.
+gcloud compute disks create tomb-platform-data-restored   --source-snapshot SNAPSHOT_NAME --zone "$ZONE" --type pd-standard
+
+# 3. Swap the disks on the instance.
+gcloud compute instances detach-disk tomb-platform --disk tomb-platform-data --zone "$ZONE"
+gcloud compute instances attach-disk tomb-platform   --disk tomb-platform-data-restored --device-name tomb-data --zone "$ZONE"
+
+# 4. Remount and bring the stack back. The startup script is idempotent and
+#    will not reformat a disk that already has a filesystem.
+gcloud compute ssh tomb-platform --zone "$ZONE" --tunnel-through-iap   --command "sudo google_metadata_script_runner startup"
+```
+
+Then confirm the site is healthy and the data is there:
+
+```sh
+curl -fsS "$(tofu output -raw service_url)/readyz"
+
+gcloud compute ssh tomb-platform --zone "$ZONE" --tunnel-through-iap   --command "cd /opt/tomb && sudo docker compose --env-file .env exec -T db psql -U tomb -d tomb -c 'SELECT count(*) FROM users;'"
+```
+
+Once satisfied, reconcile OpenTofu with reality -- state still references the
+old disk:
+
+```sh
+tofu state rm google_compute_disk.data
+tofu import google_compute_disk.data   projects/PROJECT/zones/us-central1-a/disks/tomb-platform-data-restored
+```
+
+`device_name` must stay `tomb-data`: the startup script looks the disk up at
+`/dev/disk/by-id/google-tomb-data`, so attaching it under a different name
+leaves Postgres writing to the boot disk instead.
+
+## What you now own
+
+Self-hosting trades money for responsibility. On this design you are
+responsible for OS patching (`unattended-upgrades` is on by default in Ubuntu
+but reboots are yours) and for the fact that this is a single machine with no
+failover. A VM or zone outage is downtime, not data loss.
+
+Backups are handled: the data disk is snapshotted daily and survives disk
+deletion (see above). It is also separate from the boot disk and marked
+`prevent_destroy`, so the VM can be rebuilt without touching member records.
+What is still on you is *verifying* a restore occasionally -- the procedure is
+written down above, which is most of the work, but it has not been rehearsed.
 
 ## What gets created
 
 | File | Resources |
 |---|---|
-| `network.tf` | VPC plus private service networking, so Cloud SQL needs no public IP |
-| `database.tf` | Cloud SQL for PostgreSQL 18, the `tomb` database and user, and the connection string in Secret Manager |
-| `registry.tf` | Artifact Registry Docker repository with immutable tags |
-| `secrets.tf` | The Battle.net client-secret container, the runtime service account, and its IAM bindings |
-| `run.tf` | The Cloud Run service, its environment, probes, and public invoker binding |
-
+| `network.tf` | VPC, subnet, firewall rules (web, IAP SSH), reserved public IP |
+| `compute.tf` | The VM, its runtime service account and IAM, and the Postgres data disk |
+| `secrets.tf` | Battle.net client-secret container, generated Postgres password, VM accessor bindings |
 ## Notes worth knowing
 
-- **Postgres major version is pinned twice**, here and in `compose.yaml`
-  (`postgres:18`). Change both together or local and production drift apart.
-- **`deletion_protection = true`** on the SQL instance. A `tofu destroy` will
-  refuse until it is turned off deliberately — member records are not worth an
-  accidental teardown.
-- **No secret values in state.** The database password is generated by
-  `random_password` and written straight to Secret Manager; no output exposes
-  it. The Battle.net secret is never in state at all.
-- **`SESSION_COOKIE_SECURE` is hardcoded `true`** in `run.tf`. Cloud Run
-  terminates TLS, so there is no reason for it to be anything else; only local
-  plain-HTTP development sets it false.
-- **The service is publicly invokable.** The guild gate (FR-013a) lives in the
-  application, not in IAM, because members sign in with Battle.net rather than
-  Google identities.
+- **Postgres major version is pinned in two places**, `deploy/compose.yaml` for
+  production and the repository-root `compose.yaml` for local development. Change
+  both together or the two environments drift.
+- **The data disk carries `prevent_destroy`.** `tofu destroy` will refuse while
+  that guard is in place, which is the point: it is the only irreplaceable state
+  in the project. Removing it is three deliberate steps, documented in the
+  destroy workflow's run summary.
+- **No secret values in state, with one exception.** The Battle.net client
+  secret never enters state at all. The generated Postgres password does, which
+  is why the state bucket is private with uniform access and public access
+  prevention enforced -- and Postgres listens only on the Compose network, so
+  that password is not reachable from outside the VM regardless.
+- **`SESSION_COOKIE_SECURE` is `true`** in `deploy/compose.yaml`. Caddy
+  terminates TLS, so the browser is always on HTTPS even though the hop from
+  Caddy to the app is plaintext inside the host.
+- **SSH is not exposed.** Port 22 is open only to Google's IAP range
+  (`35.235.240.0/20`); the pipeline tunnels through it with its own credentials.
+  Set `ssh_source_ranges` if you want direct access from your own address.
+- **The guild gate lives in the application** (FR-013a), not in IAM, because
+  members sign in with Battle.net rather than Google identities.

@@ -1,8 +1,11 @@
 name: Deploy
 
-# Builds the image, applies infrastructure, and verifies the result is alive.
-# This is both "deploy" and "upgrade": an application change and an
-# infrastructure change take exactly the same path.
+# Builds the image, applies infrastructure, rolls the VM onto the new image,
+# and verifies the result is alive. This is both "deploy" and "upgrade": an
+# application change and an infrastructure change take the same path.
+#
+# The stack runs as a Compose project on one Compute Engine VM -- Caddy for
+# TLS, the Go app, and self-hosted Postgres on a persistent disk.
 #
 # HOW THE PRODUCTION GATE WORKS
 #
@@ -151,6 +154,8 @@ jobs:
           workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
           service_account: ${{ vars.GCP_DEPLOYER_SA }}
 
+      - uses: google-github-actions/setup-gcloud@v2
+
       - uses: opentofu/setup-opentofu@v1
         with:
           tofu_version: 1.12.6
@@ -175,31 +180,34 @@ jobs:
 
       - name: Apply
         run: |
-          tofu apply -auto-approve -lock-timeout=5m -input=false \
-            -var="project_id=${{ vars.GCP_PROJECT_ID }}" \
-            -var="guild_realm=${{ vars.TOMB_GUILD_REALM }}" \
-            -var="bnet_client_id=${{ vars.BNET_CLIENT_ID }}" \
-            -var="public_url=${{ vars.GCP_PUBLIC_URL }}" \
-            -var="image=${{ steps.image.outputs.image }}"
+          tofu apply -auto-approve -lock-timeout=5m -input=false             -var="project_id=${{ vars.GCP_PROJECT_ID }}"             -var="guild_realm=${{ vars.TOMB_GUILD_REALM }}"             -var="bnet_client_id=${{ vars.BNET_CLIENT_ID }}"             -var="domain=${{ vars.TOMB_DOMAIN }}"             -var="acme_email=${{ vars.ACME_EMAIL }}"             -var="image=${{ steps.image.outputs.image }}"
 
-      - name: Close the redirect-URL loop
-        # The Battle.net redirect URL needs the Cloud Run URL, which does not
-        # exist until Cloud Run does. On the first deploy public_url is empty,
-        # so apply once more now that the URL is known. A no-op afterwards.
+      - name: Roll the VM onto the new image
+        # The VM owns its own configuration: startup.sh writes /opt/tomb/.env
+        # from instance metadata and Secret Manager at boot. A deploy is just a
+        # pull and a restart, run over an IAP tunnel so the VM exposes no
+        # public SSH.
         run: |
-          service_url=$(tofu output -raw service_url)
-          configured="${{ vars.GCP_PUBLIC_URL }}"
+          instance=$(tofu output -raw instance_name)
+          zone=$(tofu output -raw zone)
+          image="${{ steps.image.outputs.image }}"
 
-          if [ "$service_url" != "$configured" ]; then
-            echo "::warning::public_url ($configured) does not match the service URL ($service_url); re-applying"
-            tofu apply -auto-approve -lock-timeout=5m -input=false \
-              -var="project_id=${{ vars.GCP_PROJECT_ID }}" \
-              -var="guild_realm=${{ vars.TOMB_GUILD_REALM }}" \
-              -var="bnet_client_id=${{ vars.BNET_CLIENT_ID }}" \
-              -var="public_url=$service_url" \
-              -var="image=${{ steps.image.outputs.image }}"
-            echo "::notice::Set the GCP_PUBLIC_URL repository variable to $service_url, and register $service_url/auth/callback in the Battle.net developer portal."
-          fi
+          echo "::notice::Deploying $image to $instance in $zone"
+
+          # A freshly created VM may still be running its startup script, which
+          # installs Docker. Retry rather than failing the first deploy.
+          for attempt in $(seq 1 10); do
+            if gcloud compute ssh "$instance"                  --zone "$zone"                  --tunnel-through-iap                  --quiet                  --command "sudo /opt/tomb/deploy.sh '$image'"; then
+              echo "deploy succeeded on attempt $attempt"
+              exit 0
+            fi
+            echo "attempt $attempt failed; the VM may still be bootstrapping"
+            sleep 30
+          done
+
+          echo "::error::Could not deploy to the VM. Check the startup script output:"
+          gcloud compute instances get-serial-port-output "$instance"             --zone "$zone" 2>/dev/null | tail -40 || true
+          exit 1
 
       - name: Read outputs
         id: outputs
@@ -241,7 +249,7 @@ jobs:
             echo "  attempt $i failed; retrying"
             sleep 6
           done
-          echo "::error::/readyz never returned ok - the container is up but cannot reach Cloud SQL"
+          echo "::error::/readyz never returned ok - the app is up but cannot reach Postgres"
           exit 1
 
       - name: Landing page renders

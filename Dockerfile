@@ -18,8 +18,16 @@ FROM gcr.io/distroless/static-debian12:nonroot
 WORKDIR /app
 
 # Templates, the stylesheet and SQL migrations are all embedded in the binary
-# via go:embed, so the image needs nothing but the binary itself.
+# via go:embed, so the runtime needs nothing but the binary.
 COPY --from=build /out/tomb /app/tomb
+
+# The production Compose project travels with the image. The VM extracts these
+# on boot and on every deploy, which keeps compose.yaml and the Caddyfile in
+# lockstep with the code that expects them, and means the VM never needs a
+# checkout of this repository.
+COPY --from=build /src/deploy/compose.yaml /deploy/compose.yaml
+COPY --from=build /src/deploy/Caddyfile    /deploy/Caddyfile
+COPY --from=build /src/deploy/deploy.sh    /deploy/deploy.sh
 
 USER nonroot:nonroot
 EXPOSE 8080

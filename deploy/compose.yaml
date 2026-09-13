@@ -1,0 +1,82 @@
+# Production Compose project, run on the VM by /opt/tomb/deploy.sh.
+#
+# Differs from the repository-root compose.yaml, which is for local development:
+# here the app image is pulled from Artifact Registry rather than built, Caddy
+# terminates TLS, and Postgres writes to the attached persistent disk.
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /opt/tomb/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data # certificates and ACME account; must persist
+      - caddy-config:/config
+    environment:
+      TOMB_DOMAIN: ${TOMB_DOMAIN:?TOMB_DOMAIN is required}
+      ACME_EMAIL: ${ACME_EMAIL:-}
+    depends_on:
+      app:
+        condition: service_started
+
+  app:
+    image: ${APP_IMAGE:?APP_IMAGE is required}
+    restart: unless-stopped
+    # No published ports: only Caddy reaches it, over the Compose network.
+    expose:
+      - "8080"
+    environment:
+      BNET_CLIENT_ID: ${BNET_CLIENT_ID:?}
+      BNET_CLIENT_SECRET: ${BNET_CLIENT_SECRET:?}
+      BNET_REDIRECT_URL: ${PUBLIC_URL:?}/auth/callback
+      BNET_REGION: ${BNET_REGION:?}
+      TOMB_GUILD_NAME: ${TOMB_GUILD_NAME:?}
+      TOMB_GUILD_REALM: ${TOMB_GUILD_REALM:?}
+      DATABASE_URL: postgres://tomb:${DB_PASSWORD:?}@db:5432/tomb?sslmode=disable
+      # Caddy terminates TLS, so the browser is always on HTTPS even though
+      # this hop is plaintext inside the host.
+      SESSION_COOKIE_SECURE: "true"
+      ADDR: ":8080"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    # Same major version as the local stack, so development and production
+    # cannot drift.
+    image: postgres:18
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: tomb
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?}
+      POSTGRES_DB: tomb
+    volumes:
+      # The attached persistent disk, mounted by the startup script. Postgres
+      # 18 wants a single mount at /var/lib/postgresql, not .../data.
+      - /mnt/tomb-data/postgres:/var/lib/postgresql
+    # Tuned down for a 2 GB VM shared with the app and Caddy. Defaults assume a
+    # dedicated database host and will make the kernel kill something.
+    command:
+      - postgres
+      - -c
+      - shared_buffers=128MB
+      - -c
+      - max_connections=25
+      - -c
+      - effective_cache_size=384MB
+      - -c
+      - work_mem=4MB
+      - -c
+      - maintenance_work_mem=64MB
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tomb -d tomb"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+volumes:
+  caddy-data:
+  caddy-config:

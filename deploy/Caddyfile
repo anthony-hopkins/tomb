@@ -1,0 +1,29 @@
+# Caddy obtains and renews a Let's Encrypt certificate for TOMB_DOMAIN
+# automatically, and redirects HTTP to HTTPS. HTTPS is mandatory here: Blizzard
+# rejects a plain-HTTP OAuth redirect URI, and the app issues Secure cookies.
+
+{
+	# Empty is valid; Caddy then registers with ACME without a contact address.
+	email {$ACME_EMAIL}
+}
+
+{$TOMB_DOMAIN} {
+	encode zstd gzip
+
+	reverse_proxy app:8080 {
+		# The app builds absolute URLs and decides cookie flags from these.
+		header_up X-Forwarded-Proto https
+		header_up X-Forwarded-Host {host}
+
+		# A dashboard view fans out to Blizzard (1 + N calls), so allow more
+		# than Caddy's default patience before giving up on the upstream.
+		transport http {
+			response_header_timeout 60s
+		}
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}
