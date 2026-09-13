@@ -10,11 +10,16 @@ service-account JSON key anywhere, in GitHub secrets or otherwise.
 |---|---|---|
 | `ci.yml` | every PR and push to `main` | gofmt, build, vet, `go test -race`, Docker build |
 | `infra-plan.yml` | PR touching `tofu/**` | `tofu plan`, posted as a PR comment. Never applies. |
-| `deploy.yml` | push to `main` builds only; **manual run applies** | test → build and push image → `tofu apply` → verify the live service |
+| `deploy.yml` | push to `main` builds only; **manual run applies** | test → build and push image → `tofu apply` → roll the VM over SSH → verify the live site |
 | `infra-destroy.yml` | manual only | guarded teardown, dry-run by default |
 
 Deploy and upgrade are the same path: an application change and an
 infrastructure change both go through `deploy.yml`.
+
+The stack runs as a Compose project on one Compute Engine VM — Caddy for TLS,
+the Go app, and self-hosted Postgres on a persistent disk. `deploy.yml` applies
+OpenTofu, then rolls the VM onto the new image over an IAP-tunnelled SSH
+session; the VM has no public SSH port.
 
 ## How authentication works
 
@@ -42,7 +47,7 @@ gcloud projects create YOUR_PROJECT_ID          # or use an existing project
 gcloud billing projects link YOUR_PROJECT_ID --billing-account=BILLING_ID
 ```
 
-Billing must be enabled: Cloud SQL cannot be created without it.
+Billing must be enabled: Compute Engine will not create a VM without it.
 
 ### 2. Apply the bootstrap, locally
 
@@ -80,7 +85,8 @@ The full set the workflows read:
 | `GCP_REGION` | `us-central1` (optional) | deploy |
 | `TOMB_GUILD_REALM` | your realm slug, e.g. `area-52` | all |
 | `BNET_CLIENT_ID` | Battle.net client id | all |
-| `GCP_PUBLIC_URL` | set after the first deploy | all |
+| `TOMB_DOMAIN` | your domain, or empty for the `sslip.io` fallback | all |
+| `ACME_EMAIL` | optional Let's Encrypt contact address | all |
 | `GCP_CURRENT_IMAGE` | optional; lets plan and destroy avoid a placeholder image | plan, destroy |
 
 These are **variables, not secrets**. None is sensitive: they are identifiers,
@@ -142,44 +148,36 @@ alone builds the image but deliberately stops short of applying. Expect:
 
 1. `test` — the Go suite
 2. `build` — image built and pushed, tagged with the commit SHA
-3. `apply` — applies. Cloud SQL takes 10–15 minutes to create the first time.
-4. `apply` again, automatically: the Battle.net redirect URL needs the Cloud Run
-   URL, which does not exist until Cloud Run does. Because `GCP_PUBLIC_URL` is
-   still unset, the workflow re-applies with the real URL.
+3. `apply` — creates the VM, network, disks and secrets
+4. `Roll the VM onto the new image` — SSH through IAP and run
+   `/opt/tomb/deploy.sh`. This retries for several minutes, because a brand-new
+   VM is still installing Docker in its startup script.
 5. `verify` — liveness, readiness, the landing page, and the anonymous guild gate
 
-Then finish two things the pipeline cannot do for you:
+Then finish the two things the pipeline cannot do for you:
 
-- set `GCP_PUBLIC_URL` to the service URL the run reports
-- register `<service_url>/auth/callback` as a redirect URI in the Battle.net
-  developer portal
+```sh
+# 1. the Battle.net client secret (the container exists only after step 3)
+printf '%s' 'YOUR_CLIENT_SECRET' | gcloud secrets versions add tomb-platform-bnet-client-secret --data-file=-
 
-Until both are done, signing in fails: OAuth requires the `redirect_uri` the app
-sends to match what is registered, exactly, down to the trailing slash.
-
-## About `GCP_PUBLIC_URL`
-
-It is the public base URL the site answers on, and its only job is to build the
-OAuth redirect:
-
-```
-GCP_PUBLIC_URL -> tofu var public_url -> Cloud Run env BNET_REDIRECT_URL
-                                          = "${public_url}/auth/callback"
+# 2. restart so the app picks it up
+gcloud compute ssh tomb-platform --zone us-central1-a --tunnel-through-iap   --command "cd /opt/tomb && sudo docker compose --env-file .env restart app"
 ```
 
-Three values must match exactly, or login breaks before the consent screen even
-appears: what Cloud Run holds in `BNET_REDIRECT_URL`, what the app sends to
-Blizzard as `redirect_uri`, and what is registered at develop.battle.net.
+and register `<service_url>/auth/callback` as a redirect URI at
+<https://develop.battle.net>. Until that is done, signing in fails: OAuth
+requires the `redirect_uri` to match exactly, down to the trailing slash.
 
-It cannot be derived automatically, because Cloud Run mints the URL when it
-creates the service and OpenTofu cannot reference a resource's own output from
-inside that same resource. Hence the two-pass first deploy.
+## Hostname and TLS
 
-**Once you put a custom domain in front of the service**, set `GCP_PUBLIC_URL`
-to the domain, not the `run.app` URL, and register the domain's callback with
-Blizzard. The workflow only fills the value in when the variable is *empty*, so
-a domain you have configured is never overwritten — a deliberate choice, since
-an operator who set the variable knows something OpenTofu does not.
+HTTPS is mandatory — Blizzard rejects a plain-HTTP redirect URI and the app
+issues `Secure` cookies — and Caddy handles certificates automatically.
+
+With `TOMB_DOMAIN` unset the site serves on `<dashed-ip>.sslip.io`, which is
+real public DNS pointing at the VM, so Let's Encrypt can validate it. Set
+`TOMB_DOMAIN` to a real name when you have one and point an A record at
+`tofu output -raw public_ip`; that address is reserved and survives VM
+recreation.
 
 ## Everyday deploys
 
@@ -187,8 +185,8 @@ Merging to `main` builds and pushes an image tagged with the commit SHA, so the
 artifact is always ready. To ship it, run **Deploy** with `apply` checked.
 
 For an infrastructure-only change where you do not want a new image, run
-**Deploy** with **skip_build** checked; it reuses whatever image Cloud Run is
-already serving, read from the `deployed_image` output.
+**Deploy** with **skip_build** checked; it reuses whatever image the VM is
+already running, read from the `deployed_image` output.
 
 Leaving `apply` unchecked runs the tests and build only — useful for confirming
 a change is deployable without deploying it.
@@ -204,14 +202,14 @@ Run **Infra destroy** manually. It requires:
 `dry_run` is **checked by default**: the first run produces a destroy plan and
 deletes nothing. Uncheck it only when you have read that plan.
 
-A live destroy takes a final on-demand Cloud SQL backup first, then lowers
-`db_deletion_protection` in its own apply, then destroys. Cloud SQL refuses to
-be deleted while that protection is set, so lowering it is a deliberate,
-auditable step rather than a side effect.
+A live destroy tears down the VM, network and secrets — and then **stops at the
+Postgres data disk**, which carries `prevent_destroy` in `compute.tf`. That is
+the only irreplaceable state in the project, so deleting it takes three
+deliberate steps rather than one command: snapshot the disk, remove the
+lifecycle block, re-run the workflow. The run summary spells this out.
 
-**Deliberately left behind:** the state bucket and its version history, the
-final backup, everything in `tofu/bootstrap`, and the project itself. Remove
-those by hand if you mean to close the project down entirely.
+**Deliberately left behind:** the data disk, the state bucket and its version
+history, everything in `tofu/bootstrap`, and the project itself.
 
 ## Safety properties worth knowing
 
@@ -219,6 +217,8 @@ those by hand if you mean to close the project down entirely.
 - **State is locked.** The GCS backend locks, and `deploy.yml` and
   `infra-destroy.yml` share one concurrency group, so an apply and a destroy can
   never run at once.
+- **No public SSH.** Port 22 is open only to Google's IAP range; the pipeline
+  tunnels through it with its own federated credentials.
 - **Applies are never cancelled mid-flight.** `cancel-in-progress: false` on the
   deploy group; interrupting an apply is how state drifts from reality.
 - **Plans are reviewable before they run.** `infra-plan.yml` posts to the PR and

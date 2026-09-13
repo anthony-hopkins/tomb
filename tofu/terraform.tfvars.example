@@ -1,20 +1,24 @@
 # Copy to terraform.tfvars (gitignored) and fill in.
 project_id     = "your-gcp-project-id"
 region         = "us-central1"
+zone           = "us-central1-a"
 guild_realm    = "your-realm-slug"
 bnet_client_id = "your-battlenet-client-id"
-public_url     = "https://tomb-platform-xxxxx.run.app"
 image          = "us-central1-docker.pkg.dev/your-gcp-project-id/tomb/platform:latest"
 
-# Push images with:
-#   docker tag tomb-platform "$IMAGE" && docker push "$IMAGE"
+# Hostname for TLS. Leave empty and the stack serves on <dashed-ip>.sslip.io,
+# which is real DNS pointing at the VM, so Let's Encrypt still issues a
+# certificate. Set a real domain when you have one.
+domain     = ""
+acme_email = ""
 
-# --- Sizing (see tofu/README.md for costs) ---
-# Defaults are a moderate production posture: db-custom-1-3840 (1 vCPU,
-# 3.75 GB) and Cloud Run at 2 vCPU / 1 GiB. Uncomment to change.
-# db_tier              = "db-g1-small"   # ~$27/mo instead of ~$52/mo
-# db_disk_size         = 20
-# db_availability_type = "ZONAL"         # REGIONAL roughly doubles DB cost
-# run_cpu              = "2"
-# run_memory           = "1Gi"
-# run_max_instances    = 10
+# --- Sizing (see tofu/README.md for costs) -------------------------------
+# e2-small (0.5 vCPU, 2 GiB) ~$12.23/month is the default and fits one guild.
+# machine_type   = "e2-micro"   # 1 GiB, ~$6.11/mo, free-tier eligible, tight
+# machine_type   = "e2-medium"  # 4 GiB, ~$24.48/mo
+# boot_disk_size = 20
+# data_disk_size = 10
+# disk_type      = "pd-standard"
+
+# CIDRs allowed to reach port 22 directly. Empty means SSH via IAP only.
+# ssh_source_ranges = ["203.0.113.4/32"]

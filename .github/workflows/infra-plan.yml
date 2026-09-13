@@ -62,8 +62,9 @@ jobs:
             -var="project_id=${{ vars.GCP_PROJECT_ID }}" \
             -var="guild_realm=${{ vars.TOMB_GUILD_REALM }}" \
             -var="bnet_client_id=${{ vars.BNET_CLIENT_ID }}" \
-            -var="public_url=${{ vars.GCP_PUBLIC_URL }}" \
-            -var="image=${{ vars.GCP_CURRENT_IMAGE || 'us-docker.pkg.dev/cloudrun/container/hello' }}" \
+            -var="domain=${{ vars.TOMB_DOMAIN }}" \
+            -var="acme_email=${{ vars.ACME_EMAIL }}" \
+            -var="image=${{ vars.GCP_CURRENT_IMAGE || 'gcr.io/google-containers/pause:3.9' }}" \
             > plan.txt 2>&1
           code=$?
           set -e
