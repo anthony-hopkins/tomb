@@ -144,8 +144,8 @@ alone builds the image but deliberately stops short of applying. Expect:
 2. `build` — image built and pushed, tagged with the commit SHA
 3. `apply` — applies. Cloud SQL takes 10–15 minutes to create the first time.
 4. `apply` again, automatically: the Battle.net redirect URL needs the Cloud Run
-   URL, which does not exist until Cloud Run does. The workflow notices the
-   mismatch and re-applies with the real URL.
+   URL, which does not exist until Cloud Run does. Because `GCP_PUBLIC_URL` is
+   still unset, the workflow re-applies with the real URL.
 5. `verify` — liveness, readiness, the landing page, and the anonymous guild gate
 
 Then finish two things the pipeline cannot do for you:
@@ -153,6 +153,33 @@ Then finish two things the pipeline cannot do for you:
 - set `GCP_PUBLIC_URL` to the service URL the run reports
 - register `<service_url>/auth/callback` as a redirect URI in the Battle.net
   developer portal
+
+Until both are done, signing in fails: OAuth requires the `redirect_uri` the app
+sends to match what is registered, exactly, down to the trailing slash.
+
+## About `GCP_PUBLIC_URL`
+
+It is the public base URL the site answers on, and its only job is to build the
+OAuth redirect:
+
+```
+GCP_PUBLIC_URL -> tofu var public_url -> Cloud Run env BNET_REDIRECT_URL
+                                          = "${public_url}/auth/callback"
+```
+
+Three values must match exactly, or login breaks before the consent screen even
+appears: what Cloud Run holds in `BNET_REDIRECT_URL`, what the app sends to
+Blizzard as `redirect_uri`, and what is registered at develop.battle.net.
+
+It cannot be derived automatically, because Cloud Run mints the URL when it
+creates the service and OpenTofu cannot reference a resource's own output from
+inside that same resource. Hence the two-pass first deploy.
+
+**Once you put a custom domain in front of the service**, set `GCP_PUBLIC_URL`
+to the domain, not the `run.app` URL, and register the domain's callback with
+Blizzard. The workflow only fills the value in when the variable is *empty*, so
+a domain you have configured is never overwritten — a deliberate choice, since
+an operator who set the variable knows something OpenTofu does not.
 
 ## Everyday deploys
 

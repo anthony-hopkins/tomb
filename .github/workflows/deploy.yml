@@ -184,22 +184,46 @@ jobs:
 
       - name: Close the redirect-URL loop
         # The Battle.net redirect URL needs the Cloud Run URL, which does not
-        # exist until Cloud Run does. On the first deploy public_url is empty,
-        # so apply once more now that the URL is known. A no-op afterwards.
+        # exist until Cloud Run does, so the first deploy applies with
+        # public_url empty and fills it in here.
+        #
+        # This keys off GCP_PUBLIC_URL being EMPTY, not off it differing from
+        # the Cloud Run URL. Once a custom domain is in front of the service the
+        # two differ permanently and correctly, and re-applying on every deploy
+        # would overwrite the domain with the run.app URL. An operator who has
+        # set the variable knows something OpenTofu does not.
         run: |
           service_url=$(tofu output -raw service_url)
           configured="${{ vars.GCP_PUBLIC_URL }}"
 
-          if [ "$service_url" != "$configured" ]; then
-            echo "::warning::public_url ($configured) does not match the service URL ($service_url); re-applying"
-            tofu apply -auto-approve -lock-timeout=5m -input=false \
-              -var="project_id=${{ vars.GCP_PROJECT_ID }}" \
-              -var="guild_realm=${{ vars.TOMB_GUILD_REALM }}" \
-              -var="bnet_client_id=${{ vars.BNET_CLIENT_ID }}" \
-              -var="public_url=$service_url" \
-              -var="image=${{ steps.image.outputs.image }}"
-            echo "::notice::Set the GCP_PUBLIC_URL repository variable to $service_url, and register $service_url/auth/callback in the Battle.net developer portal."
+          if [ -n "$configured" ]; then
+            if [ "$configured" != "$service_url" ]; then
+              echo "::notice::public_url is $configured while Cloud Run serves $service_url. Assuming a custom domain and leaving it alone."
+            fi
+            echo "public_url already configured; nothing to close"
+            exit 0
           fi
+
+          echo "::warning::GCP_PUBLIC_URL is unset, so BNET_REDIRECT_URL was built from an empty base. Re-applying with $service_url."
+          tofu apply -auto-approve -lock-timeout=5m -input=false \
+            -var="project_id=${{ vars.GCP_PROJECT_ID }}" \
+            -var="guild_realm=${{ vars.TOMB_GUILD_REALM }}" \
+            -var="bnet_client_id=${{ vars.BNET_CLIENT_ID }}" \
+            -var="public_url=$service_url" \
+            -var="image=${{ steps.image.outputs.image }}"
+
+          {
+            echo "### Finish the OAuth setup"
+            echo ""
+            echo "Two steps the pipeline cannot do for you:"
+            echo ""
+            echo "1. \`gh variable set GCP_PUBLIC_URL --body '$service_url'\`"
+            echo "2. register \`$service_url/auth/callback\` as a redirect URI at <https://develop.battle.net>"
+            echo ""
+            echo "Until both are done, signing in will fail: OAuth requires the redirect URI to match exactly."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          echo "::notice::Set GCP_PUBLIC_URL to $service_url and register $service_url/auth/callback at develop.battle.net"
 
       - name: Read outputs
         id: outputs
