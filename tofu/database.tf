@@ -9,6 +9,9 @@ resource "google_sql_database_instance" "main" {
   database_version = "POSTGRES_18"
 
   settings {
+    # Explicit: PostgreSQL 16+ otherwise defaults to ENTERPRISE_PLUS, whose
+    # tier family does not include db-custom-*. See var.db_edition.
+    edition           = var.db_edition
     tier              = var.db_tier
     availability_type = var.db_availability_type
     disk_size         = var.db_disk_size
@@ -36,6 +39,25 @@ resource "google_sql_database_instance" "main" {
 
   # A guild site is not worth an accidental `tofu destroy` of member records.
   deletion_protection = var.db_deletion_protection
+
+  # Catch an edition/tier mismatch during plan instead of a minute into an
+  # apply, after the VPC and the private service connection already exist.
+  lifecycle {
+    precondition {
+      condition = (
+        var.db_edition == "ENTERPRISE_PLUS"
+        ? startswith(var.db_tier, "db-perf-optimized-")
+        : !startswith(var.db_tier, "db-perf-optimized-")
+      )
+      error_message = <<-EOT
+        db_tier "${var.db_tier}" is not valid for db_edition "${var.db_edition}".
+
+        ENTERPRISE takes shared-core (db-f1-micro, db-g1-small) or
+        dedicated-core (db-custom-CPU-MEMORY) tiers.
+        ENTERPRISE_PLUS takes only db-perf-optimized-N-* tiers.
+      EOT
+    }
+  }
 
   depends_on = [google_service_networking_connection.main]
 }

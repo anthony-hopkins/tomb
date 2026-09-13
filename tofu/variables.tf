@@ -74,9 +74,37 @@ variable "db_tier" {
       db-g1-small      shared core, 1.7 GB   ~$27/month
       db-custom-1-3840 1 vCPU,     3.75 GB   ~$52/month   <- current default
       db-custom-2-7680 2 vCPU,     7.5 GB    ~$104/month
+
+    These are all ENTERPRISE-edition tiers. ENTERPRISE_PLUS uses a different
+    family entirely (db-perf-optimized-N-*, smallest 2 vCPU / 16 GB), so the
+    two variables have to agree -- see db_edition.
   EOT
   type        = string
   default     = "db-custom-1-3840"
+}
+
+variable "db_edition" {
+  description = <<-EOT
+    Cloud SQL edition: "ENTERPRISE" or "ENTERPRISE_PLUS".
+
+    This MUST be set explicitly. For PostgreSQL 16 and later Google defaults new
+    instances to ENTERPRISE_PLUS, which accepts only db-perf-optimized-N-*
+    tiers -- the smallest being 2 vCPU / 16 GB, far more machine (and money)
+    than a guild site needs. Leaving it unset is what produced:
+
+      Invalid Tier (db-custom-1-3840) for (ENTERPRISE_PLUS) Edition.
+      Use a predefined Tier like db-perf-optimized-N-* instead.
+
+    ENTERPRISE supports PostgreSQL 18 and the shared-core and dedicated-core
+    (db-custom-*) tier families, which is what db_tier uses.
+  EOT
+  type        = string
+  default     = "ENTERPRISE"
+
+  validation {
+    condition     = contains(["ENTERPRISE", "ENTERPRISE_PLUS"], var.db_edition)
+    error_message = "db_edition must be ENTERPRISE or ENTERPRISE_PLUS."
+  }
 }
 
 variable "db_disk_size" {
