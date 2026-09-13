@@ -1,4 +1,14 @@
-# TOMB Guild Platform
+<p align="center">
+  <img src="docs/assets/banner.jpg" alt="TOMB" width="640">
+</p>
+
+<h1 align="center">TOMB Guild Platform</h1>
+
+<p align="center">
+  <em>Sign in with Battle.net. See who you are playing right now.</em>
+</p>
+
+---
 
 A guild website for TOMB. Members sign in with their Battle.net account and land
 on a dashboard showing the World of Warcraft character they most recently
@@ -52,7 +62,7 @@ internal/auth/       Battle.net OAuth2 and session management
 internal/blizzard/   Blizzard API client (behind one narrow interface)
 internal/apps/       One directory per app; dashboard is the first
 tofu/                OpenTofu: Cloud Run, Cloud SQL, Artifact Registry, Secret Manager
-docs/                How to add an app
+docs/                How to add an app; docs/assets/ holds project art
 ```
 
 Templates, the stylesheet and SQL migrations are embedded with `go:embed`, so
