@@ -172,16 +172,56 @@ and register `<service_url>/auth/callback` as a redirect URI at
 <https://develop.battle.net>. Until that is done, signing in fails: OAuth
 requires the `redirect_uri` to match exactly, down to the trailing slash.
 
-## Hostname and TLS
+## Hostname, TLS, and the OAuth callback
 
 HTTPS is mandatory — Blizzard rejects a plain-HTTP redirect URI and the app
 issues `Secure` cookies — and Caddy handles certificates automatically.
 
 With `TOMB_DOMAIN` unset the site serves on `<dashed-ip>.sslip.io`, which is
-real public DNS pointing at the VM, so Let's Encrypt can validate it. Set
-`TOMB_DOMAIN` to a real name when you have one and point an A record at
-`tofu output -raw public_ip`; that address is reserved and survives VM
-recreation.
+real public DNS pointing at the VM, so Let's Encrypt can validate it.
+
+### Moving to a real domain
+
+The callback URL must match the hostname people actually use, exactly. The chain
+is:
+
+```
+TOMB_DOMAIN -> tofu var domain -> VM metadata tomb-public-url
+            -> container env BNET_REDIRECT_URL = "${PUBLIC_URL}/auth/callback"
+            -> the redirect_uri the app sends Blizzard
+```
+
+Blizzard requires an exact string match against a registered URI, so switching
+hostname means switching the callback too. Order matters:
+
+1. **Point DNS at the VM first.** An `A` record for the domain to
+   `tofu output -raw public_ip`. That address is reserved, so it survives VM
+   recreation. Let's Encrypt validates over HTTP-01 on port 80, so the name has
+   to resolve before Caddy can get a certificate.
+2. **Register the new callback at <https://develop.battle.net>** —
+   `https://YOUR_DOMAIN/auth/callback`. Keep the old `sslip.io` callback
+   registered alongside it during the switch; Blizzard accepts several redirect
+   URIs, so sign-in keeps working on both while DNS propagates.
+3. **Set the repository variable** and deploy:
+   ```sh
+   gh variable set TOMB_DOMAIN --body 'tombguild.com'
+   ```
+   Then run **Deploy** with `apply` checked. The apply updates instance
+   metadata; `configure.sh` rewrites `/opt/tomb/.env` from that metadata on
+   every deploy, so Caddy requests a certificate for the new name and
+   `BNET_REDIRECT_URL` follows.
+4. **Remove the old `sslip.io` callback** from Blizzard once the domain works.
+
+Verify the certificate actually covers the new name before trusting it:
+
+```sh
+curl -fsS https://YOUR_DOMAIN/healthz
+echo | openssl s_client -connect YOUR_DOMAIN:443 -servername YOUR_DOMAIN 2>/dev/null   | openssl x509 -noout -subject -issuer -dates
+```
+
+If Caddy cannot get a certificate the site will not serve HTTPS at all, so a
+failing `/healthz` right after a domain switch usually means DNS had not
+propagated when Caddy tried. `docker compose logs caddy` says so explicitly.
 
 ## When you change `tofu/bootstrap`
 

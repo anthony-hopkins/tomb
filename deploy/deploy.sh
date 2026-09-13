@@ -35,12 +35,19 @@ cid="$(docker create "$IMAGE")"
 docker cp "$cid:/deploy/compose.yaml" "$APP_DIR/compose.yaml"
 docker cp "$cid:/deploy/Caddyfile" "$APP_DIR/Caddyfile"
 docker cp "$cid:/deploy/deploy.sh" "$APP_DIR/deploy.sh.new"
+docker cp "$cid:/deploy/configure.sh" "$APP_DIR/configure.sh"
 docker rm -f "$cid" >/dev/null
 mv "$APP_DIR/deploy.sh.new" "$APP_DIR/deploy.sh"
-chmod +x "$APP_DIR/deploy.sh"
+chmod +x "$APP_DIR/deploy.sh" "$APP_DIR/configure.sh"
 
-# Point .env at the new image without disturbing the secrets already in it.
-sed -i "s|^APP_IMAGE=.*|APP_IMAGE=$IMAGE|" "$APP_DIR/.env"
+# Rewrite the whole environment from instance metadata and Secret Manager,
+# rather than only swapping the image tag.
+#
+# This was previously a single sed on APP_IMAGE, which meant a configuration
+# change in OpenTofu -- a new TOMB_DOMAIN, say -- updated the instance metadata
+# and then did nothing: the stack kept serving the old hostname while the
+# deploy reported success, because the health checks passed against the old URL.
+"$APP_DIR/configure.sh" "$IMAGE"
 
 log "restarting the stack"
 cd "$APP_DIR"

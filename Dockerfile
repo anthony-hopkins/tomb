@@ -28,6 +28,7 @@ COPY --from=build /out/tomb /app/tomb
 COPY --from=build /src/deploy/compose.yaml /deploy/compose.yaml
 COPY --from=build /src/deploy/Caddyfile    /deploy/Caddyfile
 COPY --from=build /src/deploy/deploy.sh    /deploy/deploy.sh
+COPY --from=build /src/deploy/configure.sh /deploy/configure.sh
 
 USER nonroot:nonroot
 EXPOSE 8080

@@ -3,7 +3,12 @@
 # rejects a plain-HTTP OAuth redirect URI, and the app issues Secure cookies.
 
 {
-	# Empty is valid; Caddy then registers with ACME without a contact address.
+	# An `email` directive with no argument is a Caddyfile PARSE ERROR, not an
+	# ignored empty value -- Caddy refuses to start and the site never binds
+	# 443. So when ACME_EMAIL is unset, startup.sh and deploy.sh delete the
+	# line below before Caddy ever sees it, leaving an empty options block,
+	# which is valid. Caddy then registers with Let's Encrypt anonymously.
+	# Verified with `caddy validate` against caddy:2-alpine.
 	email {$ACME_EMAIL}
 }
 
