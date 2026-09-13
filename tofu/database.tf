@@ -10,9 +10,10 @@ resource "google_sql_database_instance" "main" {
 
   settings {
     tier              = var.db_tier
-    availability_type = "ZONAL"
-    disk_size         = 10
+    availability_type = var.db_availability_type
+    disk_size         = var.db_disk_size
     disk_autoresize   = true
+    disk_type         = "PD_SSD"
 
     backup_configuration {
       enabled                        = true
@@ -34,7 +35,7 @@ resource "google_sql_database_instance" "main" {
   }
 
   # A guild site is not worth an accidental `tofu destroy` of member records.
-  deletion_protection = true
+  deletion_protection = var.db_deletion_protection
 
   depends_on = [google_service_networking_connection.main]
 }

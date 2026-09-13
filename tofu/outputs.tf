@@ -8,6 +8,20 @@ output "artifact_registry" {
   value       = "${var.region}-docker.pkg.dev/${var.project_id}/${google_artifact_registry_repository.platform.repository_id}"
 }
 
+output "sql_instance_name" {
+  description = "Cloud SQL instance name, used by the destroy workflow to take a final backup."
+  value       = google_sql_database_instance.main.name
+}
+
+output "deployed_image" {
+  description = <<-EOT
+    The image Cloud Run is currently serving. The deploy workflow reads this so
+    an infrastructure-only run can re-apply without rebuilding, rather than
+    silently rolling the service back to a stale tag.
+  EOT
+  value       = google_cloud_run_v2_service.platform.template[0].containers[0].image
+}
+
 output "sql_connection_name" {
   description = "Cloud SQL instance connection name."
   value       = google_sql_database_instance.main.connection_name

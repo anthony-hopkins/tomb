@@ -12,8 +12,10 @@ resource "google_cloud_run_v2_service" "platform" {
     service_account = google_service_account.run.email
 
     scaling {
+      # Scale to zero: a guild site is idle most of the day, and idle costs
+      # nothing. The first request after idle pays a cold start.
       min_instance_count = 0
-      max_instance_count = 4
+      max_instance_count = var.run_max_instances
     }
 
     volumes {
@@ -102,8 +104,8 @@ resource "google_cloud_run_v2_service" "platform" {
 
       resources {
         limits = {
-          cpu    = "1"
-          memory = "512Mi"
+          cpu    = var.run_cpu
+          memory = var.run_memory
         }
       }
     }

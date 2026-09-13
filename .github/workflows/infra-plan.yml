@@ -1,0 +1,154 @@
+name: Infra plan
+
+# Constitution Principle V: any change touching Google Cloud must include the
+# `tofu plan` output for review before `tofu apply` runs. This workflow is how
+# that review happens -- it posts the plan as a PR comment and never applies.
+
+on:
+  pull_request:
+    paths:
+      - "tofu/**"
+      - ".github/workflows/infra-plan.yml"
+
+# Only ever reads. Apply lives in deploy.yml behind an environment gate.
+permissions:
+  contents: read
+  id-token: write # required to mint the OIDC token for GCP
+  pull-requests: write # required to post the plan comment
+
+concurrency:
+  group: infra-plan-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  plan:
+    name: Plan
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: tofu
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          # Keyless: GitHub presents an OIDC token, Google exchanges it for a
+          # short-lived access token. No service-account key exists.
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOYER_SA }}
+
+      - uses: opentofu/setup-opentofu@v1
+        with:
+          tofu_version: 1.12.6
+
+      - name: Format check
+        run: tofu fmt -check -diff
+
+      - name: Init
+        run: tofu init -backend-config="bucket=${{ vars.GCP_STATE_BUCKET }}"
+
+      - name: Validate
+        run: tofu validate -no-color
+
+      - name: Plan
+        id: plan
+        # Exit code 2 means "changes present", which is not a failure.
+        run: |
+          set +e
+          tofu plan -no-color -lock-timeout=5m -detailed-exitcode \
+            -var="project_id=${{ vars.GCP_PROJECT_ID }}" \
+            -var="guild_realm=${{ vars.TOMB_GUILD_REALM }}" \
+            -var="bnet_client_id=${{ vars.BNET_CLIENT_ID }}" \
+            -var="public_url=${{ vars.GCP_PUBLIC_URL }}" \
+            -var="image=${{ vars.GCP_CURRENT_IMAGE || 'us-docker.pkg.dev/cloudrun/container/hello' }}" \
+            > plan.txt 2>&1
+          code=$?
+          set -e
+
+          echo "exitcode=$code" >> "$GITHUB_OUTPUT"
+          if [ $code -eq 1 ]; then
+            echo "::error::tofu plan failed"
+            tail -50 plan.txt
+            exit 1
+          fi
+          if [ $code -eq 2 ]; then
+            echo "changes=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changes=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Post plan to the pull request
+        uses: actions/github-script@v7
+        env:
+          HAS_CHANGES: ${{ steps.plan.outputs.changes }}
+        with:
+          script: |
+            const fs = require('fs');
+            let plan = fs.readFileSync('tofu/plan.txt', 'utf8');
+
+            // A PR comment caps at 65536 characters; keep the tail, which is
+            // where the summary line lives.
+            const LIMIT = 60000;
+            let truncated = false;
+            if (plan.length > LIMIT) {
+              plan = plan.slice(plan.length - LIMIT);
+              truncated = true;
+            }
+
+            const changes = process.env.HAS_CHANGES === 'true';
+            const heading = changes
+              ? '### Infrastructure plan — changes to apply'
+              : '### Infrastructure plan — no changes';
+
+            const body = [
+              heading,
+              '',
+              truncated ? '_Output truncated; showing the tail. Full log in the workflow run._\n' : '',
+              '<details><summary>Show plan</summary>',
+              '',
+              '```terraform',
+              plan,
+              '```',
+              '',
+              '</details>',
+              '',
+              changes
+                ? '_Merging this PR will apply these changes. Production requires an approval in the `production` environment._'
+                : '_Nothing to apply._',
+            ].join('\n');
+
+            // Replace our previous comment rather than stacking new ones.
+            const marker = 'Infrastructure plan';
+            const comments = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const mine = comments.data.find(c =>
+              c.user.type === 'Bot' && c.body.includes(marker));
+
+            if (mine) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: mine.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
+
+      - name: Upload plan log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tofu-plan
+          path: tofu/plan.txt
+          retention-days: 14

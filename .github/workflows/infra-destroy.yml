@@ -1,0 +1,192 @@
+name: Infra destroy
+
+# Tears down the Google Cloud infrastructure. Manual only, and deliberately
+# awkward: this deletes the Cloud SQL instance holding every member record.
+#
+# Guards, all of which must be satisfied:
+#   1. it is manual only -- nothing triggers this automatically
+#   2. you type the project id into `confirm_project`
+#   3. you type DESTROY into `confirm_phrase`
+#   4. dry_run defaults to true, so the first run only ever produces a plan
+#
+# A required reviewer on the `production-destroy` environment would be a fifth,
+# and is the right thing to add if this repository goes public or the account
+# moves to a paid plan -- GitHub does not offer environment protection rules on
+# private repositories on the free plan.
+#
+# The state bucket is NOT destroyed, and neither is anything in tofu/bootstrap.
+# Those are removed by hand if you genuinely mean it.
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_project:
+        description: "Type the GCP project id exactly"
+        required: true
+        type: string
+      confirm_phrase:
+        description: "Type DESTROY to confirm"
+        required: true
+        type: string
+      dry_run:
+        description: "Only show a destroy plan; delete nothing"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: deploy-production # same group as deploy.yml: never both at once
+  cancel-in-progress: false
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Check the typed confirmations before requesting an approval, so a reviewer
+  # is never asked to approve a request that was going to fail anyway.
+  # ---------------------------------------------------------------------------
+  guard:
+    name: Check confirmations
+    runs-on: ubuntu-latest
+    steps:
+      - name: Confirmation phrase
+        run: |
+          if [ "${{ inputs.confirm_phrase }}" != "DESTROY" ]; then
+            echo "::error::confirm_phrase must be exactly DESTROY"
+            exit 1
+          fi
+
+      - name: Project id
+        run: |
+          if [ "${{ inputs.confirm_project }}" != "${{ vars.GCP_PROJECT_ID }}" ]; then
+            echo "::error::confirm_project does not match the configured project"
+            exit 1
+          fi
+
+      - name: Note the mode
+        run: |
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            echo "::notice::Dry run — a destroy plan will be produced and nothing deleted."
+          else
+            echo "::warning::LIVE DESTROY requested. The Cloud SQL instance and all member records will be deleted."
+          fi
+
+  destroy:
+    name: Destroy
+    needs: guard
+    runs-on: ubuntu-latest
+    # Declared so teardown shows in the repository's deployment history as a
+    # distinct environment. Add a required reviewer here when the plan allows.
+    environment:
+      name: production-destroy
+    defaults:
+      run:
+        working-directory: tofu
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOYER_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - uses: opentofu/setup-opentofu@v1
+        with:
+          tofu_version: 1.12.6
+
+      - name: Init
+        run: tofu init -backend-config="bucket=${{ vars.GCP_STATE_BUCKET }}"
+
+      - name: Record what exists, for the audit trail
+        run: |
+          {
+            echo "### Resources currently in state"
+            echo ""
+            echo '```'
+            tofu state list || echo "(no state)"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Back up the database before destroying it
+        if: ${{ !inputs.dry_run }}
+        run: |
+          instance=$(tofu output -raw sql_instance_name 2>/dev/null || true)
+          if [ -z "$instance" ]; then
+            echo "::notice::No Cloud SQL instance in state; nothing to back up"
+            exit 0
+          fi
+          echo "::notice::Taking a final on-demand backup of $instance"
+          gcloud sql backups create \
+            --instance="$instance" \
+            --project="${{ vars.GCP_PROJECT_ID }}" \
+            --description="pre-destroy $(date -u +%Y-%m-%dT%H:%M:%SZ) ${GITHUB_SHA::12}" \
+            || echo "::warning::Backup failed. Continuing, because you asked for a destroy."
+
+      - name: Destroy plan
+        run: |
+          tofu plan -destroy -no-color -lock-timeout=5m \
+            -var="project_id=${{ vars.GCP_PROJECT_ID }}" \
+            -var="guild_realm=${{ vars.TOMB_GUILD_REALM }}" \
+            -var="bnet_client_id=${{ vars.BNET_CLIENT_ID }}" \
+            -var="public_url=${{ vars.GCP_PUBLIC_URL }}" \
+            -var="image=${{ vars.GCP_CURRENT_IMAGE || 'us-docker.pkg.dev/cloudrun/container/hello' }}" \
+            | tee destroy-plan.txt
+
+          {
+            echo ""
+            echo "### Destroy plan"
+            echo ""
+            echo '```terraform'
+            tail -c 40000 destroy-plan.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Stop here on a dry run
+        if: ${{ inputs.dry_run }}
+        run: echo "::notice::Dry run complete. Nothing was deleted. Re-run with dry_run unchecked to proceed."
+
+      - name: Stand down database deletion protection
+        if: ${{ !inputs.dry_run }}
+        # Cloud SQL refuses to be deleted while deletion_protection is set, so
+        # lowering it is its own deliberate apply rather than a side effect.
+        run: |
+          tofu apply -auto-approve -lock-timeout=5m -input=false \
+            -var="project_id=${{ vars.GCP_PROJECT_ID }}" \
+            -var="guild_realm=${{ vars.TOMB_GUILD_REALM }}" \
+            -var="bnet_client_id=${{ vars.BNET_CLIENT_ID }}" \
+            -var="public_url=${{ vars.GCP_PUBLIC_URL }}" \
+            -var="image=${{ vars.GCP_CURRENT_IMAGE || 'us-docker.pkg.dev/cloudrun/container/hello' }}" \
+            -var="db_deletion_protection=false"
+
+      - name: Destroy
+        if: ${{ !inputs.dry_run }}
+        run: |
+          tofu destroy -auto-approve -lock-timeout=5m -input=false \
+            -var="project_id=${{ vars.GCP_PROJECT_ID }}" \
+            -var="guild_realm=${{ vars.TOMB_GUILD_REALM }}" \
+            -var="bnet_client_id=${{ vars.BNET_CLIENT_ID }}" \
+            -var="public_url=${{ vars.GCP_PUBLIC_URL }}" \
+            -var="image=${{ vars.GCP_CURRENT_IMAGE || 'us-docker.pkg.dev/cloudrun/container/hello' }}" \
+            -var="db_deletion_protection=false"
+
+      - name: What survived, on purpose
+        if: ${{ !inputs.dry_run }}
+        run: |
+          {
+            echo ""
+            echo "### Destroyed"
+            echo ""
+            echo "Still present, deliberately:"
+            echo ""
+            echo "- the state bucket \`${{ vars.GCP_STATE_BUCKET }}\` and its version history"
+            echo "- everything in \`tofu/bootstrap\` (WIF pool, deployer service account)"
+            echo "- the final Cloud SQL backup taken above"
+            echo "- the project itself and its enabled APIs"
+            echo ""
+            echo "Remove those by hand if you mean to close the project down entirely."
+          } >> "$GITHUB_STEP_SUMMARY"

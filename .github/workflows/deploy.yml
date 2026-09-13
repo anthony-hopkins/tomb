@@ -1,0 +1,276 @@
+name: Deploy
+
+# Builds the image, applies infrastructure, and verifies the result is alive.
+# This is both "deploy" and "upgrade": an application change and an
+# infrastructure change take exactly the same path.
+#
+# HOW THE PRODUCTION GATE WORKS
+#
+# Principle V requires human approval before a production apply. The obvious
+# mechanism -- a required reviewer on the `production` environment -- is not
+# available here: GitHub does not offer environment protection rules on private
+# repositories on the free plan.
+#
+# So the approval is the trigger itself. A push to main runs the tests and
+# builds and pushes the image, but does NOT apply. Applying requires someone to
+# deliberately run this workflow from the Actions tab, which is a human
+# decision with an audit trail, just a different shape.
+#
+# If the repository ever goes public, or the account moves to a paid plan, add a
+# required reviewer to the `production` environment and delete the
+# `github.event_name == workflow_dispatch` condition on the apply job to get
+# auto-deploy-on-merge with an approval prompt.
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - ".specify/**"
+  workflow_dispatch:
+    inputs:
+      skip_build:
+        description: "Reuse the image already deployed (infrastructure-only change)"
+        type: boolean
+        default: false
+      apply:
+        description: "Apply to production. Unchecked runs test and build only."
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  id-token: write
+
+# Never let two applies touch the same state at once. Not cancel-in-progress:
+# interrupting an apply mid-flight is how state drifts from reality.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Gate: the application test suite must pass before anything is deployed.
+  # ---------------------------------------------------------------------------
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.27"
+          cache: true
+
+      - run: go build ./...
+      - run: go vet ./...
+      - run: go test -race ./...
+
+  # ---------------------------------------------------------------------------
+  # Build and push the container image, tagged with the commit SHA.
+  # ---------------------------------------------------------------------------
+  build:
+    name: Build and push image
+    needs: test
+    if: ${{ !inputs.skip_build }}
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.meta.outputs.image }}
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOYER_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Compute the image tag
+        id: meta
+        run: |
+          host="${{ vars.GCP_REGION || 'us-central1' }}-docker.pkg.dev"
+          image="$host/${{ vars.GCP_PROJECT_ID }}/tomb/platform:${GITHUB_SHA::12}"
+          echo "host=$host"   >> "$GITHUB_OUTPUT"
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker "${{ steps.meta.outputs.host }}" --quiet
+
+      - name: Build
+        run: docker build -t "${{ steps.meta.outputs.image }}" .
+
+      - name: Push
+        # Tags are immutable in this repository, so a re-run of the same commit
+        # finds the tag already present. That is success, not failure.
+        run: |
+          if docker push "${{ steps.meta.outputs.image }}"; then
+            echo "pushed ${{ steps.meta.outputs.image }}"
+          else
+            echo "::notice::Push failed; checking whether this tag already exists"
+            gcloud artifacts docker images describe "${{ steps.meta.outputs.image }}" >/dev/null
+            echo "::notice::Tag already present (immutable tags); continuing"
+          fi
+
+  # ---------------------------------------------------------------------------
+  # Apply. Gated by the `production` environment.
+  # ---------------------------------------------------------------------------
+  apply:
+    name: Apply infrastructure
+    needs: [test, build]
+    # Two conditions. `always()` so an infrastructure-only dispatch (build
+    # skipped) still runs, but only when nothing failed; and the run must be a
+    # deliberate manual dispatch with apply checked -- a push to main builds
+    # the image and stops. See the note at the top of this file.
+    if: ${{ always()
+      && github.event_name == 'workflow_dispatch'
+      && inputs.apply
+      && needs.test.result == 'success'
+      && needs.build.result != 'failure'
+      && needs.build.result != 'cancelled' }}
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: ${{ steps.outputs.outputs.service_url }}
+    defaults:
+      run:
+        working-directory: tofu
+    outputs:
+      service_url: ${{ steps.outputs.outputs.service_url }}
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOYER_SA }}
+
+      - uses: opentofu/setup-opentofu@v1
+        with:
+          tofu_version: 1.12.6
+
+      - name: Init
+        run: tofu init -backend-config="bucket=${{ vars.GCP_STATE_BUCKET }}"
+
+      - name: Resolve the image to deploy
+        id: image
+        run: |
+          if [ -n "${{ needs.build.outputs.image }}" ]; then
+            echo "image=${{ needs.build.outputs.image }}" >> "$GITHUB_OUTPUT"
+          else
+            # Infrastructure-only run: keep whatever Cloud Run is serving.
+            current=$(tofu output -raw deployed_image 2>/dev/null || true)
+            if [ -z "$current" ]; then
+              echo "::error::No image was built and none is recorded in state. Run without skip_build for the first deploy."
+              exit 1
+            fi
+            echo "image=$current" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Apply
+        run: |
+          tofu apply -auto-approve -lock-timeout=5m -input=false \
+            -var="project_id=${{ vars.GCP_PROJECT_ID }}" \
+            -var="guild_realm=${{ vars.TOMB_GUILD_REALM }}" \
+            -var="bnet_client_id=${{ vars.BNET_CLIENT_ID }}" \
+            -var="public_url=${{ vars.GCP_PUBLIC_URL }}" \
+            -var="image=${{ steps.image.outputs.image }}"
+
+      - name: Close the redirect-URL loop
+        # The Battle.net redirect URL needs the Cloud Run URL, which does not
+        # exist until Cloud Run does. On the first deploy public_url is empty,
+        # so apply once more now that the URL is known. A no-op afterwards.
+        run: |
+          service_url=$(tofu output -raw service_url)
+          configured="${{ vars.GCP_PUBLIC_URL }}"
+
+          if [ "$service_url" != "$configured" ]; then
+            echo "::warning::public_url ($configured) does not match the service URL ($service_url); re-applying"
+            tofu apply -auto-approve -lock-timeout=5m -input=false \
+              -var="project_id=${{ vars.GCP_PROJECT_ID }}" \
+              -var="guild_realm=${{ vars.TOMB_GUILD_REALM }}" \
+              -var="bnet_client_id=${{ vars.BNET_CLIENT_ID }}" \
+              -var="public_url=$service_url" \
+              -var="image=${{ steps.image.outputs.image }}"
+            echo "::notice::Set the GCP_PUBLIC_URL repository variable to $service_url, and register $service_url/auth/callback in the Battle.net developer portal."
+          fi
+
+      - name: Read outputs
+        id: outputs
+        run: echo "service_url=$(tofu output -raw service_url)" >> "$GITHUB_OUTPUT"
+
+  # ---------------------------------------------------------------------------
+  # Post-deploy verification. A deploy that reports success without proving the
+  # service answers is not a deploy.
+  # ---------------------------------------------------------------------------
+  verify:
+    name: Verify deployment
+    needs: apply
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Liveness
+        run: |
+          url="${{ needs.apply.outputs.service_url }}"
+          echo "probing $url"
+          for i in $(seq 1 20); do
+            if curl -fsS --max-time 10 "$url/healthz" | grep -qx ok; then
+              echo "healthz ok (attempt $i)"
+              exit 0
+            fi
+            echo "  attempt $i failed; retrying"
+            sleep 6
+          done
+          echo "::error::/healthz never returned ok - the revision is not serving"
+          exit 1
+
+      - name: Readiness, including the database
+        run: |
+          url="${{ needs.apply.outputs.service_url }}"
+          for i in $(seq 1 20); do
+            if curl -fsS --max-time 10 "$url/readyz" | grep -qx ok; then
+              echo "readyz ok (attempt $i)"
+              exit 0
+            fi
+            echo "  attempt $i failed; retrying"
+            sleep 6
+          done
+          echo "::error::/readyz never returned ok - the container is up but cannot reach Cloud SQL"
+          exit 1
+
+      - name: Landing page renders
+        run: |
+          url="${{ needs.apply.outputs.service_url }}"
+          body=$(curl -fsS --max-time 15 "$url/")
+          echo "$body" | grep -q "Sign in with Battle.net" \
+            || { echo "::error::Landing page is missing the sign-in action"; exit 1; }
+          echo "landing page ok"
+
+      - name: Guild gate is enforced
+        run: |
+          url="${{ needs.apply.outputs.service_url }}"
+          code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 "$url/app/dashboard")
+          if [ "$code" != "302" ]; then
+            echo "::error::/app/dashboard returned $code for an anonymous request; expected a 302 redirect"
+            exit 1
+          fi
+          echo "anonymous access correctly redirected"
+
+      - name: Summary
+        run: |
+          {
+            echo "### Deployed"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| URL | ${{ needs.apply.outputs.service_url }} |"
+            echo "| Commit | \`${GITHUB_SHA::12}\` |"
+            echo ""
+            echo "Liveness, readiness, landing page and the anonymous guild gate all verified."
+          } >> "$GITHUB_STEP_SUMMARY"

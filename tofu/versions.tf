@@ -19,9 +19,13 @@ terraform {
   }
 
   # Remote state so volunteers who rotate in and out never fight over a local
-  # state file. Bootstrap this bucket once, by hand, before the first init.
+  # state file, and so GitHub Actions and a workstation share one source of
+  # truth. The bucket is created by tofu/bootstrap.
+  #
+  # Partial configuration on purpose: GCS bucket names are globally unique, so
+  # the name is supplied at init time rather than hardcoded here.
+  #   tofu init -backend-config="bucket=YOUR_BUCKET"
   backend "gcs" {
-    bucket = "tomb-platform-tfstate"
     prefix = "platform"
   }
 }
