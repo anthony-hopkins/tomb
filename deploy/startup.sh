@@ -147,6 +147,13 @@ docker cp "$cid:/deploy/deploy.sh" "$APP_DIR/deploy.sh"
 docker rm -f "$cid" >/dev/null
 chmod +x "$APP_DIR/deploy.sh"
 
+# An `email` directive with no argument is a Caddyfile parse error, so Caddy
+# would crash-loop and nothing would listen on 443. Drop the line when no
+# address is configured; Caddy then registers with ACME anonymously.
+if [ -z "${ACME_EMAIL:-}" ]; then
+  sed -i '/{\$ACME_EMAIL}/d' "$APP_DIR/Caddyfile"
+fi
+
 log "starting the stack"
 cd "$APP_DIR"
 docker compose --env-file "$APP_DIR/.env" up -d --remove-orphans

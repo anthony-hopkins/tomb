@@ -39,6 +39,18 @@ docker rm -f "$cid" >/dev/null
 mv "$APP_DIR/deploy.sh.new" "$APP_DIR/deploy.sh"
 chmod +x "$APP_DIR/deploy.sh"
 
+# deploy.sh runs without startup.sh's environment, so read the value that
+# startup.sh recorded.
+ACME_EMAIL="$(grep -E '^ACME_EMAIL=' "$APP_DIR/.env" | cut -d= -f2- || true)"
+
+# An `email` directive with no argument is a Caddyfile parse error, so Caddy
+# would crash-loop and nothing would listen on 443. Drop the line when no
+# address is configured; Caddy then registers with ACME anonymously.
+if [ -z "${ACME_EMAIL:-}" ]; then
+  sed -i '/{\$ACME_EMAIL}/d' "$APP_DIR/Caddyfile"
+fi
+
+
 # Point .env at the new image without disturbing the secrets already in it.
 sed -i "s|^APP_IMAGE=.*|APP_IMAGE=$IMAGE|" "$APP_DIR/.env"
 
