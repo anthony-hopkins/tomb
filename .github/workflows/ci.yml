@@ -3,12 +3,15 @@ name: CI
 # The merge gate from the constitution's Development Workflow: go build, go vet,
 # go test ./..., and a successful Docker image build.
 #
+# Pull requests only. deploy.yml runs the same test suite and Docker build on a
+# push to main, so triggering here as well ran the Go tests twice and built the
+# image twice for every merge. A push to main is covered by Deploy; this
+# workflow guards the pull request that precedes it.
+#
 # Infrastructure review lives in infra-plan.yml, which posts a real `tofu plan`
 # to the pull request. Deployment lives in deploy.yml.
 
 on:
-  push:
-    branches: [main]
   pull_request:
 
 permissions:
