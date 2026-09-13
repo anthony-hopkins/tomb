@@ -162,27 +162,57 @@ jobs:
 
       - name: Preflight - can the deployer actually do this?
         # tofu/bootstrap is applied by hand, so its role list can drift behind
-        # what the main configuration needs. That drift surfaces as a 403
-        # partway through an apply, after earlier resources have already been
-        # created or destroyed, which is the worst shape for a failure.
+        # what the main configuration needs. That drift otherwise surfaces as a
+        # 403 partway through an apply, after earlier resources have already
+        # been created or destroyed.
+        #
+        # Uses the Resource Manager testIamPermissions endpoint directly.
+        # `gcloud projects test-iam-permissions` does not exist -- an earlier
+        # version of this step called it, and because the failure was silenced
+        # the broken command looked exactly like "no permissions granted" and
+        # blocked a deploy with a false alarm. Hence: no stderr suppression, and
+        # an API failure is reported as an API failure rather than as a missing
+        # permission.
         run: |
-          required="compute.instances.create compute.disks.create compute.firewalls.create compute.resourcePolicies.create secretmanager.secrets.create iam.serviceAccounts.create"
+          set -euo pipefail
 
-          perms=$(echo "$required" | tr " " ",")
-          gcloud projects test-iam-permissions "${{ vars.GCP_PROJECT_ID }}"             --permissions="$perms"             --flatten="permissions[]"             --format="value(permissions)" > /tmp/granted.txt 2>/dev/null || true
+          cat > /tmp/required.json <<'JSON'
+          {"permissions":[
+            "compute.instances.create",
+            "compute.disks.create",
+            "compute.firewalls.create",
+            "compute.resourcePolicies.create",
+            "compute.addresses.create",
+            "secretmanager.secrets.create",
+            "iam.serviceAccounts.create"
+          ]}
+          JSON
 
-          missing=""
-          for p in $required; do
-            grep -qx "$p" /tmp/granted.txt || missing="$missing $p"
-          done
+          token="$(gcloud auth print-access-token)"
 
-          if [ -n "$missing" ]; then
-            echo "::error::The deployer service account is missing:$missing"
-            echo "::error::tofu/bootstrap grants these, and it is applied by hand. Re-apply it:"
-            echo "::error::  cd tofu/bootstrap && tofu plan -out=tfplan && tofu apply tfplan"
+          http_code=$(curl -sS -o /tmp/granted.json -w '%{http_code}'             -X POST             -H "Authorization: Bearer $token"             -H "Content-Type: application/json"             "https://cloudresourcemanager.googleapis.com/v1/projects/${{ vars.GCP_PROJECT_ID }}:testIamPermissions"             -d @/tmp/required.json)
+
+          if [ "$http_code" != "200" ]; then
+            echo "::error::testIamPermissions returned HTTP $http_code, so the preflight could not run."
+            cat /tmp/granted.json
             exit 1
           fi
-          echo "deployer holds every permission this apply needs"
+
+          python3 - <<'PY'
+          import json, sys
+
+          required = set(json.load(open("/tmp/required.json"))["permissions"])
+          granted = set(json.load(open("/tmp/granted.json")).get("permissions", []))
+          missing = sorted(required - granted)
+
+          if missing:
+              print("::error::The deployer service account is missing: " + " ".join(missing))
+              print("::error::tofu/bootstrap grants these, and it is applied by hand. Re-apply it:")
+              print("::error::  cd tofu/bootstrap && tofu plan -out=tfplan && tofu apply tfplan")
+              sys.exit(1)
+
+          print(f"deployer holds all {len(required)} permissions this apply needs")
+          PY
 
       - name: Init
         run: tofu init -backend-config="bucket=${{ vars.GCP_STATE_BUCKET }}"
