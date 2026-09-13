@@ -8,13 +8,17 @@ service-account JSON key anywhere, in GitHub secrets or otherwise.
 
 | Workflow | Trigger | What it does |
 |---|---|---|
-| `ci.yml` | every PR and push to `main` | gofmt, build, vet, `go test -race`, Docker build |
+| `ci.yml` | pull requests only | gofmt, build, vet, `go test -race`, Docker build |
 | `infra-plan.yml` | PR touching `tofu/**` | `tofu plan`, posted as a PR comment. Never applies. |
 | `deploy.yml` | push to `main` builds only; **manual run applies** | test → build and push image → `tofu apply` → roll the VM over SSH → verify the live site |
 | `infra-destroy.yml` | manual only | guarded teardown, dry-run by default |
 
 Deploy and upgrade are the same path: an application change and an
 infrastructure change both go through `deploy.yml`.
+
+`ci.yml` deliberately does **not** trigger on a push to `main`: `deploy.yml`
+runs the same tests and the same Docker build there, so triggering both ran
+every merge's work twice.
 
 The stack runs as a Compose project on one Compute Engine VM — Caddy for TLS,
 the Go app, and self-hosted Postgres on a persistent disk. `deploy.yml` applies
