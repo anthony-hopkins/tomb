@@ -160,6 +160,30 @@ jobs:
         with:
           tofu_version: 1.12.6
 
+      - name: Preflight - can the deployer actually do this?
+        # tofu/bootstrap is applied by hand, so its role list can drift behind
+        # what the main configuration needs. That drift surfaces as a 403
+        # partway through an apply, after earlier resources have already been
+        # created or destroyed, which is the worst shape for a failure.
+        run: |
+          required="compute.instances.create compute.disks.create compute.firewalls.create compute.resourcePolicies.create secretmanager.secrets.create iam.serviceAccounts.create"
+
+          perms=$(echo "$required" | tr " " ",")
+          gcloud projects test-iam-permissions "${{ vars.GCP_PROJECT_ID }}"             --permissions="$perms"             --flatten="permissions[]"             --format="value(permissions)" > /tmp/granted.txt 2>/dev/null || true
+
+          missing=""
+          for p in $required; do
+            grep -qx "$p" /tmp/granted.txt || missing="$missing $p"
+          done
+
+          if [ -n "$missing" ]; then
+            echo "::error::The deployer service account is missing:$missing"
+            echo "::error::tofu/bootstrap grants these, and it is applied by hand. Re-apply it:"
+            echo "::error::  cd tofu/bootstrap && tofu plan -out=tfplan && tofu apply tfplan"
+            exit 1
+          fi
+          echo "deployer holds every permission this apply needs"
+
       - name: Init
         run: tofu init -backend-config="bucket=${{ vars.GCP_STATE_BUCKET }}"
 
