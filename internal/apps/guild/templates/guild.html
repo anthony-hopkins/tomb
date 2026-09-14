@@ -39,18 +39,37 @@
           {{if .Realm}}&middot; {{.Realm}}{{end}}
         </span>
 
+        {{/* The same card as My Characters, row for row: badge, linked name,
+             realm and guild, then class, specialisation, level, item level and
+             last played. The last three come from the member's profile; when
+             that was unavailable they are left out rather than shown as
+             zero. */}}
         <div class="character-card popover" role="group" aria-label="{{.Name}} details">
           {{if .Rank}}<p class="badge">{{.Rank}}</p>{{end}}
           <h2><a href="?c={{.Key}}">{{.Name}}</a></h2>
-          {{if .Realm}}<p class="realm">{{.Realm}}</p>{{end}}
+          <p class="realm">
+            {{.Realm}}{{if .Guild}} &middot; &lt;{{.Guild}}&gt;{{end}}
+          </p>
           <dl>
             {{if .Class}}
             <dt>Class</dt>
             <dd>{{.Class}}</dd>
             {{end}}
+            {{if .ActiveSpec}}
+            <dt>Specialization</dt>
+            <dd>{{.ActiveSpec}}</dd>
+            {{end}}
             {{if .Level}}
             <dt>Level</dt>
             <dd>{{.Level}}</dd>
+            {{end}}
+            {{if .AverageItemLevel}}
+            <dt>Average item level</dt>
+            <dd>{{.AverageItemLevel}}</dd>
+            {{end}}
+            {{with .LastLogin}}
+            <dt>Last played</dt>
+            <dd>{{.}}</dd>
             {{end}}
           </dl>
         </div>
