@@ -45,6 +45,19 @@ body {
   background: transparent;
   color: var(--ink);
   font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+
+  /* Hold the footer at the bottom of the page on short pages -- the landing
+     page is one screen of content in a tall viewport, and without this the
+     footer sat halfway up with the banner showing below it.
+     
+     A column flex body with a growing main, rather than position: fixed: the
+     footer belongs at the end of the PAGE, not stuck to the viewport, so on the
+     roster it scrolls away under the cards like an ordinary footer instead of
+     hovering over them. */
+  min-height: 100vh;
+  min-height: 100dvh; /* honours mobile browser chrome; ignored where unsupported */
+  display: flex;
+  flex-direction: column;
 }
 
 /* The banner, held in the centre of the VIEWPORT -- position: fixed, so it
@@ -109,7 +122,17 @@ body::before {
 
 .battletag { color: var(--muted); font-size: 0.9rem; }
 
-main { max-width: 46rem; margin: 0 auto; padding: 2rem 1.5rem; }
+/* flex: 1 is what pushes the footer down; width still comes from the max-width
+   and the auto margins, which keep working inside a column flex container.
+   min-height: 0 lets it shrink below its content rather than overflowing. */
+main {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  max-width: 46rem;
+  margin: 0 auto;
+  padding: 2rem 1.5rem;
+}
 
 h1 { margin-top: 0; font-size: 1.6rem; }
 
