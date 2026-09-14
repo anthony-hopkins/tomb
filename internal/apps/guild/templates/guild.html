@@ -19,12 +19,32 @@
     <p class="rank-heading">{{.Label}}</p>
     <ul class="character-list">
       {{range .Members}}
-      <li class="character-row">
+      {{/* Identical to a row in My Characters: the same classes, the same
+           tabindex, and a card revealed by the same :hover and :focus-within
+           rules in the stylesheet. Nothing here is guild-specific except what
+           the card can say, which is what a roster knows. */}}
+      <li class="character-row" tabindex="0">
         <span class="row-name">{{.Name}}</span>
         <span class="row-meta">
           {{if .Level}}{{.Level}}{{end}}{{if .Class}} {{.Class}}{{end}}
           {{if .Realm}}&middot; {{.Realm}}{{end}}
         </span>
+
+        <div class="character-card popover" role="group" aria-label="{{.Name}} details">
+          {{if .Rank}}<p class="badge">{{.Rank}}</p>{{end}}
+          <h2>{{.Name}}</h2>
+          {{if .Realm}}<p class="realm">{{.Realm}}</p>{{end}}
+          <dl>
+            {{if .Class}}
+            <dt>Class</dt>
+            <dd>{{.Class}}</dd>
+            {{end}}
+            {{if .Level}}
+            <dt>Level</dt>
+            <dd>{{.Level}}</dd>
+            {{end}}
+          </dl>
+        </div>
       </li>
       {{end}}
     </ul>

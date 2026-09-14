@@ -97,6 +97,47 @@ func TestRosterRendersRankHeadings(t *testing.T) {
 	}
 }
 
+// TestRosterRowsBehaveLikeCharacterRows is the point of this page reusing the
+// character rail rather than looking like it.
+//
+// The hover card is not styling an app can opt into halfway: the stylesheet
+// reveals .character-card.popover inside a .character-row on :hover and
+// :focus-within, and it needs the row to be focusable for the keyboard half to
+// work. A row with the right class and none of the rest highlights on hover and
+// then does nothing, which is exactly what it did.
+func TestRosterRowsBehaveLikeCharacterRows(t *testing.T) {
+	a := appWith([]string{"Guild Master", "Officer"})
+	v := view{
+		Groups: a.group([]blizzard.GuildMember{
+			{Name: "Nekromoo", Rank: 0, Level: 90, Class: "Death Knight", RealmName: "Area 52"},
+			{Name: "Lazzlowe", Rank: 1, Level: 90, Class: "Paladin", RealmName: "Area 52"},
+		}),
+		Total: 2,
+	}
+
+	body := render(t, v)
+
+	// Every row focusable, or tabbing the roster reveals nothing.
+	rows := strings.Count(body, `class="character-row"`)
+	focusable := strings.Count(body, `class="character-row" tabindex="0"`)
+	if rows == 0 || rows != focusable {
+		t.Errorf("%d rows but %d focusable; the card is keyboard-unreachable on the rest",
+			rows, focusable)
+	}
+
+	// Every row carries a card, using the same classes the stylesheet keys off.
+	if cards := strings.Count(body, "character-card popover"); cards != rows {
+		t.Errorf("%d rows but %d cards; a row without one highlights and then does nothing",
+			rows, cards)
+	}
+
+	// The card names the rank, so a card opened over another group still says
+	// which rank it belongs to.
+	if !strings.Contains(body, `<p class="badge">Guild Master</p>`) {
+		t.Error("the card does not name the member's rank")
+	}
+}
+
 // TestUnnamedRanksSaySo: an unconfigured rank shows as a number, and the page
 // explains why rather than leaving it looking broken.
 func TestUnnamedRanksSaySo(t *testing.T) {
