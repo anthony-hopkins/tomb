@@ -88,6 +88,12 @@ func Mount(c *Core, authHandlers *auth.Handlers, apps []App) (http.Handler, erro
 		if seenPrefix[meta.RoutePrefix] {
 			return nil, fmt.Errorf("app registration: duplicate RoutePrefix %q", meta.RoutePrefix)
 		}
+		// Officer-only is a narrowing of guild-gated, not an alternative to
+		// it: an officer is a member first. An app that claims the one
+		// without the other has misdescribed itself.
+		if meta.OfficerOnly && !meta.RequiresGuild {
+			return nil, fmt.Errorf("app registration: app %q is OfficerOnly but not RequiresGuild", meta.Slug)
+		}
 		seenSlug[meta.Slug] = true
 		seenPrefix[meta.RoutePrefix] = true
 
@@ -96,7 +102,7 @@ func Mount(c *Core, authHandlers *auth.Handlers, apps []App) (http.Handler, erro
 		wrap := func(h http.Handler) http.Handler {
 			h = noStore(h)
 			if meta.RequiresGuild {
-				h = c.requireGuild(h)
+				h = c.requireGuild(meta, h)
 			}
 			return c.requireSession(h)
 		}
@@ -121,8 +127,13 @@ func Mount(c *Core, authHandlers *auth.Handlers, apps []App) (http.Handler, erro
 		c.home = meta.RoutePrefix
 	}
 
-	// Stable navigation order regardless of registration order.
+	// Navigation order is declared (FR-019): by NavOrder, then by label for
+	// anything that did not say. Never by registration order, which is a
+	// slice in main.go that nobody should have to keep sorted.
 	sort.SliceStable(c.registry, func(i, j int) bool {
+		if c.registry[i].NavOrder != c.registry[j].NavOrder {
+			return c.registry[i].NavOrder < c.registry[j].NavOrder
+		}
 		return c.registry[i].NavLabel < c.registry[j].NavLabel
 	})
 
@@ -211,6 +222,12 @@ func (c *Core) navFor(r *http.Request) []NavItem {
 	var items []NavItem
 	for _, meta := range c.registry {
 		if meta.RequiresGuild && haveProfile && !profile.Membership.IsMember {
+			continue
+		}
+		// An officer-only app is not merely refused to everyone else; it is
+		// not mentioned to them (FR-021). With no profile in hand -- a core
+		// page -- the entry is left out too, since it cannot be vouched for.
+		if meta.OfficerOnly && (!haveProfile || !profile.Membership.IsOfficer) {
 			continue
 		}
 		// No label, no entry. The guild overview is reached through the brand

@@ -23,6 +23,8 @@ type App interface {
 type AppMeta struct {
     Slug          string // URL-safe id, unique across apps, e.g. "dashboard"
     NavLabel      string // Human label for the nav bar, e.g. "My Character"
+    NavOrder      int    // Place in the nav bar, lowest first; ties by label (002 FR-019)
+    OfficerOnly   bool   // true => hidden from and refused to non-officers; implies RequiresGuild (002 FR-021)
     RoutePrefix   string // Must be "/app/" + Slug
     RequiresGuild bool   // true => core enforces the FR-013a guild gate
 }

@@ -170,7 +170,7 @@ func noStore(next http.Handler) http.Handler {
 // from character data, and the gate must run before any app handler
 // (contracts/app-registration.md guarantee 3). Apps then read the profile from
 // context, so a view still costs exactly one 1+N fetch (FR-016).
-func (c *Core) requireGuild(next http.Handler) http.Handler {
+func (c *Core) requireGuild(meta AppMeta, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		sess, ok := SessionFrom(r.Context())
 		if !ok {
@@ -188,6 +188,13 @@ func (c *Core) requireGuild(next http.Handler) http.Handler {
 			// Re-derived every request, so a departed member loses access on
 			// their next view (data-model.md: no cached membership flag).
 			c.RenderNonMember(w, r, http.StatusOK)
+			return
+		}
+
+		// A member below the officer rank is told exactly that -- not that
+		// they are not a member, which would be untrue and alarming.
+		if meta.OfficerOnly && !profile.Membership.IsOfficer {
+			c.RenderOfficersOnly(w, r)
 			return
 		}
 

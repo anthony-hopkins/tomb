@@ -96,6 +96,17 @@ func (c *Core) RenderError(w http.ResponseWriter, r *http.Request, status int, r
 	})
 }
 
+// RenderOfficersOnly is the FR-021 refusal: a member, but not an officer, on
+// a page for officers. 403, because that is what it is; the page shell and
+// navigation still render, because they are still a member everywhere else.
+func (c *Core) RenderOfficersOnly(w http.ResponseWriter, r *http.Request) {
+	c.renderPage(w, r, http.StatusForbidden, "error.html", PageData{
+		Title: "Officers only",
+		Message: "This page is for the guild master and officers. Everything else on " +
+			"the site is still yours.",
+	})
+}
+
 // RenderNonMember is the FR-013a denial page: no app is reachable, and the only
 // action offered is logging out (scenario 7).
 func (c *Core) RenderNonMember(w http.ResponseWriter, r *http.Request, status int) {

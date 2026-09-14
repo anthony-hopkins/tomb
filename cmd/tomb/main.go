@@ -82,9 +82,19 @@ func run() error {
 	// One guild identity, built once and shared: the membership check uses it
 	// and so does every app that is about the guild.
 	guildCfg := platform.GuildConfig{
-		Name:      cfg.GuildName,
-		RealmSlug: cfg.GuildRealm,
-		Ranks:     cfg.GuildRanks,
+		Name:        cfg.GuildName,
+		RealmSlug:   cfg.GuildRealm,
+		Ranks:       cfg.GuildRanks,
+		OfficerRank: cfg.GuildOfficerRank,
+	}
+
+	// The roster, held once and refreshed in the background, for everything
+	// that needs to know who is in the guild and at what rank.
+	roster := &platform.RosterCache{
+		Client: bnet,
+		Guild:  guildCfg,
+		Logger: logger,
+		TTL:    cfg.GuildRosterTTL,
 	}
 
 	core := &platform.Core{
@@ -94,12 +104,14 @@ func run() error {
 			Logger:   logger,
 			Config:   cfg,
 			Guild:    guildCfg,
+			Roster:   roster,
 		},
 		Sessions: sessions,
 		Profiles: &platform.ProfileFetcher{
 			Client: bnet,
 			Guild:  guildCfg,
 			Logger: logger,
+			Roster: roster,
 		},
 		CSRF:      csrf,
 		Templates: templates,

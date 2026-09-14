@@ -614,11 +614,17 @@ func signedIn(t *testing.T) *http.Request {
 }
 
 func snapshotApp(f *fakeClient, refresh time.Duration) *App {
+	guild := platform.GuildConfig{Name: "TOMB", RealmSlug: "elune", Ranks: []string{"Guild Master", "Officer"}}
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	return &App{
 		deps: platform.Deps{
-			Guild:    platform.GuildConfig{Name: "TOMB", RealmSlug: "elune", Ranks: []string{"Guild Master", "Officer"}},
+			Guild:    guild,
 			Blizzard: f,
-			Logger:   slog.New(slog.NewTextHandler(io.Discard, nil)),
+			Logger:   logger,
+			// The roster reaches the app through the core's cache now; a
+			// fresh one per app, over the same fake, so counts still mean
+			// what they say.
+			Roster: &platform.RosterCache{Client: f, Guild: guild, Logger: logger, TTL: time.Hour},
 		},
 		refreshEvery: refresh,
 	}
@@ -766,8 +772,10 @@ func TestStaleSnapshotIsServedWhileRefreshing(t *testing.T) {
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
-	if f.rosterGets.Load() != 2 {
-		t.Errorf("roster fetched %d times, want 2 (load + one refresh)", f.rosterGets.Load())
+	// The roster is the cache's business now and is still fresh; what the
+	// refresh redid is this app's own work, the profiles.
+	if f.profileCalls() != 2*len(twoMembers) {
+		t.Errorf("profiles fetched %d times, want %d (load + one refresh)", f.profileCalls(), 2*len(twoMembers))
 	}
 }
 
@@ -781,7 +789,11 @@ func TestFailedRefreshKeepsTheSnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("initial snapshot: %v", err)
 	}
+	// The cache would keep serving the roster it holds, so to make this
+	// app's refresh fail the roster has to be genuinely unobtainable: a cold
+	// cache over a client that is down.
 	f.rosterErr = errors.New("blizzard is down")
+	a.deps.Roster = &platform.RosterCache{Client: f, Guild: a.deps.Guild, Logger: a.deps.Logger, TTL: time.Hour}
 	a.mu.Lock()
 	a.snap.fetched = time.Now().Add(-2 * time.Hour)
 	a.mu.Unlock()

@@ -43,6 +43,11 @@ type Config struct {
 	// and the FR-013 access check is a different path that stays live too.
 	GuildRosterTTL time.Duration
 
+	// GuildOfficerRank is the lowest rank index that still counts as an
+	// officer, from TOMB_GUILD_OFFICER_RANK. 1 by default: the guild master
+	// (0) and the rank below. See GuildConfig.OfficerRank.
+	GuildOfficerRank int
+
 	DatabaseURL string
 
 	// SessionCookieSecure defaults to true. It may only be false for local
@@ -122,6 +127,17 @@ func LoadConfig() (Config, error) {
 		secure = parsed
 	}
 	c.SessionCookieSecure = secure
+
+	// The officer threshold. Garbage is refused rather than defaulted: a typo
+	// here silently decides who may edit the calendar.
+	c.GuildOfficerRank = 1
+	if raw := strings.TrimSpace(os.Getenv("TOMB_GUILD_OFFICER_RANK")); raw != "" {
+		n, err := strconv.Atoi(raw)
+		if err != nil || n < 0 {
+			return Config{}, fmt.Errorf("TOMB_GUILD_OFFICER_RANK must be a rank index (0 or more), got %q", raw)
+		}
+		c.GuildOfficerRank = n
+	}
 
 	// A slice, not a map, so the error lists what is missing in the same order
 	// on every start. Alphabetical, because that is the order a person scans a

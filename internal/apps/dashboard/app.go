@@ -57,6 +57,7 @@ func (a *App) Meta() platform.AppMeta {
 	return platform.AppMeta{
 		Slug:        "dashboard",
 		NavLabel:    "My Characters",
+		NavOrder:    10, // first: it is the page about you
 		RoutePrefix: "/app/dashboard",
 		// FR-013a: guild members only. The core enforces this before the
 		// handler below ever runs.

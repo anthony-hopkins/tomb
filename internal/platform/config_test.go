@@ -27,7 +27,7 @@ func setEnv(t *testing.T, overrides map[string]string) {
 	for _, k := range []string{
 		"BNET_CLIENT_ID", "BNET_CLIENT_SECRET", "BNET_REDIRECT_URL", "BNET_REGION",
 		"TOMB_GUILD_NAME", "TOMB_GUILD_REALM", "DATABASE_URL",
-		"SESSION_COOKIE_SECURE", "BNET_API_HOST", "ADDR",
+		"SESSION_COOKIE_SECURE", "BNET_API_HOST", "ADDR", "TOMB_GUILD_OFFICER_RANK",
 	} {
 		t.Setenv(k, "")
 	}
@@ -155,5 +155,31 @@ func TestAPIHostOverride(t *testing.T) {
 	}
 	if cfg.APIHost != "http://127.0.0.1:9" {
 		t.Errorf("APIHost = %q, want the trailing slash trimmed", cfg.APIHost)
+	}
+}
+
+// TestOfficerRankDefaultsToOne: unset, the guild master and the rank below
+// are officers; set, it is whatever was said; garbage refuses to start.
+func TestOfficerRankDefaultsToOne(t *testing.T) {
+	setEnv(t, nil)
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	if cfg.GuildOfficerRank != 1 {
+		t.Errorf("GuildOfficerRank = %d, want 1", cfg.GuildOfficerRank)
+	}
+
+	setEnv(t, map[string]string{"TOMB_GUILD_OFFICER_RANK": "2"})
+	cfg, err = LoadConfig()
+	if err != nil || cfg.GuildOfficerRank != 2 {
+		t.Errorf("GuildOfficerRank = %d, %v; want 2", cfg.GuildOfficerRank, err)
+	}
+
+	for _, bad := range []string{"officer", "-1"} {
+		setEnv(t, map[string]string{"TOMB_GUILD_OFFICER_RANK": bad})
+		if _, err := LoadConfig(); err == nil {
+			t.Errorf("TOMB_GUILD_OFFICER_RANK=%q was accepted", bad)
+		}
 	}
 }

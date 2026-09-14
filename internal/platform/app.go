@@ -42,11 +42,22 @@ type AppMeta struct {
 	// as unreachable: a Home app is reached through the brand link, and an app
 	// could be linked from another page. It only means "do not list me".
 	NavLabel string
+
+	// NavOrder is the app's place in the navigation bar, lowest first; ties
+	// fall back to the label (FR-019). Declared rather than alphabetical,
+	// because the bar is read left to right by importance, not by spelling.
+	NavOrder int
+
 	// RoutePrefix must equal "/app/" + Slug. Mount rejects anything else.
 	RoutePrefix string
 	// RequiresGuild makes the core enforce the FR-013a guild gate before any
 	// of this app's handlers run.
 	RequiresGuild bool
+
+	// OfficerOnly hides the app from, and refuses it to, any member below the
+	// configured officer rank (FR-021). It implies RequiresGuild; Mount
+	// refuses an app that sets this without that.
+	OfficerOnly bool
 }
 
 // Registrar is the narrow slice of routing an app is allowed to touch. Patterns
@@ -70,6 +81,11 @@ type Deps struct {
 	// already holds it for the FR-013 membership check, and rebuilding it from
 	// Config in every app would be three fields copied in three places.
 	Guild GuildConfig
+
+	// Roster is the held guild roster, refreshed in the background. The core
+	// reads it to resolve a viewer's rank; the guild page reads it to draw
+	// the rail. One copy, one refresh, however many readers.
+	Roster *RosterCache
 
 	// RenderInLayout draws an app's rendered body inside the shared page
 	// shell, so apps own their own content without owning the site chrome,

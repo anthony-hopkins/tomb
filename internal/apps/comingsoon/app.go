@@ -79,6 +79,7 @@ func (a *App) Meta() platform.AppMeta {
 	return platform.AppMeta{
 		Slug:        "coming-soon",
 		NavLabel:    "Coming Soon",
+		NavOrder:    20, // after My Characters; the calendar and logs follow
 		RoutePrefix: "/app/coming-soon",
 		// The whole site is members-only, and a roadmap is guild business.
 		RequiresGuild: true,

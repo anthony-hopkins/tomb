@@ -482,12 +482,11 @@ func (a *App) refresh(token string) {
 
 // load fetches the roster and then every member's profile.
 func (a *App) load(ctx context.Context, token string) (*rosterSnapshot, error) {
-	members, err := a.deps.Blizzard.GuildRoster(ctx, token, a.deps.Guild.RealmSlug, a.deps.Guild.Name)
+	// The roster itself comes from the core's cache, which the rank check
+	// shares; this app adds the per-member detail on top. The cache has
+	// already logged a failure, so there is nothing to add here.
+	members, err := a.deps.Roster.Members(ctx, token)
 	if err != nil {
-		a.deps.Logger.Warn("guild roster unavailable",
-			"guild", a.deps.Guild.Name+"@"+a.deps.Guild.RealmSlug,
-			"outcome", blizzard.OutcomeOf(err).String(),
-		)
 		return nil, err
 	}
 	return &rosterSnapshot{
