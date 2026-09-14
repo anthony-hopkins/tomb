@@ -216,6 +216,39 @@ main:has(.dashboard) { max-width: none; }
    which is the whole point of a navigation pane. */
 .character-nav { position: sticky; top: 1.5rem; }
 
+/* A pinned rail whose LIST scrolls, with the heading and the note above it
+   and the total below it staying put.
+
+   Only once tooltip.js has marked it: a scrolling box clips anything
+   positioned outside it, and the hover cards sit beside their rows, outside
+   the rail. The script places them in viewport coordinates, where the rail
+   cannot clip them, and only then adds this class. Without the script the
+   rail is the tall sticky column it always was -- reachable, just not pinned.
+
+   dvh, so the height follows mobile browser chrome; the 100vh line is the
+   fallback where dvh is unsupported. */
+.character-nav.is-scrollable {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 3rem);
+  max-height: calc(100dvh - 3rem);
+}
+
+.character-nav.is-scrollable > .character-list,
+.character-nav.is-scrollable > .roster-groups {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  /* Reaching the end of the list must not start scrolling the page. */
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+
+/* Scrollbars come inside the box, so the last row's right edge and the
+   frame's rounded corners are already accounted for by the border radius on
+   the list; nothing to add. */
+
 .character-list {
   list-style: none;
   margin: 0;
