@@ -15,6 +15,11 @@ import (
 	"syscall"
 	"time"
 
+	// The zone database, embedded. The production image is distroless and
+	// ships no /usr/share/zoneinfo, and without this TOMB_TIMEZONE could not
+	// be loaded there -- every time on the site depends on it.
+	_ "time/tzdata"
+
 	"github.com/anthony-hopkins/tomb/internal/apps/calendar"
 	"github.com/anthony-hopkins/tomb/internal/apps/comingsoon"
 	"github.com/anthony-hopkins/tomb/internal/apps/dashboard"

@@ -116,7 +116,7 @@ func (a *App) show(w http.ResponseWriter, r *http.Request) {
 	for _, e := range entries {
 		v.Entries = append(v.Entries, entryView{
 			ID:        e.ID,
-			When:      armory.LastPlayed(e.At.UTC()),
+			When:      armory.LastPlayed(e.At, a.deps.Config.Timezone),
 			BattleTag: e.BattleTag,
 			Action:    e.Action,
 			Subject:   e.Subject,

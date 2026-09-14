@@ -118,9 +118,9 @@ A few things worth knowing:
 ## Calendar
 
 The guild's schedule, under **Calendar** in the navigation: what is happening
-and when, by day. All times are UTC — the guild is spread across time zones,
-and a schedule that quietly meant one officer's local time would be wrong for
-most people reading it.
+and when, by day. All times on the site — the calendar, when a character last
+played, the logs — are Eastern, the zone the guild runs on. It follows
+daylight saving on its own, so it reads EDT in summer and EST in winter.
 
 The guild master and officers can add, change and remove events; everyone else
 reads. Every change is recorded in the Logs: who, when, and what changed.
