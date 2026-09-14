@@ -195,6 +195,69 @@ func TestShowsMostRecentCharacter(t *testing.T) {
 	}
 }
 
+// TestSpecializationIsItsOwnRow pins the card's label/value alignment.
+//
+// The class and spec used to share one row as "Death Knight (Blood)", which
+// wrapped for long class names and sat on one line for short ones -- so the
+// rows below it lined up differently from character to character. They are two
+// rows now, and the definition list keeps every label in the same column.
+func TestSpecializationIsItsOwnRow(t *testing.T) {
+	fake := &fakeBlizzard{
+		refs: refs("Main"),
+		profileFor: func(ref blizzard.CharacterRef) (blizzard.Character, error) {
+			c := character(ref.Name, time.Now(), 90, 700, "TOMB")
+			c.Class, c.ActiveSpec = "Death Knight", "Blood"
+			return c, nil
+		},
+	}
+
+	body := get(t, stack(t, fake, true), "/app/dashboard").Body.String()
+
+	for _, want := range []string{
+		"<dt>Class</dt>",
+		"<dd>Death Knight</dd>",
+		"<dt>Specialization</dt>",
+		"<dd>Blood</dd>",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the card is missing %q", want)
+		}
+	}
+
+	// The old inline form would still contain both words, so absence of the
+	// parenthetical is the assertion that actually distinguishes them.
+	if strings.Contains(body, "(Blood)") {
+		t.Error("the specialization is still rendered inline with the class")
+	}
+}
+
+// TestCharacterListIsANavigationPane covers the page shape: the roster is a
+// rail beside the content, not a block within it. Asserted through the markup
+// the stylesheet keys off, since CSS itself is not exercised here.
+func TestCharacterListIsANavigationPane(t *testing.T) {
+	fake := &fakeBlizzard{
+		refs: refs("Main"),
+		profileFor: func(ref blizzard.CharacterRef) (blizzard.Character, error) {
+			return character(ref.Name, time.Now(), 80, 600, "TOMB"), nil
+		},
+	}
+
+	body := get(t, stack(t, fake, true), "/app/dashboard").Body.String()
+
+	if !strings.Contains(body, `<aside class="character-nav"`) {
+		t.Error("the character list is not in an aside; main:has(.dashboard) and the " +
+			"rail styling both key off this structure")
+	}
+	if !strings.Contains(body, `class="dashboard`) {
+		t.Error("the dashboard wrapper is missing, so main will stay at its reading width")
+	}
+	// The rail must come before the content in source order, so it is the first
+	// grid column and the first thing a screen reader reaches.
+	if strings.Index(body, "character-nav") > strings.Index(body, "dashboard-main") {
+		t.Error("the rail is rendered after the content; it should lead")
+	}
+}
+
 // TestRoadmapIsListed covers the placeholder section at the foot of the
 // dashboard. It is copy rather than behaviour, but it is copy that makes
 // promises, so a silently empty list is worth catching.
