@@ -5,10 +5,12 @@ import (
 	"context"
 	"errors"
 	"html"
+	"html/template"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -1109,5 +1111,127 @@ func TestAuthorityMarks(t *testing.T) {
 	// colour travel together.
 	if !strings.Contains(body, `<span class="row-name class-name cls-monk"><svg class="rank-mark rank-mark--gm"`) {
 		t.Error("the crown is not inside the guild master's name in the rail")
+	}
+}
+
+// --- The roster search --------------------------------------------------------
+
+// searchApp is an App with a roster loaded and a layout that just writes the
+// body, so show() can be driven end to end.
+func searchApp(t *testing.T, members []blizzard.GuildMember) *App {
+	t.Helper()
+	f := &fakeClient{roster: members, byName: map[string]blizzard.Character{}}
+	a := snapshotApp(f, time.Hour)
+	a.tmpl, _ = parseTemplates()
+	a.deps.RenderInLayout = func(w http.ResponseWriter, _ *http.Request, status int, _ string, content template.HTML) {
+		w.WriteHeader(status)
+		_, _ = w.Write([]byte(content))
+	}
+	return a
+}
+
+func search(t *testing.T, a *App, q string) *httptest.ResponseRecorder {
+	t.Helper()
+	r := httptest.NewRequest(http.MethodGet, "/app/guild?q="+url.QueryEscape(q), nil)
+	r = r.WithContext(platform.ContextWithSession(r.Context(), auth.Session{AccessToken: "t"}))
+	rec := httptest.NewRecorder()
+	a.show(rec, r)
+	return rec
+}
+
+var searchable = []blizzard.GuildMember{
+	{Name: "Cwds", Rank: 0, Level: 90, Class: "Monk", RealmSlug: "elune", RealmName: "Elune"},
+	{Name: "Cwds", Rank: 3, Level: 80, Class: "Rogue", RealmSlug: "illidan", RealmName: "Illidan"},
+	{Name: "Lazzlowe", Rank: 1, Level: 90, Class: "Paladin", RealmSlug: "elune", RealmName: "Elune"},
+	{Name: "Lazzloe", Rank: 2, Level: 71, Class: "Warlock", RealmSlug: "area-52", RealmName: "Area 52"},
+}
+
+// TestSearchRedirectsToTheOneMember: a name that means one member becomes that
+// member's own URL, exactly as a click would have produced.
+func TestSearchRedirectsToTheOneMember(t *testing.T) {
+	a := searchApp(t, searchable)
+
+	for q, want := range map[string]string{
+		"Lazzlowe":      "/app/guild?c=elune%2Flazzlowe",
+		"lazzlowe":      "/app/guild?c=elune%2Flazzlowe", // case does not matter
+		"lazzlow":       "/app/guild?c=elune%2Flazzlowe", // a unique prefix is enough
+		"cwds illidan":  "/app/guild?c=illidan%2Fcwds",   // a realm tells namesakes apart
+		"Cwds (Elune)":  "/app/guild?c=elune%2Fcwds",
+		"cwds/elune":    "/app/guild?c=elune%2Fcwds",
+		"  Lazzlowe   ": "/app/guild?c=elune%2Flazzlowe",
+	} {
+		rec := search(t, a, q)
+		if rec.Code != http.StatusFound || rec.Header().Get("Location") != want {
+			t.Errorf("search %q = %d %q, want 302 %q", q, rec.Code, rec.Header().Get("Location"), want)
+		}
+	}
+}
+
+// TestSearchOffersAChoiceWhenAmbiguous: namesakes, or a prefix several names
+// share, render a list to pick from rather than guessing.
+func TestSearchOffersAChoiceWhenAmbiguous(t *testing.T) {
+	a := searchApp(t, searchable)
+
+	for q, wantNames := range map[string][]string{
+		"Cwds": {"elune%2fcwds", "illidan%2fcwds"},        // two Cwds
+		"lazz": {"elune%2flazzlowe", "area-52%2flazzloe"}, // two Lazz-somethings
+	} {
+		rec := search(t, a, q)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("search %q = %d, want 200 with a choice", q, rec.Code)
+		}
+		body := rec.Body.String()
+		if !strings.Contains(body, "Several characters match") {
+			t.Errorf("search %q did not offer a choice", q)
+		}
+		for _, key := range wantNames {
+			if !strings.Contains(body, `href="?c=`+key+`"`) {
+				t.Errorf("search %q: the choice is missing %s", q, key)
+			}
+		}
+		// The box keeps what was typed.
+		if !strings.Contains(body, `value="`+q+`"`) {
+			t.Errorf("search %q: the query was not echoed into the box", q)
+		}
+	}
+}
+
+// TestSearchSaysWhenNobodyMatches: the same notice a stale link gets.
+func TestSearchSaysWhenNobodyMatches(t *testing.T) {
+	rec := search(t, searchApp(t, searchable), "Nobody")
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "No character called <strong>Nobody</strong>") {
+		t.Errorf("search for nobody = %d, body lacks the notice", rec.Code)
+	}
+}
+
+// TestSearchExactBeatsPrefix: "Lazzloe" is also a prefix of nothing else, but
+// were a name both an exact match and a prefix of another, exact wins --
+// searching "Cwds" must not also drag in a hypothetical "Cwdsalt".
+func TestSearchExactBeatsPrefix(t *testing.T) {
+	members := append([]blizzard.GuildMember{}, searchable...)
+	members = append(members, blizzard.GuildMember{Name: "Lazzlowealt", Rank: 5, Level: 60, Class: "Mage", RealmSlug: "elune"})
+	rec := search(t, searchApp(t, members), "Lazzlowe")
+	if rec.Code != http.StatusFound {
+		t.Errorf("an exact match was outweighed by a longer name: %d", rec.Code)
+	}
+}
+
+// TestRosterRendersTheSearchBox: the form, and a datalist with every name.
+func TestRosterRendersTheSearchBox(t *testing.T) {
+	a := appWith([]string{"Guild Master", "Officer"})
+	body := render(t, view{Groups: a.group(searchable, nil), Total: 4, Home: routePrefix})
+
+	for _, want := range []string{
+		`<form class="roster-search" method="get" action="/app/guild" role="search">`,
+		`<input id="roster-q" name="q" list="roster-names"`,
+		`<datalist id="roster-names">`,
+		`<option value="Lazzlowe">90 Paladin &middot; Elune</option>`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the rail is missing %s", want)
+		}
+	}
+	if n := strings.Count(body, "<option value="); n != len(searchable) {
+		t.Errorf("datalist has %d options, want one per member (%d)", n, len(searchable))
 	}
 }
