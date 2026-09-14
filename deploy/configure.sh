@@ -32,6 +32,12 @@ BNET_CLIENT_ID="$(meta tomb-bnet-client-id)"
 TOMB_GUILD_NAME="$(meta tomb-guild-name)"
 TOMB_GUILD_REALM="$(meta tomb-guild-realm)"
 ACME_EMAIL="$(meta tomb-acme-email)"
+# Optional application configuration: empty when unset, and the app reads
+# empty as its default.
+TOMB_GUILD_RANKS="$(meta tomb-guild-ranks)"
+TOMB_GUILD_ROSTER_TTL="$(meta tomb-guild-roster-ttl)"
+TOMB_GUILD_OFFICER_RANK="$(meta tomb-guild-officer-rank)"
+TOMB_TIMEZONE="$(meta tomb-timezone)"
 DB_SECRET="$(meta tomb-db-secret)"
 BNET_SECRET="$(meta tomb-bnet-secret)"
 
@@ -71,6 +77,10 @@ umask 077
   echo "BNET_CLIENT_SECRET=$BNET_CLIENT_SECRET"
   echo "TOMB_GUILD_NAME=$TOMB_GUILD_NAME"
   echo "TOMB_GUILD_REALM=$TOMB_GUILD_REALM"
+  echo "TOMB_GUILD_RANKS=$TOMB_GUILD_RANKS"
+  echo "TOMB_GUILD_ROSTER_TTL=$TOMB_GUILD_ROSTER_TTL"
+  echo "TOMB_GUILD_OFFICER_RANK=$TOMB_GUILD_OFFICER_RANK"
+  echo "TOMB_TIMEZONE=$TOMB_TIMEZONE"
   echo "DB_PASSWORD=$DB_PASSWORD"
 } >"$APP_DIR/.env"
 chmod 600 "$APP_DIR/.env"

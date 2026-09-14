@@ -140,6 +140,10 @@ jobs:
             -var="project_id=${{ vars.GCP_PROJECT_ID }}" \
             -var="guild_realm=${{ vars.TOMB_GUILD_REALM }}" \
             -var="bnet_client_id=${{ vars.BNET_CLIENT_ID }}" \
+            -var="guild_ranks=${{ vars.TOMB_GUILD_RANKS }}" \
+            -var="guild_roster_ttl=${{ vars.TOMB_GUILD_ROSTER_TTL }}" \
+            -var="guild_officer_rank=${{ vars.TOMB_GUILD_OFFICER_RANK }}" \
+            -var="timezone=${{ vars.TOMB_TIMEZONE }}" \
             -var="domain=${{ vars.TOMB_DOMAIN }}" \
             -var="acme_email=${{ vars.ACME_EMAIL }}" \
             -var="image=${{ vars.GCP_CURRENT_IMAGE || 'gcr.io/google-containers/pause:3.9' }}" \
@@ -165,6 +169,10 @@ jobs:
             -var="project_id=${{ vars.GCP_PROJECT_ID }}" \
             -var="guild_realm=${{ vars.TOMB_GUILD_REALM }}" \
             -var="bnet_client_id=${{ vars.BNET_CLIENT_ID }}" \
+            -var="guild_ranks=${{ vars.TOMB_GUILD_RANKS }}" \
+            -var="guild_roster_ttl=${{ vars.TOMB_GUILD_ROSTER_TTL }}" \
+            -var="guild_officer_rank=${{ vars.TOMB_GUILD_OFFICER_RANK }}" \
+            -var="timezone=${{ vars.TOMB_TIMEZONE }}" \
             -var="domain=${{ vars.TOMB_DOMAIN }}" \
             -var="acme_email=${{ vars.ACME_EMAIL }}" \
             -var="image=${{ vars.GCP_CURRENT_IMAGE || 'gcr.io/google-containers/pause:3.9' }}"
