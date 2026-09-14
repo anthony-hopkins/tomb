@@ -35,6 +35,11 @@ services:
       BNET_REGION: ${BNET_REGION:?}
       TOMB_GUILD_NAME: ${TOMB_GUILD_NAME:?}
       TOMB_GUILD_REALM: ${TOMB_GUILD_REALM:?}
+      # Optional: empty is the app's default, so :- rather than :?.
+      TOMB_GUILD_RANKS: ${TOMB_GUILD_RANKS:-}
+      TOMB_GUILD_ROSTER_TTL: ${TOMB_GUILD_ROSTER_TTL:-}
+      TOMB_GUILD_OFFICER_RANK: ${TOMB_GUILD_OFFICER_RANK:-}
+      TOMB_TIMEZONE: ${TOMB_TIMEZONE:-}
       DATABASE_URL: postgres://tomb:${DB_PASSWORD:?}@db:5432/tomb?sslmode=disable
       # Caddy terminates TLS, so the browser is always on HTTPS even though
       # this hop is plaintext inside the host.

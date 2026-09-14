@@ -263,3 +263,43 @@ variable "public_url" {
 # NOTE: there is deliberately no variable for the Battle.net client secret.
 # Principle V forbids secrets in OpenTofu files or state; it lives in Secret
 # Manager and the VM reads it at boot. See README.md.
+
+# ---------------------------------------------------------------------------
+# Optional application configuration.
+#
+# Each of these reaches the container as the environment variable of the same
+# name, by way of instance metadata and deploy/configure.sh. Empty -- the
+# default -- means the variable is passed through empty, and the application
+# reads empty as "use my default". So an unset repository variable changes
+# nothing, and setting one is the whole of enabling it.
+#
+# The set here, the metadata keys in compute.tf, the lines in configure.sh and
+# the entries in compose.yaml are held to agree by a test
+# (internal/platform/plumbing_test.go): a value the app reads that is missing
+# from any hop is a variable that silently does nothing, which is how
+# TOMB_GUILD_RANKS shipped documented and unplumbed.
+# ---------------------------------------------------------------------------
+
+variable "guild_ranks" {
+  description = "Rank names, most senior first, comma-separated. Empty leaves ranks numbered. Reaches the app as TOMB_GUILD_RANKS."
+  type        = string
+  default     = ""
+}
+
+variable "guild_roster_ttl" {
+  description = "How often the guild page refreshes its roster, as a Go duration. Empty is the app's default of an hour. Reaches the app as TOMB_GUILD_ROSTER_TTL."
+  type        = string
+  default     = ""
+}
+
+variable "guild_officer_rank" {
+  description = "The lowest rank index that is still an officer. Empty is the app's default of 1. Reaches the app as TOMB_GUILD_OFFICER_RANK."
+  type        = string
+  default     = ""
+}
+
+variable "timezone" {
+  description = "The IANA zone every time is shown in. Empty is the app's default, America/New_York. Reaches the app as TOMB_TIMEZONE."
+  type        = string
+  default     = ""
+}
