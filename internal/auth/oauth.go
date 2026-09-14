@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/base64"
@@ -60,6 +61,12 @@ type Handlers struct {
 	CSRF interface {
 		Verify(r *http.Request) bool
 	}
+
+	// Audit records a sign-in or sign-out on the audit trail (spec 002,
+	// FR-022). A function rather than an interface over the platform's types,
+	// so this package stays ignorant of the core that imports it. Nil records
+	// nothing.
+	Audit func(ctx context.Context, action string, user User)
 }
 
 // NewOAuthConfig builds the confidential-client configuration. Only
@@ -177,6 +184,9 @@ func (h *Handlers) Callback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.Logger.Info("login complete", "user_id", user.ID)
+	if h.Audit != nil {
+		h.Audit(ctx, "auth.login", user)
+	}
 
 	// To "/", not to a named app. "/" already means "send a signed-in viewer
 	// home", and home is whichever app declares AppMeta.Home -- so there is one
@@ -193,6 +203,14 @@ func (h *Handlers) Logout(w http.ResponseWriter, r *http.Request) {
 		h.Logger.Warn("logout rejected: bad csrf token")
 		http.Redirect(w, r, "/", http.StatusFound)
 		return
+	}
+
+	// Who is leaving, before the session that says so is gone. A logout
+	// with no session is nobody leaving, and records nothing.
+	if h.Audit != nil {
+		if sess, err := h.Sessions.Resolve(r.Context(), r); err == nil {
+			h.Audit(r.Context(), "auth.logout", sess.User)
+		}
 	}
 
 	// Idempotent: logging out without a session still lands on the landing page.

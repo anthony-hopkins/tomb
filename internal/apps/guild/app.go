@@ -522,7 +522,7 @@ func (a *App) load(ctx context.Context, token string) (*rosterSnapshot, error) {
 // scale, a line each is a page of warnings nobody reads.
 func (a *App) details(ctx context.Context, token string, members []blizzard.GuildMember) map[string]memberDetail {
 	fetched := make([]*memberDetail, len(members))
-	b := &armory.Builder{Client: a.deps.Blizzard, Logger: a.deps.Logger}
+	b := &armory.Builder{Client: a.deps.Blizzard, Logger: a.deps.Logger, Zone: a.deps.Config.Timezone}
 
 	g, gctx := errgroup.WithContext(ctx)
 	g.SetLimit(maxConcurrentProfileFetches)
@@ -592,7 +592,7 @@ func (a *App) group(members []blizzard.GuildMember, details map[string]memberDet
 			mv.ActiveSpec = d.ActiveSpec
 			mv.AverageItemLevel = d.AverageItemLevel
 			if d.LastLogin.Unix() > 0 {
-				mv.LastLogin = armory.LastPlayed(d.LastLogin)
+				mv.LastLogin = armory.LastPlayed(d.LastLogin, a.deps.Config.Timezone)
 			}
 			mv.MythicPlusRating = d.MythicPlusRating
 			mv.Raids = d.Raids
@@ -991,7 +991,7 @@ func (a *App) selectMember(r *http.Request, v *view, members []blizzard.GuildMem
 	}
 	m := members[idx]
 
-	b := &armory.Builder{Client: a.deps.Blizzard, Logger: a.deps.Logger}
+	b := &armory.Builder{Client: a.deps.Blizzard, Logger: a.deps.Logger, Zone: a.deps.Config.Timezone}
 	panel, err := b.For(
 		r.Context(), session.AccessToken,
 		blizzard.CharacterRef{Name: m.Name, RealmSlug: m.RealmSlug},

@@ -116,6 +116,24 @@ A few things worth knowing:
 - **Not every character has a render.** If Blizzard has never generated an image
   for one, the panel says so and shows everything else as normal.
 
+## Calendar
+
+The guild's schedule, under **Calendar** in the navigation: what is happening
+and when, by day. All times on the site — the calendar, when a character last
+played, the logs — are Eastern, the zone the guild runs on. It follows
+daylight saving on its own, so it reads EDT in summer and EST in winter.
+
+The guild master and officers can add, change and remove events; everyone else
+reads. Every change is recorded in the Logs: who, when, and what changed.
+
+## Logs (guild master and officers)
+
+Officers have a **Logs** entry in the navigation that nobody else sees or can
+open. It is the audit trail: who signed in and out, and every change to the
+calendar — what was changed, by whom, and when — newest first, filterable by
+kind. Nothing in it can be edited or removed, by anyone,
+and the database is set up to refuse it even if somebody tried.
+
 ## Coming to TOMB
 
 None of this is built yet — it is what the site is being pointed at. There is a

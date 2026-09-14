@@ -1,0 +1,48 @@
+{{define "logs.html"}}
+<section class="panel logs" aria-label="Audit log">
+  <h1>Logs</h1>
+  <p class="fineprint">
+    Who did what, and when. Newest first. Sign-ins and sign-outs, and every
+    change an officer makes through the site. Nothing here can be edited or
+    removed.
+  </p>
+
+  <nav class="log-kinds" aria-label="Kinds of entry">
+    {{range .Kinds}}
+    {{if .Selected}}<span class="log-kind is-selected" aria-current="true">{{.Label}}</span>
+    {{else}}<a class="log-kind" href="?{{if .Key}}kind={{.Key}}{{end}}">{{.Label}}</a>{{end}}
+    {{end}}
+  </nav>
+
+  {{if .Unavailable}}
+  <p class="notice" role="status">The log could not be read just now. Try again shortly.</p>
+  {{else if not .Entries}}
+  <p class="fineprint">Nothing recorded yet{{with .Kind}} for {{.}}{{end}}.</p>
+  {{else}}
+  <div class="log-scroll">
+    <table class="log-table">
+      <thead>
+        <tr><th>When</th><th>Who</th><th>Action</th><th>Subject</th><th>Detail</th></tr>
+      </thead>
+      <tbody>
+        {{range .Entries}}
+        <tr>
+          <td class="log-when">{{.When}}</td>
+          <td class="log-who">{{.BattleTag}}</td>
+          <td class="log-action"><code>{{.Action}}</code></td>
+          <td class="log-subject">{{.Subject}}</td>
+          <td class="log-detail">{{.Detail}}</td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{end}}
+
+  {{if .Older}}
+  <p class="log-older">
+    <a href="?{{if .Kind}}kind={{.Kind}}&amp;{{end}}before={{.Older}}">Older entries &rarr;</a>
+  </p>
+  {{end}}
+</section>
+{{end}}

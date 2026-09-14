@@ -27,7 +27,7 @@ func setEnv(t *testing.T, overrides map[string]string) {
 	for _, k := range []string{
 		"BNET_CLIENT_ID", "BNET_CLIENT_SECRET", "BNET_REDIRECT_URL", "BNET_REGION",
 		"TOMB_GUILD_NAME", "TOMB_GUILD_REALM", "DATABASE_URL",
-		"SESSION_COOKIE_SECURE", "BNET_API_HOST", "ADDR", "TOMB_GUILD_OFFICER_RANK",
+		"SESSION_COOKIE_SECURE", "BNET_API_HOST", "ADDR", "TOMB_GUILD_OFFICER_RANK", "TOMB_TIMEZONE",
 	} {
 		t.Setenv(k, "")
 	}
@@ -181,5 +181,29 @@ func TestOfficerRankDefaultsToOne(t *testing.T) {
 		if _, err := LoadConfig(); err == nil {
 			t.Errorf("TOMB_GUILD_OFFICER_RANK=%q was accepted", bad)
 		}
+	}
+}
+
+// TestTimezoneDefaultsToEastern: unset, the guild's zone; set, that zone;
+// a name the database does not know refuses to start.
+func TestTimezoneDefaultsToEastern(t *testing.T) {
+	setEnv(t, nil)
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	if cfg.Timezone == nil || cfg.Timezone.String() != "America/New_York" {
+		t.Errorf("Timezone = %v, want America/New_York", cfg.Timezone)
+	}
+
+	setEnv(t, map[string]string{"TOMB_TIMEZONE": "Europe/London"})
+	cfg, err = LoadConfig()
+	if err != nil || cfg.Timezone.String() != "Europe/London" {
+		t.Errorf("Timezone = %v, %v; want Europe/London", cfg.Timezone, err)
+	}
+
+	setEnv(t, map[string]string{"TOMB_TIMEZONE": "Mars/Olympus_Mons"})
+	if _, err := LoadConfig(); err == nil {
+		t.Error("an unknown zone was accepted")
 	}
 }

@@ -13,6 +13,7 @@ import (
 	"html/template"
 	"net/http"
 	"strings"
+	"time"
 
 	"golang.org/x/sync/errgroup"
 
@@ -175,7 +176,7 @@ func (a *App) show(w http.ResponseWriter, r *http.Request) {
 
 	standing := a.progress(r, ranked)
 	for i, c := range ranked {
-		cv := newCharacterView(c)
+		cv := newCharacterView(c, a.deps.Config.Timezone)
 		cv.Selected = i == chosen
 		cv.MythicPlusRating, cv.Raids = standing[i].MythicPlusRating, standing[i].Raids
 		v.Characters = append(v.Characters, cv)
@@ -195,8 +196,9 @@ func (a *App) show(w http.ResponseWriter, r *http.Request) {
 	a.deps.RenderInLayout(w, r, http.StatusOK, "My Characters", template.HTML(body.String()))
 }
 
-// newCharacterView flattens one character for the templates.
-func newCharacterView(c blizzard.Character) characterView {
+// newCharacterView flattens one character for the templates, with its times
+// in the guild's zone.
+func newCharacterView(c blizzard.Character, loc *time.Location) characterView {
 	return characterView{
 		Name:             c.Name,
 		RealmName:        c.RealmLabel(),
@@ -205,7 +207,7 @@ func newCharacterView(c blizzard.Character) characterView {
 		ActiveSpec:       c.ActiveSpec,
 		Level:            c.Level,
 		AverageItemLevel: c.AverageItemLevel,
-		LastLogin:        armory.LastPlayed(c.LastLogin),
+		LastLogin:        armory.LastPlayed(c.LastLogin, loc),
 		Guild:            c.GuildName(),
 		Current:          c.IsCurrent,
 		Key:              characterKey(c),
@@ -223,7 +225,7 @@ func (a *App) progress(r *http.Request, chars []blizzard.Character) []blizzard.P
 		return out
 	}
 
-	b := &armory.Builder{Client: a.deps.Blizzard, Logger: a.deps.Logger}
+	b := &armory.Builder{Client: a.deps.Blizzard, Logger: a.deps.Logger, Zone: a.deps.Config.Timezone}
 	g, gctx := errgroup.WithContext(r.Context())
 	g.SetLimit(maxConcurrentProgressFetches)
 	for i, c := range chars {
@@ -256,6 +258,6 @@ func (a *App) panel(r *http.Request, c blizzard.Character) *armory.Panel {
 		badge = "Most recently played"
 	}
 
-	b := &armory.Builder{Client: a.deps.Blizzard, Logger: a.deps.Logger}
+	b := &armory.Builder{Client: a.deps.Blizzard, Logger: a.deps.Logger, Zone: a.deps.Config.Timezone}
 	return b.Of(r.Context(), session.AccessToken, c, badge)
 }

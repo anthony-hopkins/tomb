@@ -249,3 +249,25 @@ func TestOfCarriesSeasonStanding(t *testing.T) {
 		t.Error("a failed raid lookup produced raids")
 	}
 }
+
+// TestLastPlayedFollowsTheZone: the same instant reads as Eastern -- and as
+// daylight or standard time by date, which is why the zone is a name, not an
+// offset. Nil is UTC.
+func TestLastPlayedFollowsTheZone(t *testing.T) {
+	eastern, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		t.Fatalf("America/New_York: %v", err)
+	}
+	summer := time.Date(2026, 9, 14, 20, 15, 0, 0, time.UTC)
+	winter := time.Date(2026, 12, 14, 20, 15, 0, 0, time.UTC)
+
+	if got := LastPlayed(summer, eastern); got != "14 Sep 2026, 16:15 EDT" {
+		t.Errorf("summer = %q, want 14 Sep 2026, 16:15 EDT", got)
+	}
+	if got := LastPlayed(winter, eastern); got != "14 Dec 2026, 15:15 EST" {
+		t.Errorf("winter = %q, want 14 Dec 2026, 15:15 EST", got)
+	}
+	if got := LastPlayed(summer, nil); got != "14 Sep 2026, 20:15 UTC" {
+		t.Errorf("nil zone = %q, want UTC", got)
+	}
+}
