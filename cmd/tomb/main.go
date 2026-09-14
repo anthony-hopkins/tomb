@@ -68,6 +68,8 @@ func run() error {
 	}
 
 	bnet := blizzard.NewHTTPClient(cfg.APIHost, cfg.Namespace(), cfg.BnetRegion)
+	// Zero leaves the client on its own default; see DefaultRosterTTL.
+	bnet.RosterTTL = cfg.GuildRosterTTL
 
 	store := &auth.Store{DB: db}
 	sessions := &auth.SessionManager{Store: store, CookieSecure: cfg.SessionCookieSecure}
