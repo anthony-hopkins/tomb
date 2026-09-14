@@ -179,23 +179,123 @@ button:hover { border-color: var(--accent); }
 .fineprint { color: var(--muted); font-size: 0.85rem; }
 .fineprint a { color: var(--accent); }
 
-/* Roster: every character on the account, most recently played first. */
+/* Roster: a left-hand list of characters with the detail card revealed on
+   hover, in the shape of a console side-nav.
+   
+   Entirely CSS. The site ships no JavaScript and the CSP has no script-src at
+   all, so a scripted popover is not an option here -- which is fine, because
+   :hover and :focus-within do the whole job. */
 .roster-heading { margin-bottom: 1rem; }
 
-.roster {
+.roster-layout {
+  display: grid;
+  grid-template-columns: minmax(12rem, 17rem) 1fr;
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.character-list {
   list-style: none;
   margin: 0;
   padding: 0;
-  display: grid;
-  /* auto-fill, not auto-fit: a single character keeps a card's width instead
-     of stretching to the full page, which looked like a layout bug. */
-  grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
-  gap: 1rem;
+  background: var(--panel-veil);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  /* The popover has to escape this box; never set overflow here. */
 }
 
-/* The card already carries the panel treatment; inside the grid it only needs
-   to stop collapsing to its content. */
-.roster .character-card { margin: 0; height: 100%; }
+.character-row {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding: 0.7rem 0.9rem;
+  border-left: 3px solid transparent;
+  cursor: default;
+}
+
+.character-row + .character-row { border-top: 1px solid var(--line); }
+.character-row:first-child { border-radius: 9px 9px 0 0; }
+.character-row:last-child { border-radius: 0 0 9px 9px; }
+
+/* is-current is on the row so the roster still says which character is the
+   most recently played without needing the card open. */
+.character-row.is-current { border-left-color: var(--accent-2); }
+
+.character-row:hover,
+.character-row:focus,
+.character-row:focus-within {
+  background: rgba(54, 158, 232, 0.12);
+  border-left-color: var(--accent);
+  outline: none;
+}
+
+.row-name { font-weight: 600; }
+.row-meta { color: var(--muted); font-size: 0.85rem; }
+
+/* The card, floated to the right of the row it belongs to.
+   
+   Hidden with visibility and opacity rather than display:none so it can fade,
+   and pointer-events:none so a card that is invisible can never intercept a
+   click meant for the row underneath it. visibility is transitioned with a
+   delay on the way out only, which is what stops it being focusable while
+   invisible. */
+.character-card.popover {
+  position: absolute;
+  top: -1px;
+  left: calc(100% + 1.5rem);
+  z-index: 5;
+  width: 22rem;
+  max-width: min(22rem, 70vw);
+  /* More opaque than a normal panel: this one overlays other content, so the
+     artwork behind it must not compete with the text on it. */
+  background: rgba(6, 16, 25, 0.94);
+  box-shadow: 0 18px 40px -16px #000;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateX(-0.4rem);
+  pointer-events: none;
+  transition: opacity 120ms ease, transform 120ms ease, visibility 0s linear 120ms;
+}
+
+.character-row:hover .popover,
+.character-row:focus .popover,
+.character-row:focus-within .popover {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(0);
+  transition-delay: 0s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .character-card.popover { transition: none; transform: none; }
+}
+
+.roster-hint { color: var(--muted); font-size: 0.9rem; margin: 0.25rem 0 0; }
+
+/* Narrow screens have no room beside the list, and no hover either. The card
+   drops inline beneath its row and opens on tap, which focus-within gives us
+   for free. display, not opacity, so a closed card takes up no space. */
+@media (max-width: 48rem) {
+  .roster-layout { grid-template-columns: 1fr; }
+  .roster-hint { display: none; }
+
+  .character-card.popover {
+    position: static;
+    display: none;
+    width: auto;
+    max-width: none;
+    margin-top: 0.6rem;
+    opacity: 1;
+    visibility: visible;
+    transform: none;
+    box-shadow: none;
+  }
+
+  .character-row:hover .popover,
+  .character-row:focus .popover,
+  .character-row:focus-within .popover { display: block; }
+}
 
 .character-card.is-current {
   border-color: var(--accent);
@@ -224,6 +324,46 @@ button:hover { border-color: var(--accent); }
 
 .character-card dt { color: var(--muted); }
 .character-card dd { margin: 0; font-variant-numeric: tabular-nums; }
+
+/* Roadmap: placeholder copy for things that do not exist yet. Styled plainly
+   on purpose -- it should read as a list of intentions, not as navigation
+   somebody will try to click. */
+.roadmap { margin-top: 2rem; }
+.roadmap h2 { margin-top: 0; font-size: 1.3rem; }
+
+.roadmap-list {
+  list-style: none;
+  margin: 1.25rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 1.1rem;
+}
+
+.roadmap-list li {
+  border-left: 2px solid var(--line);
+  padding-left: 1rem;
+}
+
+.roadmap-list h3 {
+  margin: 0 0 0.2rem;
+  font-size: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.roadmap-list p { margin: 0; color: var(--muted); }
+
+.tag-ai {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #002b26;
+  background: var(--accent);
+  border-radius: 999px;
+  padding: 0.1rem 0.5rem;
+}
 
 .site-footer {
   background: var(--bar-veil);

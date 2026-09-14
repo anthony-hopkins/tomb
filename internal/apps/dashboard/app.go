@@ -55,10 +55,56 @@ func (a *App) Routes(r platform.Registrar) {
 	r.Handle("GET /", http.HandlerFunc(a.show))
 }
 
+// roadmapItem is one entry in the "what's coming" list at the foot of the
+// dashboard.
+//
+// Placeholder copy, deliberately: nothing here is wired to anything, and none
+// of it should be read as a promise about dates. It sits in Go rather than in
+// the template so the list is data -- testable, and extendable without touching
+// markup -- and so that the AI flag is a field rather than a hand-repeated bit
+// of styling.
+type roadmapItem struct {
+	Title string
+	Blurb string
+	AI    bool
+}
+
+var roadmap = []roadmapItem{
+	{
+		Title: "Guildmates' characters",
+		Blurb: "See what the rest of TOMB is playing, not just your own roster.",
+	},
+	{
+		Title: "Guild calendar",
+		Blurb: "Events and plans in one place, so raid nights stop living in Discord scrollback.",
+	},
+	{
+		Title: "Ask TOMB Bot",
+		AI:    true,
+		Blurb: "Ask about the guild, the schedule, what is running this week, or just for advice.",
+	},
+	{
+		Title: "Combat log analysis",
+		AI:    true,
+		Blurb: "Compare your logs against the top performers of your class, see exactly where " +
+			"the differences are and what each one costs you, with suggested fixes.",
+	},
+	{
+		Title: "Gear analysis",
+		AI:    true,
+		Blurb: "Compare your gear to the top performers and get the path of least resistance to " +
+			"your next upgrades, prioritised so your resources always go where they matter most.",
+	},
+}
+
 // view is what the dashboard template renders.
 type view struct {
 	// Characters is the whole roster in FR-006 order, most current first.
 	Characters []characterView
+
+	// Roadmap is the placeholder "what's coming" list. Shown whether or not the
+	// roster loaded: it is about the site, not about this account.
+	Roadmap []roadmapItem
 
 	// Partial reports that some characters could not be loaded, so the page can
 	// say so rather than quietly showing an incomplete roster (research.md D9).
@@ -101,7 +147,7 @@ func (a *App) show(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	v := view{Partial: profile.Partial}
+	v := view{Partial: profile.Partial, Roadmap: roadmap}
 
 	for _, c := range Rank(profile.Characters) {
 		v.Characters = append(v.Characters, characterView{
