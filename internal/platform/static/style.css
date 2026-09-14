@@ -185,14 +185,36 @@ button:hover { border-color: var(--accent); }
    Entirely CSS. The site ships no JavaScript and the CSP has no script-src at
    all, so a scripted popover is not an option here -- which is fine, because
    :hover and :focus-within do the whole job. */
-.roster-heading { margin-bottom: 1rem; }
+.roster-heading { margin: 0 0 1rem; font-size: 1.5rem; }
 
-.roster-layout {
+/* The dashboard is the one page that wants the whole width: its character list
+   is a page-level rail, not part of the reading column.
+   
+   :has() rather than a class on <main>, because the core owns the layout and an
+   app supplies only its own content -- an app cannot put a class on <main>
+   without the platform growing an API for it, and one app is not a reason to
+   grow one (Principle II, Principle VII). Where :has() is unsupported the page
+   simply keeps the centred column it had before, which is a working layout
+   rather than a broken one. */
+main:has(.dashboard) { max-width: none; }
+
+.dashboard {
   display: grid;
-  grid-template-columns: minmax(12rem, 17rem) 1fr;
-  gap: 1.5rem;
+  grid-template-columns: minmax(13rem, 17rem) minmax(0, 1fr);
+  gap: 2rem;
   align-items: start;
 }
+
+/* No characters, no rail, no empty first column. */
+.dashboard.is-empty { grid-template-columns: minmax(0, 1fr); }
+
+/* Everything that is prose stays at a readable measure even though main no
+   longer constrains it. */
+.dashboard-main { max-width: 46rem; }
+
+/* Sticky, so the roster stays to hand while the roadmap scrolls past it --
+   which is the whole point of a navigation pane. */
+.character-nav { position: sticky; top: 1.5rem; }
 
 .character-list {
   list-style: none;
@@ -277,7 +299,8 @@ button:hover { border-color: var(--accent); }
    drops inline beneath its row and opens on tap, which focus-within gives us
    for free. display, not opacity, so a closed card takes up no space. */
 @media (max-width: 48rem) {
-  .roster-layout { grid-template-columns: 1fr; }
+  .dashboard { grid-template-columns: 1fr; }
+  .character-nav { position: static; }
   .roster-hint { display: none; }
 
   .character-card.popover {
@@ -313,7 +336,6 @@ button:hover { border-color: var(--accent); }
 .character-card h2 { margin: 0; font-size: 1.25rem; }
 
 .character-card .realm { color: var(--muted); margin-top: 0.25rem; }
-.character-card .spec { color: var(--muted); }
 
 .character-card dl {
   display: grid;
