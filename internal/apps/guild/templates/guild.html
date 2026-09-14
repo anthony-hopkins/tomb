@@ -57,6 +57,42 @@
   {{end}}
 
   <div class="dashboard-main">
+    {{with .Summary}}
+    <section class="panel guild-summary" aria-label="Guild summary">
+      <h2>{{.Name}}</h2>
+      <p class="realm">{{.Realm}}</p>
+
+      <dl class="guild-stats">
+        <dt>Characters</dt>
+        <dd>{{.Total}}</dd>
+        {{if .CapLevel}}
+        <dt>At level {{.CapLevel}}</dt>
+        <dd>{{.AtCap}}</dd>
+        {{end}}
+        <dt>Ranks</dt>
+        <dd>{{len .Ranks}}</dd>
+      </dl>
+
+      {{if .Ranks}}
+      <h3 class="summary-heading">By rank</h3>
+      <ul class="count-list">
+        {{range .Ranks}}
+        <li><span class="count-label">{{.Label}}</span><span class="count-n">{{.Count}}</span></li>
+        {{end}}
+      </ul>
+      {{end}}
+
+      {{if .Classes}}
+      <h3 class="summary-heading">By class</h3>
+      <ul class="count-list">
+        {{range .Classes}}
+        <li><span class="count-label">{{.Label}}</span><span class="count-n">{{.Count}}</span></li>
+        {{end}}
+      </ul>
+      {{end}}
+    </section>
+    {{end}}
+
     {{if .Unavailable}}
     <section class="panel">
       <h1>The roster is unavailable</h1>
