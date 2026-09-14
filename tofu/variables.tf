@@ -225,7 +225,21 @@ variable "guild_name" {
 }
 
 variable "guild_realm" {
-  description = "TOMB guild realm slug, lowercase and hyphenated (FR-013)."
+  description = <<-EOT
+    The slug of the realm the guild was FOUNDED on, lowercase and hyphenated
+    (FR-013) -- not the realm its members play on.
+
+    These are routinely different. On a connected-realm cluster a guild keeps
+    the realm it was created on while its members' characters sit on any realm
+    in the group: TOMB is registered on "elune" and its members play on Area 52.
+    Blizzard reports the guild's own realm on each character profile, so that is
+    what membership is checked against.
+
+    Setting this to the realm you play on refuses every member, and does it in a
+    way that is indistinguishable from nobody being in the guild. If that
+    happens, the app now says so outright -- look for "guild name matched but
+    realm did not" in the logs, which prints the value to use.
+  EOT
   type        = string
 }
 

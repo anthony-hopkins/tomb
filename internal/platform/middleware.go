@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/anthony-hopkins/tomb/internal/auth"
@@ -47,14 +48,55 @@ func (s *statusRecorder) Write(b []byte) (int, error) {
 	return s.ResponseWriter.Write(b)
 }
 
+// battleNetFormActions lists the origins a sign-in submission may be redirected
+// THROUGH, not merely to.
+//
+// The chain a member actually walks is three hops:
+//
+//	POST /auth/login  ->  oauth.battle.net/authorize
+//	                  ->  us.account.battle.net/login/en/
+//
+// and a browser checks form-action against every hop, not only the first.
+// Naming oauth.battle.net alone let the first redirect through and then dropped
+// the second in silence -- the same dead-button symptom as naming none of them,
+// reached one step further along.
+//
+// A wildcard over battle.net rather than a list of hosts, for two reasons. The
+// account host is region-specific (us./eu./kr./tw., following BNET_REGION), and
+// the hops inside Blizzard's domain are Blizzard's to change; a list would need
+// editing every time they reroute, and each edit would be prompted by sign-in
+// breaking in production again. It remains a real restriction: Blizzard's own
+// domain, over HTTPS, and nowhere else.
+//
+// Note that CSP's *.battle.net matches subdomains only, never battle.net
+// itself, which is why no bare origin appears here -- nothing in the flow uses
+// one. TestCSPFormActionCoversTheWholeSignInChain holds this to the endpoint.
+var battleNetFormActions = []string{"https://*.battle.net"}
+
+// contentSecurityPolicy is assembled once, at package init.
+//
+// Server-rendered HTML with one local stylesheet and no JavaScript, so every
+// other directive can stay as strict as it looks.
+var contentSecurityPolicy = buildContentSecurityPolicy(battleNetFormActions)
+
+func buildContentSecurityPolicy(formActions []string) string {
+	sources := append([]string{"'self'"}, formActions...)
+
+	return "default-src 'none'; " +
+		"style-src 'self'; " +
+		"img-src 'self' https://render.worldofwarcraft.com; " +
+		"form-action " + strings.Join(sources, " ") + "; " +
+		"base-uri 'none'; " +
+		"frame-ancestors 'none'"
+}
+
 // securityHeaders applies baseline hardening to every response.
 func (c *Core) securityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h := w.Header()
 		// Server-rendered HTML with one local stylesheet and no JavaScript, so
 		// the policy can be this strict (constitution Technology Constraints).
-		h.Set("Content-Security-Policy",
-			"default-src 'none'; style-src 'self'; img-src 'self' https://render.worldofwarcraft.com; form-action 'self'; base-uri 'none'; frame-ancestors 'none'")
+		h.Set("Content-Security-Policy", contentSecurityPolicy)
 		h.Set("X-Content-Type-Options", "nosniff")
 		h.Set("Referrer-Policy", "strict-origin-when-cross-origin")
 		h.Set("X-Frame-Options", "DENY")

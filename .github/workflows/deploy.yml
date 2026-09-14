@@ -543,7 +543,20 @@ jobs:
               break
             fi
 
-            echo "attempt $attempt could not reach the VM over SSH (exit 255); it may still be bootstrapping"
+            # 255 is SSH itself failing, which has two causes here and one of
+            # them needs action rather than patience. The VM may still be
+            # installing Docker on a first boot -- wait. Or the nightly
+            # auto-stop schedule may have switched it off underneath this
+            # deploy: it is a Compute Engine resource policy and knows nothing
+            # about workflow runs, so a deploy that starts near the schedule can
+            # lose its VM half way through. Waiting will not fix that one.
+            status="$(gcloud compute instances describe "$INSTANCE" --zone "$ZONE" --format='value(status)' 2>/dev/null || echo UNKNOWN)"
+            if [ "$status" = "TERMINATED" ]; then
+              echo "::warning::$INSTANCE is TERMINATED mid-deploy; the auto-stop schedule fired. Restarting it."
+              gcloud compute instances start "$INSTANCE" --zone "$ZONE" --quiet || true
+            else
+              echo "attempt $attempt could not reach the VM over SSH (exit 255, status $status); it may still be bootstrapping"
+            fi
             sleep 30
           done
 
@@ -647,6 +660,152 @@ jobs:
             exit 1
           fi
           echo "anonymous access correctly redirected"
+
+      - name: Sign-in actually reaches Battle.net
+        # The check that was missing when a header took the front door off.
+        #
+        # Every other probe in this job passes on a site nobody can log into.
+        # /healthz, /readyz, the landing page rendering and the anonymous guild
+        # gate were all green while clicking "Sign in with Battle.net" did
+        # nothing whatsoever: the CSP permitted the POST to /auth/login and then
+        # forbade the redirect, so the browser declined to navigate and showed no
+        # error at all. A plain curl follows redirects happily, which is why
+        # nothing here noticed.
+        #
+        # FOLLOW THE WHOLE CHAIN, NOT THE FIRST HOP.
+        #
+        # Signing in is three hops -- /auth/login, then oauth.battle.net, then
+        # Blizzard's region-specific account host -- and a browser enforces
+        # form-action against every one of them. An earlier version of this
+        # check looked only at the first, which is precisely how the second
+        # failure got to production: permitting oauth.battle.net alone moved the
+        # dead button one redirect further along and changed nothing else.
+        #
+        # The policy is read from the DOCUMENT THAT SUBMITS THE FORM, because
+        # that is the one a browser enforces, not the POST response.
+        #
+        # No credentials are involved. Everything up to Blizzard's own login
+        # page is ours, and that is the part that keeps breaking.
+        env:
+          URL: ${{ needs.apply.outputs.service_url }}
+        run: |
+          set -euo pipefail
+
+          curl -sS -D /tmp/landing.h -o /dev/null --max-time 20 "$URL/"
+          curl -sS -D /tmp/login.h -o /dev/null --max-time 20 -X POST "$URL/auth/login"
+
+          # Walk the redirect chain one hop at a time, recording each target.
+          # Capped, so a redirect loop at Blizzard cannot hang the deploy.
+          : > /tmp/chain.txt
+          next="$(curl -sS -o /dev/null -w '%{redirect_url}' --max-time 20 -X POST "$URL/auth/login")"
+          hops=0
+          while [ -n "$next" ] && [ "$hops" -lt 6 ]; do
+            echo "$next" >> /tmp/chain.txt
+            next="$(curl -sS -o /dev/null -w '%{redirect_url}' --max-time 20 "$next" || true)"
+            hops=$((hops + 1))
+          done
+
+          python3 - <<'PY'
+          import os, sys
+          from urllib.parse import urlparse, parse_qs
+
+          def parse(path):
+              status, headers = None, {}
+              with open(path, encoding="utf-8", errors="replace") as fh:
+                  for raw in fh:
+                      line = raw.strip()
+                      if line.startswith("HTTP/"):
+                          parts = line.split()
+                          if status is None and len(parts) > 1:
+                              status = parts[1]
+                      elif ":" in line:
+                          key, value = line.split(":", 1)
+                          headers.setdefault(key.strip().lower(), value.strip())
+              return status, headers
+
+          def permits(source, origin):
+              # The subset of CSP host-source matching this policy uses.
+              # *.battle.net matches subdomains only, never battle.net itself,
+              # and must not match evil-battle.net or battle.net.example.com.
+              if source in ("*", origin):
+                  return True
+              marker = "://*."
+              if marker not in source:
+                  return False
+              scheme, domain = source.split(marker, 1)
+              u = urlparse(origin)
+              return u.scheme == scheme and u.netloc.endswith("." + domain)
+
+          def origin_of(u):
+              p = urlparse(u)
+              return p.scheme + "://" + p.netloc
+
+          site = os.environ["URL"].rstrip("/")
+          problems = []
+
+          def die(messages):
+              for message in messages:
+                  print("::error::" + message)
+              sys.exit(1)
+
+          login_status, login_headers = parse("/tmp/login.h")
+          _, landing_headers = parse("/tmp/landing.h")
+
+          if login_status != "302":
+              die([f"POST /auth/login returned {login_status}, want 302. "
+                   "Sign-in is not starting the OAuth flow at all."])
+
+          first = login_headers.get("location", "")
+          parsed = urlparse(first)
+
+          if parsed.netloc != "oauth.battle.net":
+              problems.append(f"sign-in redirects to {origin_of(first)!r}, want https://oauth.battle.net")
+
+          query = parse_qs(parsed.query)
+          expected_callback = site + "/auth/callback"
+          callback = (query.get("redirect_uri") or [""])[0]
+          if callback != expected_callback:
+              problems.append(
+                  f"redirect_uri is {callback!r}, want {expected_callback!r}. Blizzard matches "
+                  "this exactly, so a mismatch fails sign-in after the member approves access.")
+
+          if not (query.get("client_id") or [""])[0]:
+              problems.append("no client_id on the authorize URL; BNET_CLIENT_ID is not reaching the app.")
+
+          # form-action does NOT fall back to default-src, so an absent directive
+          # permits the submission; a present one must permit every hop.
+          directives = {}
+          for part in landing_headers.get("content-security-policy", "").split(";"):
+              fields = part.split()
+              if fields:
+                  directives[fields[0].lower()] = fields[1:]
+          form_action = directives.get("form-action")
+
+          with open("/tmp/chain.txt", encoding="utf-8") as fh:
+              chain = [line.strip() for line in fh if line.strip()]
+
+          if not chain:
+              problems.append("the sign-in POST returned no redirect to follow.")
+
+          print("sign-in redirect chain:")
+          for index, hop in enumerate(chain, start=1):
+              origin = origin_of(hop)
+              allowed = form_action is None or any(permits(s, origin) for s in form_action)
+              print(f"  {index}. {origin}  {'permitted' if allowed else 'BLOCKED'}")
+              if not allowed:
+                  problems.append(
+                      f"hop {index} of the sign-in chain goes to {origin}, which the landing "
+                      f"page's CSP form-action {form_action} does not permit. A browser checks "
+                      "form-action against EVERY hop of a form submission's redirect chain, so "
+                      "sign-in will silently stop there: no error page, no failed request, just "
+                      "a console violation. curl cannot see this.")
+
+          if problems:
+              die(problems)
+
+          print("redirect_uri: " + callback)
+          print("form-action:  " + str(form_action))
+          PY
 
       # Runs whatever failed above. `if: failure()` rather than `always()`: on a
       # green deploy there is nothing to look at.

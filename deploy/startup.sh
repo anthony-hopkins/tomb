@@ -14,6 +14,33 @@ APP_DIR=/opt/tomb
 DATA_MOUNT=/mnt/tomb-data
 DATA_DEVICE=/dev/disk/by-id/google-tomb-data
 
+# Serialise against the other script that rewrites /opt/tomb.
+#
+# startup.sh runs on every boot; deploy.sh runs over SSH. They never used to
+# overlap, because the VM was always already up when a deploy arrived. Then
+# develop started stopping itself overnight, so a deploy now STARTS the VM and
+# SSHes in immediately -- and the boot-time script is still running when it
+# does. Both rewrite /opt/tomb/{compose.yaml,Caddyfile,deploy.sh,configure.sh}
+# with docker cp, which replaces each file rather than editing it in place, so
+# there is a window where it does not exist. A deploy landed in that window:
+#
+#   bash: /opt/tomb/configure.sh: No such file or directory
+#
+# One lock, taken by whichever arrives first; the other waits. Held on fd 9 for
+# the life of the script, so children inherit it, and skipped when the process
+# already holds it -- re-locking the same file from the same process would
+# block on itself forever, and deploy.sh re-execs itself on self-update.
+if [ "${TOMB_STACK_LOCKED:-}" != "1" ]; then
+  exec 9>/var/lock/tomb-stack.lock
+  if ! flock --timeout 900 9; then
+    echo "ERROR: timed out waiting for the stack lock." >&2
+    echo "Another process -- almost certainly the boot-time startup script -- has held it" >&2
+    echo "for fifteen minutes. Check 'journalctl -u google-startup-scripts' on the VM." >&2
+    exit 1
+  fi
+  export TOMB_STACK_LOCKED=1
+fi
+
 meta() {
   curl -fsS -H "Metadata-Flavor: Google" \
     "http://metadata.google.internal/computeMetadata/v1/instance/attributes/$1" 2>/dev/null || true
