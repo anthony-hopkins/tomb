@@ -1,6 +1,10 @@
 package platform
 
-import "github.com/anthony-hopkins/tomb/internal/blizzard"
+import (
+	"fmt"
+
+	"github.com/anthony-hopkins/tomb/internal/blizzard"
+)
 
 // GuildConfig is the configured TOMB guild identity used for verification
 // (FR-013). Both values come from the environment, never from a hand-maintained
@@ -8,6 +12,29 @@ import "github.com/anthony-hopkins/tomb/internal/blizzard"
 type GuildConfig struct {
 	Name      string
 	RealmSlug string
+
+	// Ranks names the guild's ranks by index, most senior first. Empty is fine;
+	// see RankLabel.
+	Ranks []string
+}
+
+// RankLabel names a rank index.
+//
+// Blizzard returns the index and never the name -- ranks are named in-game and
+// are in no endpoint -- so an unconfigured rank falls back to "Rank N". That is
+// visibly unconfigured rather than quietly wrong, which matters: guessing that
+// rank 4 is "Member" would look correct and be a lie about somebody's standing
+// in the guild.
+func (g GuildConfig) RankLabel(rank int) string {
+	if rank >= 0 && rank < len(g.Ranks) && g.Ranks[rank] != "" {
+		return g.Ranks[rank]
+	}
+	if rank == 0 {
+		// Rank 0 is the guild master in every guild, by Blizzard's definition
+		// rather than by convention, so this one is safe to name.
+		return "Guild Master"
+	}
+	return fmt.Sprintf("Rank %d", rank)
 }
 
 // GuildMembership is the FR-013 verification result.

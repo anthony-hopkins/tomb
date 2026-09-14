@@ -35,6 +35,26 @@ type HTTPClient struct {
 	// expiry: the only way an entry becomes wrong is if Blizzard reissues an
 	// icon under the same id, which they do not.
 	iconCache sync.Map
+
+	// RosterTTL is how long a fetched guild roster may be reused before it is
+	// fetched again.
+	//
+	// ZERO -- THE DEFAULT -- MEANS NEVER REUSE IT: every request fetches. The
+	// roster is a single call however large the guild, nowhere near Blizzard's
+	// limits, so throttling it buys a few hundred milliseconds on the home page
+	// in exchange for showing a roster that is up to an hour out of date. Live
+	// is the better default for a list of who is in the guild.
+	//
+	// Set it if the home page ever feels slow enough to trade freshness for.
+	RosterTTL time.Duration
+
+	rosterMu    sync.Mutex
+	rosterCache map[string]rosterEntry
+}
+
+type rosterEntry struct {
+	members []GuildMember
+	fetched time.Time
 }
 
 // NewHTTPClient builds a client with sane timeouts.
@@ -381,6 +401,123 @@ func (c *HTTPClient) CharacterEquipment(ctx context.Context, token string, ref C
 	}
 	SortEquipment(items)
 	return items, nil
+}
+
+func (c *HTTPClient) GuildRoster(ctx context.Context, token, realmSlug, guildName string) ([]GuildMember, error) {
+	key := strings.ToLower(realmSlug) + "/" + GuildNameSlug(guildName)
+
+	if members, ok, fresh := c.cachedRoster(key); ok && fresh {
+		return members, nil
+	}
+
+	members, err := c.fetchRoster(ctx, token, realmSlug, guildName)
+	if err != nil {
+		// Serve the last roster we did get, rather than nothing.
+		//
+		// This is not caching in the sense of avoiding calls -- the call was
+		// made and failed. It is that one bad minute at Blizzard would otherwise
+		// empty the front page of the site, and the roster from the last
+		// successful load is a far better answer than "unavailable": almost
+		// certainly nobody joined or left in between.
+		if stale, ok, _ := c.cachedRoster(key); ok {
+			return stale, nil
+		}
+		return nil, err
+	}
+
+	c.storeRoster(key, members)
+	return members, nil
+}
+
+// cachedRoster returns a copy of the cached roster, whether there is one at
+// all, and whether it is still within its TTL.
+//
+// Present and fresh are two different questions, and collapsing them into one
+// bool is how the stale-on-failure path quietly stops working: the caller asks
+// "is it fresh" on the way in and "is there anything at all" on the way out.
+//
+// A copy, because the cached slice outlives the request and callers sort and
+// group what they are handed; sharing it would let one request reorder
+// another's data.
+func (c *HTTPClient) cachedRoster(key string) (members []GuildMember, present, fresh bool) {
+	c.rosterMu.Lock()
+	defer c.rosterMu.Unlock()
+
+	entry, ok := c.rosterCache[key]
+	if !ok {
+		return nil, false, false
+	}
+
+	out := make([]GuildMember, len(entry.members))
+	copy(out, entry.members)
+
+	// With no TTL configured nothing is ever fresh, so every request refetches.
+	// The entry is still PRESENT, which is the whole point: it is kept solely so
+	// a failed fetch has something better to serve than an error.
+	fresh = c.RosterTTL > 0 && time.Since(entry.fetched) < c.RosterTTL
+	return out, true, fresh
+}
+
+func (c *HTTPClient) storeRoster(key string, members []GuildMember) {
+	c.rosterMu.Lock()
+	defer c.rosterMu.Unlock()
+
+	if c.rosterCache == nil {
+		c.rosterCache = make(map[string]rosterEntry)
+	}
+	stored := make([]GuildMember, len(members))
+	copy(stored, members)
+	c.rosterCache[key] = rosterEntry{members: stored, fetched: time.Now()}
+}
+
+func (c *HTTPClient) fetchRoster(ctx context.Context, token, realmSlug, guildName string) ([]GuildMember, error) {
+	const endpoint = "guild-roster"
+
+	var payload struct {
+		Members []struct {
+			Character struct {
+				Name  string `json:"name"`
+				Level int    `json:"level"`
+				Realm struct {
+					Slug string `json:"slug"`
+					Name string `json:"name"`
+				} `json:"realm"`
+				PlayableClass struct {
+					ID int `json:"id"`
+				} `json:"playable_class"`
+			} `json:"character"`
+			Rank int `json:"rank"`
+		} `json:"members"`
+	}
+
+	path := fmt.Sprintf("/data/wow/guild/%s/%s/roster",
+		url.PathEscape(strings.ToLower(realmSlug)),
+		url.PathEscape(GuildNameSlug(guildName)),
+	)
+	q := url.Values{
+		"namespace": {c.Namespace},
+		"locale":    {c.Locale},
+	}
+	if err := c.get(ctx, endpoint, c.APIHost+path, q, token, &payload); err != nil {
+		return nil, err
+	}
+
+	members := make([]GuildMember, 0, len(payload.Members))
+	for _, m := range payload.Members {
+		if m.Character.Name == "" {
+			continue
+		}
+		members = append(members, GuildMember{
+			Name:      m.Character.Name,
+			RealmSlug: m.Character.Realm.Slug,
+			RealmName: m.Character.Realm.Name,
+			Level:     m.Character.Level,
+			Rank:      m.Rank,
+			Class:     classNames[m.Character.PlayableClass.ID],
+		})
+	}
+	SortRoster(members)
+	return members, nil
 }
 
 // ItemIcon resolves an item's media id to its icon URL, caching the result for

@@ -29,7 +29,18 @@ type App interface {
 type AppMeta struct {
 	// Slug is a URL-safe id, unique across apps, e.g. "dashboard".
 	Slug string
-	// NavLabel is the human label shown in navigation, e.g. "My Character".
+	// Home marks the app a signed-in viewer lands on from "/".
+	//
+	// At most one app may set it; Mount refuses two. An app that is Home is
+	// usually reached by the site's brand link rather than a nav entry, which
+	// is why Home and an empty NavLabel go together.
+	Home bool
+
+	// NavLabel is the human label shown in navigation, e.g. "My Characters".
+	//
+	// Empty leaves the app out of the navigation entirely. That is not the same
+	// as unreachable: a Home app is reached through the brand link, and an app
+	// could be linked from another page. It only means "do not list me".
 	NavLabel string
 	// RoutePrefix must equal "/app/" + Slug. Mount rejects anything else.
 	RoutePrefix string
@@ -53,6 +64,12 @@ type Deps struct {
 	Blizzard blizzard.Client
 	Logger   *slog.Logger
 	Config   Config
+
+	// Guild is the configured guild identity and its rank names. Lent to apps
+	// because a guild platform's apps are mostly about the guild: the core
+	// already holds it for the FR-013 membership check, and rebuilding it from
+	// Config in every app would be three fields copied in three places.
+	Guild GuildConfig
 
 	// RenderInLayout draws an app's rendered body inside the shared page
 	// shell, so apps own their own content without owning the site chrome,

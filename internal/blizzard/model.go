@@ -32,6 +32,12 @@ type Client interface {
 	// cost argument as CharacterMedia: one character, never the roster.
 	CharacterEquipment(ctx context.Context, token string, ref CharacterRef) ([]EquippedItem, error)
 
+	// GuildRoster lists every character in a guild.
+	//
+	// Characters, not people: somebody with five alts in the guild appears five
+	// times, which is what the game means by a roster and what the API returns.
+	GuildRoster(ctx context.Context, token, realmSlug, guildName string) ([]GuildMember, error)
+
 	// ItemIcon resolves an item's media id to an icon URL.
 	//
 	// One call per item, which is the expensive one -- a full set of gear is
@@ -39,6 +45,65 @@ type Client interface {
 	// changes, so this is static game data rather than character data and
 	// FR-016's ban on caching does not reach it.
 	ItemIcon(ctx context.Context, token string, mediaID int) (string, error)
+}
+
+// GuildMember is one character on a guild's roster.
+type GuildMember struct {
+	Name      string
+	RealmSlug string
+	RealmName string
+	Level     int
+
+	// Rank is the guild rank INDEX, 0 being the guild master. Blizzard does not
+	// publish the rank NAMES -- those are set in-game and appear nowhere in the
+	// API -- so turning 3 into "Veteran" is configuration, not data. See
+	// GuildRanks.
+	Rank int
+
+	// Class is resolved from the roster's numeric class id, and is empty when
+	// the id is one this build does not know.
+	Class string
+}
+
+// classNames maps Blizzard's playable class ids to names.
+//
+// The roster returns an id and nothing else, and resolving each one properly
+// would be a call per class on a page that is already a roster-sized fetch.
+// These ids have been stable for the life of the API; a new one renders with no
+// class rather than a wrong one.
+var classNames = map[int]string{
+	1: "Warrior", 2: "Paladin", 3: "Hunter", 4: "Rogue", 5: "Priest",
+	6: "Death Knight", 7: "Shaman", 8: "Mage", 9: "Warlock", 10: "Monk",
+	11: "Druid", 12: "Demon Hunter", 13: "Evoker",
+}
+
+// GuildNameSlug turns a guild's display name into the slug its API path uses.
+func GuildNameSlug(name string) string {
+	var b strings.Builder
+	for _, r := range strings.ToLower(strings.TrimSpace(name)) {
+		switch {
+		case r == ' ':
+			b.WriteByte('-')
+		default:
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+// SortRoster orders a roster the way a guild page should read: by rank, guild
+// master first, and alphabetically within each rank.
+//
+// Alphabetical WITHIN a rank rather than across the whole list, because the
+// grouping is the information -- who outranks whom -- and the alphabety is only
+// there so a name can be found inside its group.
+func SortRoster(members []GuildMember) {
+	sort.SliceStable(members, func(i, j int) bool {
+		if members[i].Rank != members[j].Rank {
+			return members[i].Rank < members[j].Rank
+		}
+		return strings.ToLower(members[i].Name) < strings.ToLower(members[j].Name)
+	})
 }
 
 // IconHosts are the origins item icons may be served from.

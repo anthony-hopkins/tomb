@@ -20,6 +20,10 @@ type Core struct {
 
 	mux      *http.ServeMux
 	registry []AppMeta
+
+	// home is the route a signed-in viewer is sent to from "/", taken from the
+	// app that declares AppMeta.Home.
+	home string
 }
 
 // appRegistrar adapts a ServeMux to the narrow Registrar an app may touch,
@@ -101,6 +105,22 @@ func Mount(c *Core, authHandlers *auth.Handlers, apps []App) (http.Handler, erro
 		c.registry = append(c.registry, meta)
 	}
 
+	// Home is declared, not positional.
+	//
+	// It used to be "the first registered app", which was wrong the moment you
+	// read the next four lines: the registry is SORTED, so "first" meant
+	// alphabetically first by nav label, and signing in landed on Coming Soon.
+	// Position is the wrong thing to key this on when position is not stable.
+	for _, meta := range c.registry {
+		if !meta.Home {
+			continue
+		}
+		if c.home != "" {
+			return nil, fmt.Errorf("two apps claim to be Home: %q and %q", c.home, meta.RoutePrefix)
+		}
+		c.home = meta.RoutePrefix
+	}
+
 	// Stable navigation order regardless of registration order.
 	sort.SliceStable(c.registry, func(i, j int) bool {
 		return c.registry[i].NavLabel < c.registry[j].NavLabel
@@ -137,10 +157,16 @@ func (c *Core) mountCoreRoutes(a *auth.Handlers) {
 }
 
 // landing serves the public landing page, or sends a signed-in viewer to their
-// dashboard (contracts/http-routes.md GET /).
+// home (contracts/http-routes.md GET /).
+//
+// Home is whichever app declares AppMeta.Home. The core still has no business
+// knowing WHICH app that is -- moving the front page is a flag on an app rather
+// than an edit here (Principle II) -- but it is declared rather than inferred
+// from position, because position is not stable: the registry is sorted for
+// navigation.
 func (c *Core) landing(w http.ResponseWriter, r *http.Request) {
 	if _, ok := SessionFrom(r.Context()); ok {
-		http.Redirect(w, r, "/app/dashboard", http.StatusFound)
+		http.Redirect(w, r, c.homePath(), http.StatusFound)
 		return
 	}
 
@@ -152,6 +178,21 @@ func (c *Core) landing(w http.ResponseWriter, r *http.Request) {
 		data.Message = "You have been signed out. Sign in again to see your current character."
 	}
 	c.renderPage(w, r, http.StatusOK, "landing.html", data)
+}
+
+// homePath is where a signed-in viewer is sent from "/".
+//
+// The app that declares itself Home. With none declared it falls back to the
+// first app in NAV order, and with no apps at all to the landing page itself --
+// a redirect loop would be a worse failure than a bare page.
+func (c *Core) homePath() string {
+	if c.home != "" {
+		return c.home
+	}
+	if len(c.registry) > 0 {
+		return c.registry[0].RoutePrefix
+	}
+	return "/"
 }
 
 // navFor builds navigation from AppMeta alone, listing only apps the current
@@ -170,6 +211,12 @@ func (c *Core) navFor(r *http.Request) []NavItem {
 	var items []NavItem
 	for _, meta := range c.registry {
 		if meta.RequiresGuild && haveProfile && !profile.Membership.IsMember {
+			continue
+		}
+		// No label, no entry. The guild overview is reached through the brand
+		// link, so listing it again beside it would be the same destination
+		// twice.
+		if meta.NavLabel == "" {
 			continue
 		}
 		items = append(items, NavItem{Label: meta.NavLabel, Href: meta.RoutePrefix})

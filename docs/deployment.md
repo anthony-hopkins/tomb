@@ -242,6 +242,8 @@ The full set the workflows read:
 | `GCP_STATE_BUCKET` | bootstrap output | all |
 | `GCP_REGION` | `us-central1` (optional) | deploy |
 | `TOMB_GUILD_REALM` | the slug of the realm the guild was **founded** on, e.g. `elune` — see the note below | all |
+| `TOMB_GUILD_ROSTER_TTL` | how long a fetched guild roster may be reused, as a Go duration (`30m`, `3h`). Optional; **unset means fetch live every time**, which is the default | all |
+| `TOMB_GUILD_RANKS` | rank names, most senior first, comma-separated — e.g. `Guild Master,Officer,Veteran,Member,Trainee`. Optional; see below | all |
 | `BNET_CLIENT_ID` | Battle.net client id | all |
 | `TOMB_DOMAIN` | your domain, or empty for the `sslip.io` fallback | all |
 | `ACME_EMAIL` | optional Let's Encrypt contact address | all |
@@ -265,6 +267,20 @@ GitHub.
 > ```
 > {"msg":"guild name matched but realm did not",
 >  "configured":"TOMB@area-52","found":"TOMB@elune"}
+> ```
+
+> **`TOMB_GUILD_RANKS` names ranks that Blizzard will not.** The roster API
+> returns a rank *index* and nothing else — ranks are named in-game and appear
+> in no endpoint — so the guild page cannot show "Officer" unless it is told.
+>
+> Positions match the rank index: the first entry is rank 0, the guild master.
+> An index with no name renders as `Rank 2`, which is visibly unconfigured
+> rather than quietly wrong — guessing would look correct and misstate somebody's
+> standing in the guild. Leave an entry blank to skip a rank without shifting
+> every rank below it:
+>
+> ```sh
+> gh variable set TOMB_GUILD_RANKS --body 'Guild Master,Officer,Veteran,,Member,Trainee'
 > ```
 
 ### 4. The production gate

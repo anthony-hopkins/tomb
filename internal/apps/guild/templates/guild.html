@@ -1,0 +1,82 @@
+{{define "guild.html"}}
+{{/* The same two-column shape as My Characters -- roster rail on the left,
+     panel on the right -- so the two pages read as one site. The panel is
+     deliberately empty for now. */}}
+<div class="dashboard{{if not .Groups}} is-empty{{end}}">
+
+  {{if .Groups}}
+  <aside class="character-nav" aria-label="Guild roster">
+    <h1 class="roster-heading">Guild</h1>
+
+    {{if .RanksUnnamed}}
+    <p class="roster-note">
+      Rank names are not configured, so ranks below the guild master show as
+      numbers. Set <code>TOMB_GUILD_RANKS</code> to name them.
+    </p>
+    {{end}}
+
+    {{/* One panel around every group, rather than a panel per group. The
+         rank headings divide the list from the inside, the way a console
+         side-nav has sections -- which is what makes this read as one roster
+         instead of five stacked boxes. */}}
+    <div class="roster-groups">
+    {{range .Groups}}
+      <p class="rank-heading">{{.Label}}</p>
+      <ul class="character-list">
+      {{range .Members}}
+      {{/* Identical to a row in My Characters: the same classes, the same
+           tabindex, and a card revealed by the same :hover and :focus-within
+           rules in the stylesheet. Nothing here is guild-specific except what
+           the card can say, which is what a roster knows. */}}
+      <li class="character-row" tabindex="0">
+        <span class="row-name">{{.Name}}</span>
+        <span class="row-meta">
+          {{if .Level}}{{.Level}}{{end}}{{if .Class}} {{.Class}}{{end}}
+          {{if .Realm}}&middot; {{.Realm}}{{end}}
+        </span>
+
+        <div class="character-card popover" role="group" aria-label="{{.Name}} details">
+          {{if .Rank}}<p class="badge">{{.Rank}}</p>{{end}}
+          <h2>{{.Name}}</h2>
+          {{if .Realm}}<p class="realm">{{.Realm}}</p>{{end}}
+          <dl>
+            {{if .Class}}
+            <dt>Class</dt>
+            <dd>{{.Class}}</dd>
+            {{end}}
+            {{if .Level}}
+            <dt>Level</dt>
+            <dd>{{.Level}}</dd>
+            {{end}}
+          </dl>
+        </div>
+      </li>
+      {{end}}
+      </ul>
+    {{end}}
+    </div>
+
+    <p class="roster-total">
+      {{.Total}} character{{if ne .Total 1}}s{{end}} on the roster
+    </p>
+  </aside>
+  {{end}}
+
+  <div class="dashboard-main">
+    {{if .Unavailable}}
+    <section class="panel">
+      <h1>The roster is unavailable</h1>
+      <p>
+        Blizzard could not be reached for the guild roster just now. Everything
+        else on the site still works; try again shortly.
+      </p>
+    </section>
+    {{else if not .Groups}}
+    <section class="panel">
+      <h1>No roster</h1>
+      <p>Blizzard returned no characters for this guild.</p>
+    </section>
+    {{end}}
+  </div>
+</div>
+{{end}}

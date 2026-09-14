@@ -73,6 +73,10 @@ func (f *fakeClient) ItemIcon(context.Context, string, int) (string, error) {
 	return "", nil
 }
 
+func (f *fakeClient) GuildRoster(context.Context, string, string, string) ([]blizzard.GuildMember, error) {
+	return nil, nil
+}
+
 var _ blizzard.Client = (*fakeClient)(nil)
 
 func refsFor(names ...string) []blizzard.CharacterRef {
