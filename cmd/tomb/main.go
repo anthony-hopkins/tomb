@@ -15,6 +15,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/anthony-hopkins/tomb/internal/apps/comingsoon"
 	"github.com/anthony-hopkins/tomb/internal/apps/dashboard"
 	"github.com/anthony-hopkins/tomb/internal/auth"
 	"github.com/anthony-hopkins/tomb/internal/blizzard"
@@ -106,10 +107,18 @@ func run() error {
 		return fmt.Errorf("build dashboard app: %w", err)
 	}
 
+	comingSoon, err := comingsoon.New(core.Deps)
+	if err != nil {
+		return fmt.Errorf("build coming soon app: %w", err)
+	}
+
 	// The single registration point. Adding an app means adding one line here
 	// and nothing else (Principle II, contracts/app-registration.md).
+	//
+	// Order is nav order: My Characters first, Coming Soon to its right.
 	apps := []platform.App{
 		characterDashboard,
+		comingSoon,
 	}
 
 	handler, err := platform.Mount(core, authHandlers, apps)

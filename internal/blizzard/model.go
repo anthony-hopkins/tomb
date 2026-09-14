@@ -18,6 +18,41 @@ type Client interface {
 
 	// CharacterProfile fetches one character's full summary.
 	CharacterProfile(ctx context.Context, token string, ref CharacterRef) (Character, error)
+
+	// CharacterMedia fetches the images Blizzard renders for a character.
+	//
+	// Separate from the profile because it is a separate endpoint and a
+	// separate cost: fetched for the one character being looked at, never for
+	// the whole roster, which would double the per-view fan-out (FR-016).
+	CharacterMedia(ctx context.Context, token string, ref CharacterRef) (Media, error)
+}
+
+// Media is the set of images Blizzard renders for a character, in its current
+// gear, on its own servers.
+//
+// This is how the site shows a character without shipping a 3D viewer: no
+// extracted game assets, no WebGL, no JavaScript, and nothing to re-extract
+// every patch. The trade is that these are stills -- there is no rotating it.
+type Media struct {
+	// Avatar is a square bust. Inset is waist-up on a scene background.
+	Avatar string
+	Inset  string
+
+	// Main is full-body on a background; MainRaw is the same cut out, with
+	// transparency, which is the one that suits a dark page.
+	Main    string
+	MainRaw string
+}
+
+// Hero is the largest usable image, preferring the cut-out so the character
+// sits on the page's own background rather than in a grey box.
+func (m Media) Hero() string {
+	for _, candidate := range []string{m.MainRaw, m.Main, m.Inset, m.Avatar} {
+		if candidate != "" {
+			return candidate
+		}
+	}
+	return ""
 }
 
 // Identity is the subset of /userinfo this platform uses.

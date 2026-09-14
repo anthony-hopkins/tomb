@@ -49,6 +49,10 @@ func (fakeBlizzard) CharacterProfile(context.Context, string, blizzard.Character
 	return blizzard.Character{}, nil
 }
 
+func (fakeBlizzard) CharacterMedia(context.Context, string, blizzard.CharacterRef) (blizzard.Media, error) {
+	return blizzard.Media{}, nil
+}
+
 func testHandlers(r Renderer) *Handlers {
 	return &Handlers{
 		OAuth:    NewOAuthConfig("client-id", "client-secret", "http://localhost:8080/auth/callback"),
