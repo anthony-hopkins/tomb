@@ -21,7 +21,7 @@ locals {
 # Runtime identity for the VM. Distinct from the CI deployer: this one may only
 # read the two secrets it needs and pull images.
 resource "google_service_account" "vm" {
-  account_id   = "${var.service_name}-vm"
+  account_id   = "${local.name}-vm"
   display_name = "TOMB platform VM runtime"
   description  = "Identity of the VM running the Compose stack"
 }
@@ -54,7 +54,7 @@ resource "google_project_iam_member" "vm_metrics" {
 # ---------------------------------------------------------------------------
 
 resource "google_compute_disk" "data" {
-  name = "${var.service_name}-data"
+  name = "${local.name}-data"
   type = var.disk_type
   zone = var.zone
   size = var.data_disk_size
@@ -67,7 +67,7 @@ resource "google_compute_disk" "data" {
 }
 
 resource "google_compute_instance" "main" {
-  name         = var.service_name
+  name         = local.name
   machine_type = var.machine_type
   zone         = var.zone
 
@@ -96,6 +96,9 @@ resource "google_compute_instance" "main" {
       nat_ip = google_compute_address.main.address
     }
   }
+
+  # Empty in production, where the auto-stop policy does not exist.
+  resource_policies = google_compute_resource_policy.auto_stop[*].self_link
 
   service_account {
     email = google_service_account.vm.email

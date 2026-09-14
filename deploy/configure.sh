@@ -83,4 +83,34 @@ if [ -z "$ACME_EMAIL" ]; then
   sed -i '/{\$ACME_EMAIL}/d' "$APP_DIR/Caddyfile"
 fi
 
+# Prove the Caddyfile parses BEFORE anything restarts on it.
+#
+# A bad Caddyfile does not degrade the site, it deletes it: Caddy exits during
+# config load, so nothing binds 80 or 443 and every request is refused at the
+# TCP level. `docker compose up -d` reports success anyway -- it starts the
+# container, it does not wait to see whether the container stays up -- so a
+# parse error reaches production looking exactly like a clean deploy.
+#
+# That is how the empty `email` directive shipped. It was caught by a human
+# reading a verification job twenty retries later, with no logs, rather than
+# here, where the error message names the line.
+#
+# Same image Compose runs, read out of compose.yaml so the two cannot drift.
+CADDY_IMAGE="$(awk '$1=="caddy:"{f=1;next} f&&$1=="image:"{print $2;exit} f&&/^  [a-z]/{exit}'   "$APP_DIR/compose.yaml")"
+
+if [ -z "$CADDY_IMAGE" ]; then
+  log "ERROR: could not find the caddy image in $APP_DIR/compose.yaml"
+  exit 1
+fi
+
+log "validating the Caddyfile with $CADDY_IMAGE"
+if ! validation="$(docker run --rm   -e TOMB_DOMAIN="$TOMB_DOMAIN"   -e ACME_EMAIL="$ACME_EMAIL"   -v "$APP_DIR/Caddyfile:/etc/caddy/Caddyfile:ro"   "$CADDY_IMAGE" caddy validate --adapter caddyfile --config /etc/caddy/Caddyfile 2>&1)"; then
+  log "ERROR: the generated Caddyfile is not valid, so Caddy would not start."
+  log "Refusing to restart the stack on it; the current site keeps serving."
+  echo "$validation" >&2
+  echo "--- the file that failed to parse ---" >&2
+  cat -n "$APP_DIR/Caddyfile" >&2
+  exit 1
+fi
+
 log "configured for domain '$TOMB_DOMAIN', image '$IMAGE'"

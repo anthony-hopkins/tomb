@@ -18,40 +18,59 @@ Built as a thin Go core plus independently addable **apps**. The Character
 Dashboard is the first one; see [docs/adding-an-app.md](docs/adding-an-app.md)
 for the second.
 
-## Quick start
+## Working on this
+
+**There is no local stack to bring up.** Constitution Principle IV recognises no
+supported local runtime environment: a workstation stack terminates no TLS, runs
+no reverse proxy, performs no ACME and answers a different OAuth callback, so its
+verdict on whether something works is not worth much. Running software is tested
+in a deployed Google Cloud environment.
+
+What runs on your machine is the merge gate, and nothing that serves:
 
 ```sh
-cp .env.example .env      # then fill in your Battle.net client id and secret
-docker compose up --build
+make check      # go build, go vet, go test ./..., docker build
+make test       # go test ./...
 ```
 
-That is the whole setup — no local Go or Postgres install needed. The site comes
-up on <http://localhost:8080>.
+All four `make check` steps must pass before merge.
 
-You need a Battle.net OAuth client from <https://develop.battle.net> with
-`http://localhost:8080/auth/callback` registered as a redirect URI.
+## How a change reaches a running site
+
+| Branch | Environment | How it moves |
+|---|---|---|
+| feature branch | — | pull request into `develop` |
+| `develop` | develop, <https://dev.tombguild.com> | merge the pull request — deploys itself, and starts the VM if it is stopped |
+| `main` | production, <https://tombguild.com> | pull request from `develop`, then run **Deploy** |
+
+Merging into `develop` builds the image and applies it automatically; production
+keeps a manual gate. Nothing is pushed directly to `main`, and no commit reaches
+`main` without having been exercised in develop first. The pipeline refuses to
+apply production from any branch but `main`.
+
+Develop stops itself overnight and is started by the next deploy, or by
+`gh workflow run dev-lifecycle.yml -f action=start`, so it costs compute only
+while it is in use — roughly $4-8/month idle against $17 running.
+
+Both environments come from one OpenTofu configuration, selected by workspace,
+and run the same image and the same Compose project — they differ in hostname
+and whether the database disk is snapshotted, and nothing else. See
+[tofu/environments.tf](tofu/environments.tf) and
+[docs/deployment.md](docs/deployment.md).
+
+Both environments are live. Sign-in on develop additionally needs its own
+Battle.net client secret in Secret Manager and its callback registered at
+develop.battle.net — see
+[docs/deployment.md](docs/deployment.md#standing-up-the-develop-environment).
 
 ## This machine has a split toolchain
 
 | Tool | Runs from | Notes |
 |---|---|---|
-| `docker` | **Windows** (PowerShell or Git Bash) | Docker Desktop's WSL integration is off for the Ubuntu distro, so `docker` resolves but fails inside WSL |
-| `go` | Windows | Also present in WSL at `~/.local/go` |
+| `go` | Windows or WSL | Windows PATH, and WSL at `~/.local/go` |
+| `docker` | Windows or WSL | Docker Desktop, WSL integration enabled for Ubuntu |
 | `tofu` | **WSL only** | `~/.local/bin/tofu`; see [tofu/README.md](tofu/README.md) |
-
-Enabling Docker Desktop → Resources → WSL Integration → Ubuntu would collapse
-this into one shell, and is also a prerequisite if integration tests ever need
-testcontainers.
-
-## Development
-
-```sh
-make check      # the full pre-merge gate: build, vet, test, docker build
-make test       # go test ./...
-make run        # docker compose up --build
-```
-
-The constitution requires all four `make check` steps to pass before merge.
+| `gcloud`, `gh` | **WSL only** | not on the Windows PATH at all |
 
 ## Layout
 

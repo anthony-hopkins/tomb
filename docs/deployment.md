@@ -4,21 +4,166 @@ Infrastructure and the application are both deployed by GitHub Actions running
 OpenTofu against Google Cloud. Authentication is keyless — there is no
 service-account JSON key anywhere, in GitHub secrets or otherwise.
 
-## The four workflows
+## The five workflows
 
 | Workflow | Trigger | What it does |
 |---|---|---|
 | `ci.yml` | pull requests only | gofmt, build, vet, `go test -race`, Docker build |
-| `infra-plan.yml` | PR touching `tofu/**` | `tofu plan`, posted as a PR comment. Never applies. |
-| `deploy.yml` | push to `main` builds only; **manual run applies** | test → build and push image → `tofu apply` → roll the VM over SSH → verify the live site |
+| `infra-plan.yml` | PR touching `tofu/**` | `tofu plan` for the PR's target environment, posted as a comment. Never applies. |
+| `dev-lifecycle.yml` | manual only | start / stop / status for the develop VM. Cannot touch production. |
+| `deploy.yml` | push to `develop` or `main` builds only; **manual run applies** | test → build and push image → `tofu apply` → roll the VM over SSH → verify the live site |
 | `infra-destroy.yml` | manual only | guarded teardown, dry-run by default |
 
 Deploy and upgrade are the same path: an application change and an
 infrastructure change both go through `deploy.yml`.
 
-`ci.yml` deliberately does **not** trigger on a push to `main`: `deploy.yml`
-runs the same tests and the same Docker build there, so triggering both ran
-every merge's work twice.
+`ci.yml` deliberately does **not** trigger on a push to `develop` or `main`:
+`deploy.yml` runs the same tests and the same Docker build there, so triggering
+both ran every merge's work twice.
+
+## Branches
+
+Constitution 2.0.0 removed the local development stack — there is no supported
+way to run this software on a workstation, because a local stack has no TLS
+edge, no reverse proxy and a different OAuth callback, and would not be telling
+you the truth. Running software is tested in a deployed environment:
+
+```
+feature branch  --PR-->  develop  --PR-->  main
+                         (develop env)     (production, tombguild.com)
+```
+
+Every commit that reaches `main` has been deployed to and exercised in develop
+first. Nothing is pushed straight to `main`.
+
+### How the two environments stay the same
+
+One OpenTofu configuration, one Compose project, one image. The **workspace**
+decides which environment is being touched, and `tofu/environments.tf` is the
+only file that knows the difference:
+
+| | production | develop |
+|---|---|---|
+| Workspace | `default` | `develop` |
+| Resource prefix | `tomb-platform` | `tomb-platform-develop` |
+| Hostname | `tombguild.com` | `dev.tombguild.com` |
+| Machine | `e2-small` | `e2-small` |
+| Disk snapshots | yes | no |
+| Applies when | dispatched from `main` | pushed to `develop` |
+
+Production is workspace `default` because that is where its state already lives;
+renaming it would mean migrating live production state for a cosmetic gain.
+
+The workspace is the single source of truth for *both* the state file and every
+resource name. That is deliberate — if the environment were a variable passed
+alongside the workspace, the two could disagree, and the failure mode of that
+disagreement is applying develop's names onto production's state. The `resolve`
+job additionally refuses to apply production from any branch but `main`, and
+develop from any branch but `develop`.
+
+Everything else — machine type, Postgres tuning, the Caddyfile, the deploy
+script — is identical by construction, because both environments run the same
+image and the same `deploy/compose.yaml` out of it.
+
+### Standing up the develop environment
+
+It does not exist until its first deploy. Because Caddy cannot obtain a
+certificate for a hostname that does not resolve, and the address does not exist
+until the infrastructure is applied, the first deploy is two passes:
+
+**1. Create the infrastructure.** Push to `develop`, or run **Deploy** with
+environment `develop`. OpenTofu creates the VM, disks, network and reserved
+address. The run then *fails* at the TLS check — expected, because DNS does not
+point anywhere yet — and stops immediately rather than retrying, printing the
+address you need both in the log and in the run summary:
+
+```
+### DNS is the missing piece
+dev.tombguild.com.  A  35.253.225.22
+```
+
+> **Do not re-run the deploy until the name resolves.** Let's Encrypt allows
+> five *failed validations* per hostname per hour, and every attempt against a
+> name that does not resolve spends one. develop's own first deploy burned
+> fourteen in a single run, because the workflow retried the whole deploy ten
+> times and each retry recreated Caddy into another doomed ACME order — which
+> rate-limited the hostname, so the certificate could not be issued even after
+> DNS was fixed.
+>
+> `deploy.sh` now resolves the hostname before waiting on TLS and exits 3 if it
+> is absent, and the workflow retries only genuine SSH failures (exit 255,
+> meaning the VM is still installing Docker). A deploy script that actually ran
+> and failed is never retried: it would give the same answer, more slowly.
+
+**2. Point DNS at it, then deploy again.** Add an `A` record for
+`dev.tombguild.com` to that address — it is reserved, so it survives VM
+recreation — and register `https://dev.tombguild.com/auth/callback` as a
+redirect URI at <https://develop.battle.net>, alongside the production one.
+Blizzard accepts several. Then push to `develop` again; Caddy gets its
+certificate and verification passes.
+
+**3. Add the Battle.net client secret.** Same one-time step production needed,
+against the develop secret container:
+
+```sh
+printf '%s' "$BNET_CLIENT_SECRET" |   gcloud secrets versions add tomb-platform-develop-bnet-client-secret --data-file=-
+```
+
+Until that version exists the app starts but sign-in fails, which `configure.sh`
+warns about rather than treating as fatal.
+
+**4. Delete the transitional exception** from the constitution's Development
+Workflow section. It exists only until this environment does.
+
+To override the hostname, set the `TOMB_DEVELOP_DOMAIN` repository variable;
+unset, it derives as `dev.` + `TOMB_DOMAIN` so the two cannot drift apart.
+
+### Develop only runs when you need it
+
+The VM is essentially the whole cost of an environment — ~$12.23 of a ~$17
+month, with the database's own disk at 40 cents — so develop stops itself
+overnight and is started on demand.
+
+| | Running | Stopped |
+|---|---|---|
+| Compute | ~$12.23/mo | **not billed** |
+| Disks + reserved address | ~$4–8/mo | ~$4–8/mo |
+| Data, DNS, TLS certificate | kept | **kept** |
+
+`tofu/autostop.tf` attaches a Compute Engine *instance schedule* that stops the
+VM on a cron — Google runs it, so there is no Cloud Scheduler job, no function,
+and nothing on the VM to rot. There is deliberately **no start schedule**: an
+environment that switches itself on every morning whether or not anyone is
+working defeats the point. Adjust with `auto_stop_schedule` and
+`auto_stop_timezone`; it defaults to 02:00 UTC daily.
+
+Starting is on demand, either way round:
+
+```sh
+gh workflow run dev-lifecycle.yml -f action=start    # or stop, or status
+```
+
+or just deploy — a push to `develop` starts the VM if it is stopped, then rolls
+it onto the new image. Coming back takes about a minute; `startup.sh` runs on
+every boot and brings the stack up on its own.
+
+Production cannot auto-stop. `enable_auto_stop` is an ordinary variable and
+could be passed `true` by a typo, so the policy is additionally guarded on
+`local.is_production` in `autostop.tf` — a structural block, not a convention.
+
+> **Why stopped and not destroyed.** Caddy's certificate lives in the
+> `caddy-data` volume on the boot disk, so destroying the VM means a fresh
+> Let's Encrypt issuance on every rebuild — and LE allows five duplicate
+> certificates per name per week. Cycle develop harder than that and it comes
+> back with no working TLS until the window clears. Stopping keeps the disk, the
+> certificate and the reserved address. It also saves the same amount as
+> destroying the VM but keeping its address, because Google bills an unattached
+> static IP at a higher rate than an attached one.
+>
+> If you do want develop gone entirely for a long break, note that its data disk
+> carries the same `prevent_destroy` guard as production's — OpenTofu requires a
+> literal there, so it cannot be made conditional — and removing it is a
+> deliberate edit.
 
 The stack runs as a Compose project on one Compute Engine VM — Caddy for TLS,
 the Go app, and self-hosted Postgres on a persistent disk. `deploy.yml` applies
@@ -115,8 +260,8 @@ plan supports the required reviewers protection rule. (HTTP 422)
 So the approval Principle V requires takes a different shape: **the trigger is
 the approval.**
 
-- A push to `main` runs the tests, builds the image and pushes it. It does
-  **not** apply.
+- A push to `develop` or `main` runs the tests, builds the image and pushes it.
+  It does **not** apply.
 - Applying requires someone to run **Deploy** from the Actions tab with
   `apply` checked. That is a deliberate human action, attributed and logged.
 - Destroying additionally requires typing the project id and the word `DESTROY`,
@@ -244,8 +389,9 @@ discovering the gap halfway through.
 
 ## Everyday deploys
 
-Merging to `main` builds and pushes an image tagged with the commit SHA, so the
-artifact is always ready. To ship it, run **Deploy** with `apply` checked.
+Merging to `develop` or `main` builds and pushes an image tagged with the commit
+SHA, so the artifact is always ready. To ship what is on `main`, run **Deploy**
+with `apply` checked.
 
 For an infrastructure-only change where you do not want a new image, run
 **Deploy** with **skip_build** checked; it reuses whatever image the VM is

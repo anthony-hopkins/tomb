@@ -1,3 +1,12 @@
+output "environment" {
+  description = <<-EOT
+    Which environment this state describes, derived from the OpenTofu workspace.
+    Read back by the deploy workflow as a cross-check that the workspace it
+    selected is the environment it believes it is deploying to.
+  EOT
+  value       = local.environment
+}
+
 output "service_url" {
   description = "Public URL of the site. Register <this>/auth/callback with Battle.net."
   value       = local.effective_public_url
@@ -32,8 +41,11 @@ output "data_disk_name" {
 }
 
 output "snapshot_policy" {
-  description = "Resource policy taking the daily snapshots of the data disk."
-  value       = google_compute_resource_policy.data_snapshots.name
+  description = <<-EOT
+    Resource policy taking the daily snapshots of the data disk, or empty in an
+    environment where snapshots are disabled (see var.enable_snapshots).
+  EOT
+  value       = var.enable_snapshots ? google_compute_resource_policy.data_snapshots[0].name : ""
 }
 
 output "artifact_registry" {

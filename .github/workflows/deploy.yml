@@ -14,10 +14,30 @@ name: Deploy
 # available here: GitHub does not offer environment protection rules on private
 # repositories on the free plan.
 #
-# So the approval is the trigger itself. A push to main runs the tests and
-# builds and pushes the image, but does NOT apply. Applying requires someone to
-# deliberately run this workflow from the Actions tab, which is a human
+# So the approval is the trigger itself. A push to develop or main runs the tests
+# and builds and pushes the image, but does NOT apply. Applying requires someone
+# to deliberately run this workflow from the Actions tab, which is a human
 # decision with an audit trail, just a different shape.
+#
+# BRANCH PROMOTION (constitution 2.0.0, Development Workflow)
+#
+# `develop` is the integration branch and `main` is production.
+#
+#   push to develop  -> test, build, APPLY to develop, verify
+#   push to main     -> test and build only; production waits for a human
+#   dispatch         -> pick the environment, apply if `apply` is checked
+#
+# Develop applying itself is the point of having it, and Principle V permits it
+# explicitly for lower environments. Production keeps the manual gate.
+#
+# A branch and an environment cannot be mixed: production may only be applied
+# from `main`, develop only from `develop`. The `resolve` job below refuses
+# anything else before an apply can start, because the failure it prevents --
+# applying a develop branch's infrastructure changes onto production -- is not
+# one you get to notice afterwards.
+#
+# Which OpenTofu workspace each environment uses, and why production is
+# `default`, is explained in tofu/environments.tf.
 #
 # If the repository ever goes public, or the account moves to a paid plan, add a
 # required reviewer to the `production` environment and delete the
@@ -26,19 +46,24 @@ name: Deploy
 
 on:
   push:
-    branches: [main]
+    branches: [develop, main]
     paths-ignore:
       - "**.md"
       - "docs/**"
       - ".specify/**"
   workflow_dispatch:
     inputs:
+      environment:
+        description: "Which environment to act on"
+        type: choice
+        options: [develop, production]
+        default: develop
       skip_build:
         description: "Reuse the image already deployed (infrastructure-only change)"
         type: boolean
         default: false
       apply:
-        description: "Apply to production. Unchecked runs test and build only."
+        description: "Apply to the chosen environment. Unchecked runs test and build only."
         type: boolean
         default: true
 
@@ -48,11 +73,118 @@ permissions:
 
 # Never let two applies touch the same state at once. Not cancel-in-progress:
 # interrupting an apply mid-flight is how state drifts from reality.
+#
+# Keyed per environment, so a develop deploy and a production deploy do not
+# queue behind each other -- they are different state files and cannot collide.
 concurrency:
-  group: deploy-production
+  group: deploy-${{ github.event_name == 'workflow_dispatch' && inputs.environment || (github.ref_name == 'develop' && 'develop' || 'production') }}
   cancel-in-progress: false
 
 jobs:
+  # ---------------------------------------------------------------------------
+  # Work out what this run is actually targeting, once, so no later job has to
+  # re-derive it from `github.ref` and reach a different answer.
+  # ---------------------------------------------------------------------------
+  resolve:
+    name: Resolve target
+    runs-on: ubuntu-latest
+    outputs:
+      environment: ${{ steps.t.outputs.environment }}
+      workspace: ${{ steps.t.outputs.workspace }}
+      domain: ${{ steps.t.outputs.domain }}
+      snapshots: ${{ steps.t.outputs.snapshots }}
+      auto_stop: ${{ steps.t.outputs.auto_stop }}
+      apply: ${{ steps.t.outputs.apply }}
+
+    steps:
+      - name: Target
+        id: t
+        env:
+          # Passed through the environment rather than interpolated into the
+          # script: a repository variable is attacker-controlled in the same
+          # sense any configuration is, and `${{ }}` inside a run block is
+          # textual substitution into the shell.
+          PROD_DOMAIN: ${{ vars.TOMB_DOMAIN }}
+          DEV_DOMAIN: ${{ vars.TOMB_DEVELOP_DOMAIN }}
+          EVENT: ${{ github.event_name }}
+          BRANCH: ${{ github.ref_name }}
+          INPUT_ENVIRONMENT: ${{ inputs.environment }}
+          INPUT_APPLY: ${{ inputs.apply }}
+        run: |
+          set -euo pipefail
+
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            environment="$INPUT_ENVIRONMENT"
+            apply="$INPUT_APPLY"
+          elif [ "$BRANCH" = "develop" ]; then
+            # Develop applies itself. That is what a lower environment is for.
+            environment="develop"
+            apply="true"
+          else
+            # A push to main builds the artifact and stops; Principle V wants a
+            # human to decide when production changes.
+            environment="production"
+            apply="false"
+          fi
+
+          # A branch and an environment cannot be mixed. Checked even when
+          # apply is false, so the mistake surfaces on the build too.
+          case "$environment" in
+            production)
+              if [ "$BRANCH" != "main" ]; then
+                echo "::error::production may only be deployed from main, not $BRANCH."
+                echo "::error::Promote by opening a pull request from develop into main."
+                exit 1
+              fi
+              workspace="default"
+              snapshots="true"
+              auto_stop="false"
+              domain="$PROD_DOMAIN"
+              ;;
+            develop)
+              if [ "$BRANCH" != "develop" ]; then
+                echo "::error::develop may only be deployed from the develop branch, not $BRANCH."
+                exit 1
+              fi
+              workspace="develop"
+              snapshots="false"
+              # The VM is the whole cost of an environment; an idle one should
+              # not be running. Started again by any deploy, or dev-lifecycle.
+              auto_stop="true"
+              # Defaults to dev.<production domain> so the two cannot drift
+              # apart silently; set TOMB_DEVELOP_DOMAIN to override.
+              domain="${DEV_DOMAIN:-}"
+              if [ -z "$domain" ] && [ -n "$PROD_DOMAIN" ]; then
+                domain="dev.$PROD_DOMAIN"
+              fi
+              ;;
+            *)
+              echo "::error::Unknown environment '$environment'."
+              exit 1
+              ;;
+          esac
+
+          {
+            echo "environment=$environment"
+            echo "workspace=$workspace"
+            echo "domain=$domain"
+            echo "snapshots=$snapshots"
+            echo "auto_stop=$auto_stop"
+            echo "apply=$apply"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "### Target"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Environment | \`$environment\` |"
+            echo "| Workspace | \`$workspace\` |"
+            echo "| Hostname | ${domain:-_sslip.io fallback_} |"
+            echo "| Applies | $apply |"
+            echo "| Stops nightly | $auto_stop |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
   # ---------------------------------------------------------------------------
   # Gate: the application test suite must pass before anything is deployed.
   # ---------------------------------------------------------------------------
@@ -123,27 +255,29 @@ jobs:
   # Apply. Gated by the `production` environment.
   # ---------------------------------------------------------------------------
   apply:
-    name: Apply infrastructure
-    needs: [test, build]
-    # Two conditions. `always()` so an infrastructure-only dispatch (build
-    # skipped) still runs, but only when nothing failed; and the run must be a
-    # deliberate manual dispatch with apply checked -- a push to main builds
-    # the image and stops. See the note at the top of this file.
+    name: Apply to ${{ needs.resolve.outputs.environment }}
+    needs: [resolve, test, build]
+    # `always()` so an infrastructure-only dispatch (build skipped) still runs,
+    # but only when nothing failed. Whether this run applies at all, and where,
+    # was decided once in `resolve` -- see the note at the top of this file.
     if: ${{ always()
-      && github.event_name == 'workflow_dispatch'
-      && inputs.apply
+      && needs.resolve.outputs.apply == 'true'
+      && needs.resolve.result == 'success'
       && needs.test.result == 'success'
       && needs.build.result != 'failure'
       && needs.build.result != 'cancelled' }}
     runs-on: ubuntu-latest
     environment:
-      name: production
+      name: ${{ needs.resolve.outputs.environment }}
       url: ${{ steps.outputs.outputs.service_url }}
     defaults:
       run:
         working-directory: tofu
     outputs:
       service_url: ${{ steps.outputs.outputs.service_url }}
+      instance_name: ${{ steps.outputs.outputs.instance_name }}
+      zone: ${{ steps.outputs.outputs.zone }}
+      public_ip: ${{ steps.outputs.outputs.public_ip }}
 
     steps:
       - uses: actions/checkout@v5
@@ -217,6 +351,23 @@ jobs:
       - name: Init
         run: tofu init -backend-config="bucket=${{ vars.GCP_STATE_BUCKET }}"
 
+      - name: Select the workspace
+        # The workspace is what separates develop's state from production's, so
+        # selecting the wrong one would apply one environment's plan onto the
+        # other's real resources. `-or-create` because develop's workspace does
+        # not exist until its first deploy; production is `default`, which
+        # always exists. tofu/environments.tf explains the mapping.
+        run: |
+          set -euo pipefail
+          workspace="${{ needs.resolve.outputs.workspace }}"
+          tofu workspace select -or-create "$workspace"
+          selected="$(tofu workspace show)"
+          if [ "$selected" != "$workspace" ]; then
+            echo "::error::Asked for workspace '$workspace' but '$selected' is selected."
+            exit 1
+          fi
+          echo "workspace: $selected -> environment ${{ needs.resolve.outputs.environment }}"
+
       - name: Resolve the image to deploy
         id: image
         run: |
@@ -233,50 +384,205 @@ jobs:
           fi
 
       - name: Apply
+        # `domain`, `enable_snapshots` and `enable_auto_stop` come from
+        # `resolve`, not straight from a repository variable: they are what
+        # differs between environments, and resolve is the single place that
+        # difference is decided.
         run: |
-          tofu apply -auto-approve -lock-timeout=5m -input=false             -var="project_id=${{ vars.GCP_PROJECT_ID }}"             -var="guild_realm=${{ vars.TOMB_GUILD_REALM }}"             -var="bnet_client_id=${{ vars.BNET_CLIENT_ID }}"             -var="domain=${{ vars.TOMB_DOMAIN }}"             -var="acme_email=${{ vars.ACME_EMAIL }}"             -var="image=${{ steps.image.outputs.image }}"
+          tofu apply -auto-approve -lock-timeout=5m -input=false \
+            -var="project_id=${{ vars.GCP_PROJECT_ID }}" \
+            -var="guild_realm=${{ vars.TOMB_GUILD_REALM }}" \
+            -var="bnet_client_id=${{ vars.BNET_CLIENT_ID }}" \
+            -var="domain=${{ needs.resolve.outputs.domain }}" \
+            -var="enable_snapshots=${{ needs.resolve.outputs.snapshots }}" \
+            -var="enable_auto_stop=${{ needs.resolve.outputs.auto_stop }}" \
+            -var="acme_email=${{ vars.ACME_EMAIL }}" \
+            -var="image=${{ steps.image.outputs.image }}"
+
+      - name: Read outputs
+        id: outputs
+        run: |
+          set -euo pipefail
+
+          # Cross-check: the state just written must agree about which
+          # environment it is. If the workspace and the configuration ever
+          # disagree, this is the cheapest place to find out.
+          actual="$(tofu output -raw environment)"
+          if [ "$actual" != "${{ needs.resolve.outputs.environment }}" ]; then
+            echo "::error::Applied state reports environment '$actual' but this run targeted '${{ needs.resolve.outputs.environment }}'."
+            exit 1
+          fi
+
+          {
+            echo "service_url=$(tofu output -raw service_url)"
+            echo "instance_name=$(tofu output -raw instance_name)"
+            echo "zone=$(tofu output -raw zone)"
+            echo "public_ip=$(tofu output -raw public_ip)"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Reserved address
+        # Written to the summary immediately after apply, BEFORE the roll, so a
+        # first deploy that cannot get a certificate still tells you the address
+        # to point DNS at. Without this the first deploy of a new environment
+        # fails at the TLS step and takes the one fact you needed with it.
+        run: |
+          set -euo pipefail
+          ip="$(tofu output -raw public_ip)"
+          echo "::notice::${{ needs.resolve.outputs.environment }} reserved address: $ip"
+          echo "DNS record needed: ${{ needs.resolve.outputs.domain }}. A $ip"
+          {
+            echo "### ${{ needs.resolve.outputs.environment }} address"
+            echo ""
+            echo "Reserved public IP: \`$ip\`"
+            echo ""
+            echo "The hostname \`${{ needs.resolve.outputs.domain }}\` must have an"
+            echo "A record pointing here before Caddy can obtain a certificate."
+            echo "This address survives VM recreation."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Start the VM if it is stopped
+        # develop stops itself overnight (autostop.tf), so a deploy has to be
+        # able to wake it. The roll below runs over SSH and would otherwise fail
+        # ten times and give up against a TERMINATED instance.
+        #
+        # Starting is enough to bring the stack back on its own: startup.sh runs
+        # on every boot and is idempotent. This step only has to get the machine
+        # to RUNNING; the deploy that follows puts the right image on it.
+        env:
+          ZONE: ${{ steps.outputs.outputs.zone }}
+          INSTANCE: ${{ steps.outputs.outputs.instance_name }}
+        run: |
+          set -euo pipefail
+
+          status="$(gcloud compute instances describe "$INSTANCE" --zone "$ZONE" --format='value(status)')"
+          echo "$INSTANCE is $status"
+
+          if [ "$status" = "RUNNING" ]; then
+            exit 0
+          fi
+
+          echo "::notice::Starting $INSTANCE (was $status)"
+          gcloud compute instances start "$INSTANCE" --zone "$ZONE" --quiet
+
+          for i in $(seq 1 20); do
+            status="$(gcloud compute instances describe "$INSTANCE" --zone "$ZONE" --format='value(status)')"
+            if [ "$status" = "RUNNING" ]; then
+              echo "running after $i check(s)"
+              exit 0
+            fi
+            sleep 6
+          done
+
+          echo "::error::$INSTANCE did not reach RUNNING; last status $status"
+          exit 1
 
       - name: Roll the VM onto the new image
         # The VM owns its own configuration: startup.sh writes /opt/tomb/.env
         # from instance metadata and Secret Manager at boot. A deploy is just a
         # pull and a restart, run over an IAP tunnel so the VM exposes no
         # public SSH.
+        #
+        # RETRY ONLY WHAT RETRYING CAN FIX.
+        #
+        # A freshly created VM may still be installing Docker, so SSH itself can
+        # fail for a minute or two; that is worth retrying. A deploy script that
+        # actually RAN and then failed is not -- running it again produces the
+        # same answer, more slowly.
+        #
+        # Retrying everything cost 32 minutes on develop's first deploy and,
+        # worse, fourteen failed Let's Encrypt validations for a hostname that
+        # did not resolve. LE allows five per hostname per hour, so blind retry
+        # turned a missing DNS record into an hour of rate-limiting on top.
+        #
+        # gcloud returns 255 when SSH itself fails and the remote command's own
+        # exit status otherwise, which is exactly the distinction needed:
+        #
+        #   255  could not connect        -> still bootstrapping, retry
+        #   3    ran; stack up, TLS not   -> DNS is missing, stop and say so
+        #   *    ran; something broke     -> stop, the script printed why
+        env:
+          IMAGE: ${{ steps.image.outputs.image }}
+          INSTANCE: ${{ steps.outputs.outputs.instance_name }}
+          ZONE: ${{ steps.outputs.outputs.zone }}
+          DOMAIN: ${{ needs.resolve.outputs.domain }}
+          PUBLIC_IP: ${{ steps.outputs.outputs.public_ip }}
         run: |
-          instance=$(tofu output -raw instance_name)
-          zone=$(tofu output -raw zone)
-          image="${{ steps.image.outputs.image }}"
+          echo "::notice::Deploying $IMAGE to $INSTANCE in $ZONE"
 
-          echo "::notice::Deploying $image to $instance in $zone"
-
-          # A freshly created VM may still be running its startup script, which
-          # installs Docker. Retry rather than failing the first deploy.
+          rc=0
           for attempt in $(seq 1 10); do
-            if gcloud compute ssh "$instance"                  --zone "$zone"                  --tunnel-through-iap                  --quiet                  --command "sudo /opt/tomb/deploy.sh '$image'"; then
+            set +e
+            gcloud compute ssh "$INSTANCE" --zone "$ZONE" --tunnel-through-iap --quiet --command "sudo /opt/tomb/deploy.sh '$IMAGE'"
+            rc=$?
+            set -e
+
+            if [ "$rc" -eq 0 ]; then
               echo "deploy succeeded on attempt $attempt"
               exit 0
             fi
-            echo "attempt $attempt failed; the VM may still be bootstrapping"
+
+            if [ "$rc" -ne 255 ]; then
+              break
+            fi
+
+            echo "attempt $attempt could not reach the VM over SSH (exit 255); it may still be bootstrapping"
             sleep 30
           done
 
-          echo "::error::Could not deploy to the VM. Check the startup script output:"
-          gcloud compute instances get-serial-port-output "$instance"             --zone "$zone" 2>/dev/null | tail -40 || true
+          if [ "$rc" -eq 3 ]; then
+            echo "::error::$DOMAIN has no certificate yet. The stack is up; TLS is the only thing missing."
+            {
+              echo "### DNS is the missing piece"
+              echo ""
+              echo "The develop stack deployed and the app is healthy. Caddy cannot obtain a"
+              echo "certificate because the hostname does not point at this VM yet."
+              echo ""
+              echo '```'
+              echo "$DOMAIN.  A  $PUBLIC_IP"
+              echo '```'
+              echo ""
+              echo "That address is reserved and survives VM recreation. Add the record, then"
+              echo "push to \`develop\` again."
+              echo ""
+              echo "**Do not re-run the deploy until the name resolves.** Each attempt spends"
+              echo "part of an hourly Let's Encrypt budget of five failed validations for this"
+              echo "hostname, and exhausting it delays issuance even after DNS is correct."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+          if [ "$rc" -eq 255 ]; then
+            echo "::error::Could not reach $INSTANCE over SSH after 10 attempts. Serial console:"
+            gcloud compute instances get-serial-port-output "$INSTANCE" --zone "$ZONE" 2>/dev/null | tail -40 || true
+          else
+            echo "::error::/opt/tomb/deploy.sh failed on $INSTANCE with exit $rc. Its output is above."
+          fi
           exit 1
 
-      - name: Read outputs
-        id: outputs
-        run: echo "service_url=$(tofu output -raw service_url)" >> "$GITHUB_OUTPUT"
 
   # ---------------------------------------------------------------------------
   # Post-deploy verification. A deploy that reports success without proving the
   # service answers is not a deploy.
   # ---------------------------------------------------------------------------
   verify:
-    name: Verify deployment
-    needs: apply
+    name: Verify ${{ needs.resolve.outputs.environment }}
+    needs: [resolve, apply]
     runs-on: ubuntu-latest
 
     steps:
+      # Authenticate up front so the diagnostic step at the bottom can reach the
+      # VM. Verification failing used to produce twenty identical "couldn't
+      # connect" lines and nothing else -- no container state, no logs, no
+      # indication of which of app, db or Caddy had died -- which turned a
+      # one-line answer into an SSH session.
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOYER_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
       - name: Liveness
         run: |
           url="${{ needs.apply.outputs.service_url }}"
@@ -324,6 +630,50 @@ jobs:
           fi
           echo "anonymous access correctly redirected"
 
+      # Runs whatever failed above. `if: failure()` rather than `always()`: on a
+      # green deploy there is nothing to look at.
+      - name: Why it failed
+        if: failure()
+        run: |
+          instance="${{ needs.apply.outputs.instance_name }}"
+          zone="${{ needs.apply.outputs.zone }}"
+          url="${{ needs.apply.outputs.service_url }}"
+          host="${url#https://}"
+
+          echo "::group::What the name resolves to"
+          # A hostname pointing somewhere other than the VM looks identical to a
+          # dead VM from a curl, and is the likelier cause right after a domain
+          # change.
+          getent hosts "$host" || echo "  $host does not resolve"
+          echo "  reserved address of the VM: $(gcloud compute addresses list             --filter="name~tomb" --format='value(address)' 2>/dev/null || echo unknown)"
+          echo "::endgroup::"
+
+          echo "::group::Ports"
+          for port in 80 443; do
+            if timeout 10 bash -c "</dev/tcp/$host/$port" 2>/dev/null; then
+              echo "  $port open"
+            else
+              echo "  $port CLOSED"
+            fi
+          done
+          echo "::endgroup::"
+
+          echo "::group::Containers on the VM"
+          gcloud compute ssh "$instance" --zone "$zone" --tunnel-through-iap --quiet             --command 'cd /opt/tomb && sudo docker compose --env-file .env ps -a' || true
+          echo "::endgroup::"
+
+          echo "::group::Caddy logs"
+          gcloud compute ssh "$instance" --zone "$zone" --tunnel-through-iap --quiet             --command 'cd /opt/tomb && sudo docker compose --env-file .env logs --tail 80 caddy' || true
+          echo "::endgroup::"
+
+          echo "::group::App logs"
+          gcloud compute ssh "$instance" --zone "$zone" --tunnel-through-iap --quiet             --command 'cd /opt/tomb && sudo docker compose --env-file .env logs --tail 40 app' || true
+          echo "::endgroup::"
+
+          echo "::group::Caddyfile as generated on the VM"
+          gcloud compute ssh "$instance" --zone "$zone" --tunnel-through-iap --quiet             --command 'sudo cat -n /opt/tomb/Caddyfile' || true
+          echo "::endgroup::"
+
       - name: Summary
         run: |
           {
@@ -331,7 +681,9 @@ jobs:
             echo ""
             echo "| | |"
             echo "|---|---|"
+            echo "| Environment | \`${{ needs.resolve.outputs.environment }}\` |"
             echo "| URL | ${{ needs.apply.outputs.service_url }} |"
+            echo "| Address | \`${{ needs.apply.outputs.public_ip }}\` |"
             echo "| Commit | \`${GITHUB_SHA::12}\` |"
             echo ""
             echo "Liveness, readiness, landing page and the anonymous guild gate all verified."

@@ -90,6 +90,52 @@ variable "disk_type" {
 # Backups
 # ---------------------------------------------------------------------------
 
+variable "enable_auto_stop" {
+  description = <<-EOT
+    Whether this environment stops itself on a schedule.
+
+    False in production, and structurally impossible there regardless -- see the
+    guard in autostop.tf. True in develop, where the VM is the whole cost and an
+    environment nobody is using should not be running.
+  EOT
+  type        = bool
+  default     = false
+}
+
+variable "auto_stop_schedule" {
+  description = <<-EOT
+    Cron expression for the scheduled shutdown, in var.auto_stop_timezone.
+
+    Default is 02:00 every day. Deliberately no matching start schedule: an
+    environment that switches itself on each morning, used or not, defeats the
+    purpose. Deploys and dev-lifecycle.yml start it on demand.
+  EOT
+  type        = string
+  default     = "0 2 * * *"
+}
+
+variable "auto_stop_timezone" {
+  description = <<-EOT
+    IANA time zone the auto-stop cron is interpreted in. UTC by default so the
+    schedule does not shift under daylight saving; set e.g. "America/Chicago" if
+    you would rather it tracked local evenings.
+  EOT
+  type        = string
+  default     = "UTC"
+}
+
+variable "enable_snapshots" {
+  description = <<-EOT
+    Whether to take daily snapshots of the Postgres data disk.
+
+    True in production, where the disk is the only irreplaceable state in the
+    project. False in develop, whose rows are re-created by the next sign-in and
+    are not worth paying to retain.
+  EOT
+  type        = bool
+  default     = true
+}
+
 variable "snapshot_retention_days" {
   description = <<-EOT
     How long automated snapshots of the Postgres data disk are kept.
