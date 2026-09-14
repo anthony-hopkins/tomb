@@ -137,6 +137,34 @@ done
 TOMB_DOMAIN="$(grep -E '^TOMB_DOMAIN=' "$APP_DIR/.env" | cut -d= -f2-)"
 [ -n "$TOMB_DOMAIN" ] || fail "TOMB_DOMAIN is missing from $APP_DIR/.env."
 
+# Before waiting on TLS, check the hostname resolves at all.
+#
+# Caddy validates over ACME HTTP-01, which requires Let's Encrypt to resolve the
+# name and reach this VM. If the name does not resolve there is no certificate
+# coming, and waiting three minutes to discover that is the least of it: every
+# attempt is a FAILED VALIDATION against Let's Encrypt, which allows five per
+# hostname per hour. The first deploy of dev.tombguild.com burned fourteen in
+# one run, because the workflow retried the whole deploy ten times and each
+# retry recreated Caddy into another doomed ACME order. That left the hostname
+# rate-limited, so the certificate could not be issued even once DNS was fixed.
+#
+# So: resolve first, and if the name is not there, stop immediately with exit 3
+# rather than generating more failures. The workflow treats 3 as "the deploy
+# ran, the stack is up, DNS is the missing piece" and does not retry it.
+if ! getent hosts "$TOMB_DOMAIN" >/dev/null 2>&1; then
+  echo "ERROR: $TOMB_DOMAIN does not resolve, so Let's Encrypt cannot validate it." >&2
+  echo "" >&2
+  echo "The stack is up and the app is healthy; only TLS is missing. Point an A" >&2
+  echo "record at this VM's reserved address and deploy again:" >&2
+  echo "" >&2
+  echo "    $TOMB_DOMAIN.  A  $(curl -fsS -H 'Metadata-Flavor: Google'     'http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/access-configs/0/external-ip' 2>/dev/null || echo '<see the run summary>')" >&2
+  echo "" >&2
+  echo "That address is reserved and survives VM recreation. Avoid re-running the" >&2
+  echo "deploy until DNS resolves: each attempt spends part of an hourly Let's" >&2
+  echo "Encrypt budget of five failed validations for this hostname." >&2
+  exit 3
+fi
+
 # Generous: on a hostname change Caddy has to complete an ACME order first.
 log "waiting for caddy to serve https://$TOMB_DOMAIN/healthz"
 for i in $(seq 1 30); do
@@ -148,7 +176,26 @@ for i in $(seq 1 30); do
   sleep 6
 done
 
-fail "caddy never served https://$TOMB_DOMAIN/healthz from this VM.
-  Nothing on 443 usually means Caddy exited during config load, or could not
-  obtain a certificate -- if the hostname changed, check that DNS points at
-  this VM, since Let's Encrypt validates over HTTP-01 on port 80."
+# The name resolves but nothing is serving. Separate the two causes, because
+# they need opposite responses: a dead Caddy is a real failure worth retrying
+# and dumping logs for, whereas a live Caddy still working through an ACME order
+# just needs DNS to have propagated and the retry to stop.
+if dc ps --status running --services 2>/dev/null | grep -qx caddy; then
+  echo "ERROR: caddy is running but has no usable certificate for $TOMB_DOMAIN yet." >&2
+  echo "" >&2
+  echo "$TOMB_DOMAIN resolves to $(getent hosts "$TOMB_DOMAIN" | awk '{print $1}' | head -1)." >&2
+  echo "Check that address is this VM, and that port 80 is reachable from the" >&2
+  echo "internet -- Let's Encrypt validates over HTTP-01 there, not on 443." >&2
+  echo "" >&2
+  echo "Recent caddy output:" >&2
+  dc logs --tail 30 caddy >&2 || true
+  echo "" >&2
+  echo "Not retrying: repeated attempts spend an hourly Let's Encrypt budget of" >&2
+  echo "five failed validations per hostname, and being rate-limited turns a DNS" >&2
+  echo "fix into an hour of waiting." >&2
+  exit 3
+fi
+
+fail "caddy is not running, so nothing is listening on 443.
+  This is a dead proxy rather than a certificate problem -- Caddy exited during
+  config load."

@@ -428,6 +428,8 @@ jobs:
         run: |
           set -euo pipefail
           ip="$(tofu output -raw public_ip)"
+          echo "::notice::${{ needs.resolve.outputs.environment }} reserved address: $ip"
+          echo "DNS record needed: ${{ needs.resolve.outputs.domain }}. A $ip"
           {
             echo "### ${{ needs.resolve.outputs.environment }} address"
             echo ""
@@ -479,27 +481,84 @@ jobs:
         # from instance metadata and Secret Manager at boot. A deploy is just a
         # pull and a restart, run over an IAP tunnel so the VM exposes no
         # public SSH.
+        #
+        # RETRY ONLY WHAT RETRYING CAN FIX.
+        #
+        # A freshly created VM may still be installing Docker, so SSH itself can
+        # fail for a minute or two; that is worth retrying. A deploy script that
+        # actually RAN and then failed is not -- running it again produces the
+        # same answer, more slowly.
+        #
+        # Retrying everything cost 32 minutes on develop's first deploy and,
+        # worse, fourteen failed Let's Encrypt validations for a hostname that
+        # did not resolve. LE allows five per hostname per hour, so blind retry
+        # turned a missing DNS record into an hour of rate-limiting on top.
+        #
+        # gcloud returns 255 when SSH itself fails and the remote command's own
+        # exit status otherwise, which is exactly the distinction needed:
+        #
+        #   255  could not connect        -> still bootstrapping, retry
+        #   3    ran; stack up, TLS not   -> DNS is missing, stop and say so
+        #   *    ran; something broke     -> stop, the script printed why
+        env:
+          IMAGE: ${{ steps.image.outputs.image }}
+          INSTANCE: ${{ steps.outputs.outputs.instance_name }}
+          ZONE: ${{ steps.outputs.outputs.zone }}
+          DOMAIN: ${{ needs.resolve.outputs.domain }}
+          PUBLIC_IP: ${{ steps.outputs.outputs.public_ip }}
         run: |
-          instance=$(tofu output -raw instance_name)
-          zone=$(tofu output -raw zone)
-          image="${{ steps.image.outputs.image }}"
+          echo "::notice::Deploying $IMAGE to $INSTANCE in $ZONE"
 
-          echo "::notice::Deploying $image to $instance in $zone"
-
-          # A freshly created VM may still be running its startup script, which
-          # installs Docker. Retry rather than failing the first deploy.
+          rc=0
           for attempt in $(seq 1 10); do
-            if gcloud compute ssh "$instance"                  --zone "$zone"                  --tunnel-through-iap                  --quiet                  --command "sudo /opt/tomb/deploy.sh '$image'"; then
+            set +e
+            gcloud compute ssh "$INSTANCE" --zone "$ZONE" --tunnel-through-iap --quiet --command "sudo /opt/tomb/deploy.sh '$IMAGE'"
+            rc=$?
+            set -e
+
+            if [ "$rc" -eq 0 ]; then
               echo "deploy succeeded on attempt $attempt"
               exit 0
             fi
-            echo "attempt $attempt failed; the VM may still be bootstrapping"
+
+            if [ "$rc" -ne 255 ]; then
+              break
+            fi
+
+            echo "attempt $attempt could not reach the VM over SSH (exit 255); it may still be bootstrapping"
             sleep 30
           done
 
-          echo "::error::Could not deploy to the VM. Check the startup script output:"
-          gcloud compute instances get-serial-port-output "$instance"             --zone "$zone" 2>/dev/null | tail -40 || true
+          if [ "$rc" -eq 3 ]; then
+            echo "::error::$DOMAIN has no certificate yet. The stack is up; TLS is the only thing missing."
+            {
+              echo "### DNS is the missing piece"
+              echo ""
+              echo "The develop stack deployed and the app is healthy. Caddy cannot obtain a"
+              echo "certificate because the hostname does not point at this VM yet."
+              echo ""
+              echo '```'
+              echo "$DOMAIN.  A  $PUBLIC_IP"
+              echo '```'
+              echo ""
+              echo "That address is reserved and survives VM recreation. Add the record, then"
+              echo "push to \`develop\` again."
+              echo ""
+              echo "**Do not re-run the deploy until the name resolves.** Each attempt spends"
+              echo "part of an hourly Let's Encrypt budget of five failed validations for this"
+              echo "hostname, and exhausting it delays issuance even after DNS is correct."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+          if [ "$rc" -eq 255 ]; then
+            echo "::error::Could not reach $INSTANCE over SSH after 10 attempts. Serial console:"
+            gcloud compute instances get-serial-port-output "$INSTANCE" --zone "$ZONE" 2>/dev/null | tail -40 || true
+          else
+            echo "::error::/opt/tomb/deploy.sh failed on $INSTANCE with exit $rc. Its output is above."
+          fi
           exit 1
+
 
   # ---------------------------------------------------------------------------
   # Post-deploy verification. A deploy that reports success without proving the
