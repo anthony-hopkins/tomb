@@ -37,9 +37,30 @@ func rosterClient(t *testing.T, host string, ttl time.Duration) *HTTPClient {
 	return c
 }
 
-// TestRosterIsCached is the point of the cache: the guild overview is the page
-// every member lands on, and without this each of those loads waits on Blizzard.
-func TestRosterIsCached(t *testing.T) {
+// TestRosterIsLiveByDefault is the default, and the one that matters: the
+// roster is a single call nowhere near Blizzard's limits, so every request
+// fetches and nobody is shown a guild list that is an hour out of date.
+func TestRosterIsLiveByDefault(t *testing.T) {
+	var calls atomic.Int32
+	var fail atomic.Bool
+	srv := rosterServer(t, &calls, &fail)
+	c := rosterClient(t, srv.URL, 0) // zero: no reuse
+
+	for i := 0; i < 4; i++ {
+		if _, err := c.GuildRoster(context.Background(), "token", "elune", "TOMB"); err != nil {
+			t.Fatalf("call %d: %v", i, err)
+		}
+	}
+
+	if n := calls.Load(); n != 4 {
+		t.Errorf("hit Blizzard %d times for 4 page loads, want 4 -- the default must not throttle", n)
+	}
+}
+
+// TestRosterIsCachedWhenAskedFor: the TTL still works when it is set, for
+// whoever decides the home page is worth a few hundred milliseconds of
+// staleness.
+func TestRosterIsCachedWhenAskedFor(t *testing.T) {
 	var calls atomic.Int32
 	var fail atomic.Bool
 	srv := rosterServer(t, &calls, &fail)
@@ -82,22 +103,22 @@ func TestRosterRefetchesWhenStale(t *testing.T) {
 	}
 }
 
-// TestStaleRosterBeatsNoRoster is the failure path worth having.
+// TestStaleRosterBeatsNoRoster is the failure path, and it holds with NO TTL
+// configured -- which is the point.
 //
-// One bad minute at Blizzard would otherwise empty the front page of the site.
-// A roster from an hour ago is a far better answer than "unavailable": almost
-// certainly nobody joined or left in the meantime.
+// The last good roster is kept even when nothing is being reused, because this
+// is not about avoiding calls: the call was made and it failed. One bad minute
+// at Blizzard would otherwise empty the front page of the site.
 func TestStaleRosterBeatsNoRoster(t *testing.T) {
 	var calls atomic.Int32
 	var fail atomic.Bool
 	srv := rosterServer(t, &calls, &fail)
-	c := rosterClient(t, srv.URL, time.Nanosecond)
+	c := rosterClient(t, srv.URL, 0) // no reuse, and the fallback still works
 
-	// Warm the cache.
+	// One good fetch, to have something to fall back to.
 	if _, err := c.GuildRoster(context.Background(), "token", "elune", "TOMB"); err != nil {
 		t.Fatalf("warming: %v", err)
 	}
-	time.Sleep(time.Millisecond)
 
 	// Now Blizzard falls over.
 	fail.Store(true)

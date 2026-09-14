@@ -36,26 +36,21 @@ type HTTPClient struct {
 	// icon under the same id, which they do not.
 	iconCache sync.Map
 
-	// RosterTTL is how long a fetched guild roster is served before it is
-	// fetched again. Zero means DefaultRosterTTL.
+	// RosterTTL is how long a fetched guild roster may be reused before it is
+	// fetched again.
+	//
+	// ZERO -- THE DEFAULT -- MEANS NEVER REUSE IT: every request fetches. The
+	// roster is a single call however large the guild, nowhere near Blizzard's
+	// limits, so throttling it buys a few hundred milliseconds on the home page
+	// in exchange for showing a roster that is up to an hour out of date. Live
+	// is the better default for a list of who is in the guild.
+	//
+	// Set it if the home page ever feels slow enough to trade freshness for.
 	RosterTTL time.Duration
 
 	rosterMu    sync.Mutex
 	rosterCache map[string]rosterEntry
 }
-
-// DefaultRosterTTL is how long a guild roster is considered fresh.
-//
-// A roster is one call however large the guild, so this is not about rate
-// limits -- it is about the front page. The guild overview is what every member
-// lands on, and without a cache each of those loads waits on Blizzard. An hour
-// removes essentially all of that while keeping the roster current enough that
-// somebody who joined this morning is listed by lunchtime.
-//
-// Guild membership changes in days, not seconds. The FR-013 access check is a
-// separate path and stays live, so a cached roster never gates anybody in or
-// out -- it only decides who is drawn on a page.
-const DefaultRosterTTL = time.Hour
 
 type rosterEntry struct {
 	members []GuildMember
@@ -417,10 +412,13 @@ func (c *HTTPClient) GuildRoster(ctx context.Context, token, realmSlug, guildNam
 
 	members, err := c.fetchRoster(ctx, token, realmSlug, guildName)
 	if err != nil {
-		// Serve a stale roster rather than nothing. The alternative is that one
-		// bad minute at Blizzard empties the front page of the site, and a
-		// roster from an hour ago is a far better answer than "unavailable" --
-		// nobody joined or left in the meantime, almost certainly.
+		// Serve the last roster we did get, rather than nothing.
+		//
+		// This is not caching in the sense of avoiding calls -- the call was
+		// made and failed. It is that one bad minute at Blizzard would otherwise
+		// empty the front page of the site, and the roster from the last
+		// successful load is a far better answer than "unavailable": almost
+		// certainly nobody joined or left in between.
 		if stale, ok, _ := c.cachedRoster(key); ok {
 			return stale, nil
 		}
@@ -450,14 +448,14 @@ func (c *HTTPClient) cachedRoster(key string) (members []GuildMember, present, f
 		return nil, false, false
 	}
 
-	ttl := c.RosterTTL
-	if ttl <= 0 {
-		ttl = DefaultRosterTTL
-	}
-
 	out := make([]GuildMember, len(entry.members))
 	copy(out, entry.members)
-	return out, true, time.Since(entry.fetched) < ttl
+
+	// With no TTL configured nothing is ever fresh, so every request refetches.
+	// The entry is still PRESENT, which is the whole point: it is kept solely so
+	// a failed fetch has something better to serve than an error.
+	fresh = c.RosterTTL > 0 && time.Since(entry.fetched) < c.RosterTTL
+	return out, true, fresh
 }
 
 func (c *HTTPClient) storeRoster(key string, members []GuildMember) {
