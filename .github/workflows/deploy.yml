@@ -648,6 +648,108 @@ jobs:
           fi
           echo "anonymous access correctly redirected"
 
+      - name: Sign-in actually reaches Battle.net
+        # The check that was missing when a header took the front door off.
+        #
+        # Every other probe in this job passes on a site nobody can log into.
+        # /healthz, /readyz, the landing page rendering and the anonymous guild
+        # gate were all green while clicking "Sign in with Battle.net" did
+        # nothing whatsoever: the CSP permitted the POST to /auth/login and then
+        # forbade the 302 to oauth.battle.net, so the browser declined to
+        # navigate and showed no error at all. A plain curl follows that
+        # redirect happily, which is why nothing here noticed.
+        #
+        # So this does what a browser does, which is the only way to catch it.
+        # form-action is enforced against the document that SUBMITS the form, so
+        # the policy comes from the landing page, and it is checked against the
+        # redirect the POST actually returns.
+        #
+        # No credentials needed. Everything up to Blizzard's own login page is
+        # ours, and that is exactly the part that broke.
+        env:
+          URL: ${{ needs.apply.outputs.service_url }}
+        run: |
+          set -euo pipefail
+
+          curl -sS -D /tmp/landing.h -o /dev/null --max-time 20 "$URL/"
+          curl -sS -D /tmp/login.h -o /dev/null --max-time 20 -X POST "$URL/auth/login"
+
+          python3 - <<'PY'
+          import os, sys
+          from urllib.parse import urlparse, parse_qs
+
+          def parse(path):
+              status, headers = None, {}
+              with open(path, encoding="utf-8", errors="replace") as fh:
+                  for raw in fh:
+                      line = raw.strip()
+                      if line.startswith("HTTP/"):
+                          parts = line.split()
+                          if status is None and len(parts) > 1:
+                              status = parts[1]
+                      elif ":" in line:
+                          key, value = line.split(":", 1)
+                          headers.setdefault(key.strip().lower(), value.strip())
+              return status, headers
+
+          site = os.environ["URL"].rstrip("/")
+          problems = []
+
+          login_status, login_headers = parse("/tmp/login.h")
+          _, landing_headers = parse("/tmp/landing.h")
+
+          def die(messages):
+              for message in messages:
+                  print("::error::" + message)
+              sys.exit(1)
+
+          if login_status != "302":
+              die([f"POST /auth/login returned {login_status}, want 302. "
+                   "Sign-in is not starting the OAuth flow at all."])
+
+          location = login_headers.get("location", "")
+          parsed = urlparse(location)
+          origin = parsed.scheme + "://" + parsed.netloc
+
+          if parsed.netloc != "oauth.battle.net":
+              problems.append(f"sign-in redirects to {origin!r}, want https://oauth.battle.net")
+
+          query = parse_qs(parsed.query)
+          expected_callback = site + "/auth/callback"
+          callback = (query.get("redirect_uri") or [""])[0]
+          if callback != expected_callback:
+              problems.append(
+                  f"redirect_uri is {callback!r}, want {expected_callback!r}. Blizzard matches "
+                  "this exactly, so a mismatch fails sign-in after the member approves access.")
+
+          if not (query.get("client_id") or [""])[0]:
+              problems.append("no client_id on the authorize URL; BNET_CLIENT_ID is not reaching the app.")
+
+          # The browser rule. form-action does NOT fall back to default-src, so
+          # an absent directive permits the submission, while a present one must
+          # name the redirect's origin or the navigation is silently refused.
+          directives = {}
+          for part in landing_headers.get("content-security-policy", "").split(";"):
+              fields = part.split()
+              if fields:
+                  directives[fields[0].lower()] = fields[1:]
+
+          form_action = directives.get("form-action")
+          if form_action is not None and origin not in form_action and "*" not in form_action:
+              problems.append(
+                  f"the landing page's CSP has form-action {form_action}, which does not permit "
+                  f"{origin}. A browser checks form-action against the REDIRECT TARGET of a form "
+                  "submission, so clicking sign-in will silently do nothing: no error page, no "
+                  "failed request, just a console violation. curl cannot see this.")
+
+          if problems:
+              die(problems)
+
+          print("sign-in reaches " + origin)
+          print("  redirect_uri: " + callback)
+          print("  form-action:  " + str(form_action))
+          PY
+
       # Runs whatever failed above. `if: failure()` rather than `always()`: on a
       # green deploy there is nothing to look at.
       - name: Why it failed
