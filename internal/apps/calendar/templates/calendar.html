@@ -29,7 +29,12 @@
       </div>
       <div>
         <label for="ev-ends">Ends ({{$.ZoneName}}, optional)</label>
-        <input id="ev-ends" name="ends" type="datetime-local" value="{{.Ends}}">
+        {{/* min is the start, so the picker offers nothing earlier. The
+             server still refuses an end at or before the start; this keeps a
+             person from being able to try. tooltip.js moves min as the start
+             is typed and adds a validity message; without it, min is what the
+             server last rendered. */}}
+        <input id="ev-ends" name="ends" type="datetime-local" value="{{.Ends}}"{{if .Starts}} min="{{.Starts}}"{{end}}>
       </div>
     </div>
     <div class="form-row">

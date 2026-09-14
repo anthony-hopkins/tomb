@@ -11,7 +11,7 @@
 // JavaScript only where a specific interaction genuinely requires it, and "put
 // this box where it fits" is the interaction that qualifies.
 //
-// It does four things:
+// It does five things:
 //
 //   1. Places an open tooltip or card so it stays inside the viewport. CSS can
 //      put it beside its row, but it cannot know that the row is near the
@@ -35,6 +35,12 @@
 //      only ever fills the box; without this, picking a name still leaves
 //      the viewer to press enter. Typing is left alone -- only a pick, or
 //      a paste, of a name that is actually on the roster submits.
+//
+//   5. Keeps a calendar event's end after its start as the form is filled:
+//      the end's earliest allowed value follows the start, and an end at or
+//      before it is refused by the browser with a message, before the form
+//      ever reaches the server -- which refuses it too, so nothing depends
+//      on this.
 //
 // No framework, no build step, no dependencies. It is served from the same
 // origin under a script-src of 'self'.
@@ -174,6 +180,27 @@
           }
         }
       });
+    }
+
+    // The calendar's event form: the end may not be at or before the start.
+    //
+    // datetime-local values are "YYYY-MM-DDTHH:MM", which compare correctly
+    // as strings, so no dates are parsed. setCustomValidity is what makes the
+    // browser hold the form and say why; an empty string clears it.
+    var starts = document.getElementById("ev-starts");
+    var ends = document.getElementById("ev-ends");
+    if (starts && ends) {
+      var checkEnd = function () {
+        ends.min = starts.value;
+        if (ends.value && starts.value && ends.value <= starts.value) {
+          ends.setCustomValidity("The end must be after the start.");
+        } else {
+          ends.setCustomValidity("");
+        }
+      };
+      starts.addEventListener("input", checkEnd);
+      ends.addEventListener("input", checkEnd);
+      checkEnd();
     }
 
     var nav = document.querySelector(".character-nav");
