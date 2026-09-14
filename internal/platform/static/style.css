@@ -327,16 +327,44 @@ main:has(.dashboard) { max-width: none; }
    The heading is what makes the order legible -- a roster sorted by rank with
    no headings reads as an arbitrary order to anyone who does not already know
    the ranks. */
+/* The roster is ONE panel with rank sections inside it, not a panel per rank.
+   
+   Five stacked boxes read as five lists; one box with headings in it reads as
+   one roster, which is what it is -- and matches the character rail exactly. */
+.roster-groups {
+  background: var(--panel-veil);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  /* The hover card has to escape; never set overflow here. */
+}
+
+/* Inside the panel the lists carry no chrome of their own. */
+.roster-groups .character-list {
+  background: none;
+  border: 0;
+  border-radius: 0;
+}
+
+/* ...and the rows stop rounding their corners, since they are no longer at the
+   panel's edges -- only the first and last row in the whole panel are. */
+.roster-groups .character-row:first-child,
+.roster-groups .character-row:last-child { border-radius: 0; }
+
 .rank-heading {
-  margin: 1.1rem 0 0.4rem;
+  margin: 0;
+  padding: 0.75rem 0.9rem 0.4rem;
+  border-top: 1px solid var(--line);
   font-size: 0.72rem;
   letter-spacing: 0.09em;
   text-transform: uppercase;
   color: var(--accent);
 }
-.rank-heading:first-of-type { margin-top: 0; }
 
-.character-nav .character-list + .rank-heading { margin-top: 1.25rem; }
+/* The first section heads the panel, so it needs no rule above it. */
+.roster-groups > .rank-heading:first-child {
+  border-top: 0;
+  border-radius: 10px 10px 0 0;
+}
 
 .roster-note {
   margin: 0 0 0.75rem;
