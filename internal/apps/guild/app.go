@@ -246,6 +246,18 @@ type barView struct {
 	// "death-knight", "mage". The label beside the bar is what identifies the
 	// row; the colour reinforces it with the hue every player already knows.
 	Class string
+
+	// Roles breaks the row down by what its members' specialisations do --
+	// tank, healer, DPS -- in that order, omitting roles nobody fills. Only
+	// members whose profile carried a spec are counted, so the roles need
+	// not sum to Count on a snapshot where some profiles were unavailable.
+	Roles []roleCount
+}
+
+// roleCount is one role and how many of a class's members play it.
+type roleCount struct {
+	Role  blizzard.Role
+	Count int
 }
 
 // boardView is one leaderboard: a title and its top entries, best first.
@@ -615,6 +627,7 @@ func (a *App) summarise(members []blizzard.GuildMember, groups []rankGroup, deta
 	}
 
 	classes := map[string]int{}
+	roles := map[string]map[blizzard.Role]int{}
 	for _, m := range members {
 		switch {
 		case m.Level > s.CapLevel:
@@ -624,13 +637,31 @@ func (a *App) summarise(members []blizzard.GuildMember, groups []rankGroup, deta
 		case m.Level == s.CapLevel:
 			s.AtCap++
 		}
-		if m.Class != "" {
-			classes[m.Class]++
+		if m.Class == "" {
+			continue
+		}
+		classes[m.Class]++
+		// The role comes from the active spec, which only the profile
+		// carries; a member with no detail yet is in the class count and in
+		// no role.
+		if d, ok := details[memberKey(m)]; ok {
+			if r := blizzard.RoleOf(d.ActiveSpec); r != blizzard.RoleUnknown {
+				if roles[m.Class] == nil {
+					roles[m.Class] = map[blizzard.Role]int{}
+				}
+				roles[m.Class][r]++
+			}
 		}
 	}
 
 	for name, n := range classes {
-		s.Classes = append(s.Classes, barView{Label: name, Count: n, Class: armory.ClassSlug(name)})
+		b := barView{Label: name, Count: n, Class: armory.ClassSlug(name)}
+		for _, r := range blizzard.Roles {
+			if k := roles[name][r]; k > 0 {
+				b.Roles = append(b.Roles, roleCount{Role: r, Count: k})
+			}
+		}
+		s.Classes = append(s.Classes, b)
 	}
 	// Commonest first, then alphabetically so equal counts do not shuffle
 	// between page loads -- map iteration order is random, and a list that

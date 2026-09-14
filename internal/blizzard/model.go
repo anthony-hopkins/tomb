@@ -159,6 +159,49 @@ var classNames = map[int]string{
 	11: "Druid", 12: "Demon Hunter", 13: "Evoker",
 }
 
+// Role is what a specialisation does in a group: tank, healer or damage.
+type Role string
+
+const (
+	RoleTank   Role = "Tank"
+	RoleHealer Role = "Healer"
+	RoleDPS    Role = "DPS"
+
+	// RoleUnknown is a specialisation this build does not know, or none at
+	// all -- a member whose profile could not be fetched has no spec.
+	RoleUnknown Role = ""
+)
+
+// Roles is every role, in the order a group is called for: tank, healer, DPS.
+var Roles = []Role{RoleTank, RoleHealer, RoleDPS}
+
+// specRoles maps the specialisations that are not damage to what they are.
+//
+// Keyed on the spec name alone rather than class and spec, which works
+// because the game never gives one name two roles: Protection tanks whether
+// it is a Paladin's or a Warrior's, Holy and Restoration heal for both classes
+// that have them, and Frost is damage for both a Death Knight and a Mage.
+// Anything not listed is damage, which is what the majority of specs are and
+// what a newly added one most likely is.
+var specRoles = map[string]Role{
+	"Blood": RoleTank, "Vengeance": RoleTank, "Guardian": RoleTank,
+	"Brewmaster": RoleTank, "Protection": RoleTank,
+
+	"Restoration": RoleHealer, "Preservation": RoleHealer, "Mistweaver": RoleHealer,
+	"Holy": RoleHealer, "Discipline": RoleHealer,
+}
+
+// RoleOf reports what a specialisation does. An empty spec is RoleUnknown.
+func RoleOf(spec string) Role {
+	if spec == "" {
+		return RoleUnknown
+	}
+	if r, ok := specRoles[spec]; ok {
+		return r
+	}
+	return RoleDPS
+}
+
 // GuildNameSlug turns a guild's display name into the slug its API path uses.
 func GuildNameSlug(name string) string {
 	return strings.ReplaceAll(strings.ToLower(strings.TrimSpace(name)), " ", "-")

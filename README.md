@@ -62,7 +62,8 @@ page component — so anything that improves one improves the other.
 
 Until you click someone, the panel shows the guild at a glance: how many
 characters are on the roster, how many are at max level, and the breakdown by
-class as a bar chart. Beside it are three leaderboards — top item
+class as a bar chart — with, under each class, how many of them are tanks,
+healers and DPS by their current specialisation. Beside it are three leaderboards — top item
 level, top Mythic+ rating, and most raid bosses down (mythic kills first, then
 heroic, then normal) — each naming the top ten, with every name a link to that
 character's Armory view. All of it is counted from the roster the site already

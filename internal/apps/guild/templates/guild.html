@@ -206,6 +206,13 @@
             <rect class="bar-fill cls-{{.Class}}" width="{{.Pct}}%" height="10" rx="4"/>
           </svg>
           <span class="bar-n">{{.Count}}</span>
+          {{if .Roles}}
+          {{/* What the class's members actually do, from their active
+               specialisations: tank, healer, DPS. Only those anyone fills. */}}
+          <span class="bar-roles">
+            {{range $i, $r := .Roles}}{{if $i}} &middot; {{end}}<span class="bar-role"><span class="bar-role-name">{{$r.Role}}</span> {{$r.Count}}</span>{{end}}
+          </span>
+          {{end}}
         </li>
         {{end}}
       </ul>
