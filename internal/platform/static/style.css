@@ -376,6 +376,49 @@ main:has(.dashboard) { max-width: none; }
   font-size: 0.95em;
 }
 
+/* Guild summary: what the roster adds up to, beside the roster itself. */
+.guild-summary h2 { margin: 0; font-size: 1.5rem; }
+.guild-summary .realm { color: var(--muted); margin-top: 0.25rem; }
+
+.guild-stats {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.4rem 1.5rem;
+  margin: 1.25rem 0 0;
+}
+.guild-stats dt { color: var(--muted); }
+.guild-stats dd { margin: 0; font-variant-numeric: tabular-nums; }
+
+.summary-heading {
+  margin: 1.5rem 0 0.6rem;
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.count-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.3rem;
+}
+
+.count-list li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 3rem;
+  gap: 0.75rem;
+  font-size: 0.9rem;
+}
+
+.count-label { overflow-wrap: anywhere; }
+.count-n {
+  text-align: right;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
 .roster-total {
   margin: 0.9rem 0 0;
   font-size: 0.8rem;

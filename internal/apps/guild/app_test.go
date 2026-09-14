@@ -175,6 +175,116 @@ func TestRosterIsOnePanel(t *testing.T) {
 	}
 }
 
+// TestSummaryCountsTheRoster covers the panel beside the rail.
+//
+// Every number is counted from the roster already fetched, which is what makes
+// the panel free: a guild summary that needed its own calls would be a second
+// cost on the page every member lands on.
+func TestSummaryCountsTheRoster(t *testing.T) {
+	a := appWith([]string{"Guild Master", "Officer"})
+	members := []blizzard.GuildMember{
+		{Name: "Cwds", Rank: 0, Level: 90, Class: "Monk"},
+		{Name: "Arcanost", Rank: 1, Level: 90, Class: "Mage"},
+		{Name: "Azelora", Rank: 1, Level: 90, Class: "Mage"},
+		{Name: "Boodytv", Rank: 1, Level: 64, Class: "Hunter"},
+	}
+	groups := a.group(members)
+	sum := a.summarise(members, groups)
+
+	if sum == nil {
+		t.Fatal("no summary for a roster with members in it")
+	}
+	if sum.Total != 4 {
+		t.Errorf("Total = %d, want 4", sum.Total)
+	}
+
+	// The cap is derived, not hardcoded: it moves every expansion, and a
+	// hardcoded level would quietly start counting nothing.
+	if sum.CapLevel != 90 {
+		t.Errorf("CapLevel = %d, want 90 (the highest level present)", sum.CapLevel)
+	}
+	if sum.AtCap != 3 {
+		t.Errorf("AtCap = %d, want 3 (the level 64 is below it)", sum.AtCap)
+	}
+
+	// Rank counts come from the groups, so the panel and the rail cannot
+	// disagree about how many officers there are.
+	if len(sum.Ranks) != 2 || sum.Ranks[0].Count != 1 || sum.Ranks[1].Count != 3 {
+		t.Errorf("ranks = %v, want Guild Master 1 and Officer 3", sum.Ranks)
+	}
+
+	// Commonest class first.
+	if len(sum.Classes) != 3 || sum.Classes[0].Label != "Mage" || sum.Classes[0].Count != 2 {
+		t.Errorf("classes = %v, want Mage 2 first", sum.Classes)
+	}
+}
+
+// TestClassOrderIsStable: map iteration is random, so equal counts must be
+// broken alphabetically. A list that reshuffles itself on every refresh looks
+// broken even when the numbers are right.
+func TestClassOrderIsStable(t *testing.T) {
+	a := appWith(nil)
+	members := []blizzard.GuildMember{
+		{Name: "A", Rank: 0, Level: 90, Class: "Warrior"},
+		{Name: "B", Rank: 0, Level: 90, Class: "Mage"},
+		{Name: "C", Rank: 0, Level: 90, Class: "Druid"},
+	}
+
+	var first []string
+	for i := 0; i < 20; i++ {
+		sum := a.summarise(members, a.group(members))
+		var order []string
+		for _, c := range sum.Classes {
+			order = append(order, c.Label)
+		}
+		if first == nil {
+			first = order
+			continue
+		}
+		for j := range order {
+			if order[j] != first[j] {
+				t.Fatalf("class order changed between runs: %v then %v", first, order)
+			}
+		}
+	}
+	if first[0] != "Druid" {
+		t.Errorf("equal counts should break alphabetically, got %v", first)
+	}
+}
+
+// TestSummaryRenders checks the panel reaches the page, since an empty right
+// hand side is what this was added to fix.
+func TestSummaryRenders(t *testing.T) {
+	a := appWith([]string{"Guild Master"})
+	members := []blizzard.GuildMember{{Name: "Cwds", Rank: 0, Level: 90, Class: "Monk"}}
+	v := view{
+		Groups:  a.group(members),
+		Total:   1,
+		Summary: a.summarise(members, a.group(members)),
+	}
+
+	body := html.UnescapeString(render(t, v))
+
+	for _, want := range []string{"guild-summary", "TOMB", "Characters", "At level 90", "By rank", "By class", "Monk"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the summary panel is missing %q", want)
+		}
+	}
+}
+
+// TestNoSummaryWithoutARoster: an unavailable roster must not render a panel
+// full of zeroes, which would read as a guild with nobody in it.
+func TestNoSummaryWithoutARoster(t *testing.T) {
+	a := appWith(nil)
+	if sum := a.summarise(nil, nil); sum != nil {
+		t.Errorf("summarised an empty roster into %v", sum)
+	}
+
+	if strings.Contains(render(t, view{Unavailable: true}), "guild-summary") {
+		t.Error("a summary panel rendered for an unavailable roster")
+	}
+}
+
 // TestUnnamedRanksSaySo: an unconfigured rank shows as a number, and the page
 // explains why rather than leaving it looking broken.
 func TestUnnamedRanksSaySo(t *testing.T) {

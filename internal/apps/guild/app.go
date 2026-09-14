@@ -13,6 +13,7 @@ import (
 	"embed"
 	"html/template"
 	"net/http"
+	"sort"
 
 	"github.com/anthony-hopkins/tomb/internal/blizzard"
 	"github.com/anthony-hopkins/tomb/internal/platform"
@@ -86,8 +87,39 @@ type rankGroup struct {
 	Members []memberView
 }
 
+// summaryView is the panel beside the rail: what the roster adds up to.
+//
+// Every number here is counted from the roster already in hand. It is the whole
+// reason this panel is cheap -- a guild summary that needed its own fetches
+// would be a second cost on the page every member lands on.
+type summaryView struct {
+	Name  string
+	Realm string
+	Total int
+
+	// AtCap is how many characters sit at the highest level anyone in the guild
+	// has reached, and CapLevel is that level. Derived rather than hardcoded:
+	// the cap moves every expansion, and a hardcoded 80 would have quietly
+	// started counting nothing.
+	AtCap    int
+	CapLevel int
+
+	Ranks   []countView
+	Classes []countView
+}
+
+// countView is one label and how many characters carry it.
+type countView struct {
+	Label string
+	Count int
+}
+
 type view struct {
 	Groups []rankGroup
+
+	// Summary is the panel beside the rail, absent when there is no roster to
+	// summarise.
+	Summary *summaryView
 
 	// Total is every character on the roster, which is not the same as the
 	// number of people: one member with five alts in the guild is five rows.
@@ -112,6 +144,7 @@ func (a *App) show(w http.ResponseWriter, r *http.Request) {
 	} else {
 		v.Groups = a.group(members)
 		v.Total = len(members)
+		v.Summary = a.summarise(members, v.Groups)
 	}
 
 	var body bytes.Buffer
@@ -173,6 +206,57 @@ func (a *App) group(members []blizzard.GuildMember) []rankGroup {
 		})
 	}
 	return groups
+}
+
+// summarise counts what the roster adds up to.
+//
+// Rank counts come from the groups rather than being recounted: they are the
+// same numbers, and counting them twice is how the rail and the panel end up
+// disagreeing with each other.
+func (a *App) summarise(members []blizzard.GuildMember, groups []rankGroup) *summaryView {
+	if len(members) == 0 {
+		return nil
+	}
+
+	s := &summaryView{
+		Name:  a.deps.Guild.Name,
+		Realm: a.deps.Guild.RealmSlug,
+		Total: len(members),
+	}
+
+	for _, g := range groups {
+		s.Ranks = append(s.Ranks, countView{Label: g.Label, Count: len(g.Members)})
+	}
+
+	classes := map[string]int{}
+	for _, m := range members {
+		if m.Level > s.CapLevel {
+			s.CapLevel = m.Level
+		}
+		if m.Class != "" {
+			classes[m.Class]++
+		}
+	}
+	for _, m := range members {
+		if m.Level == s.CapLevel {
+			s.AtCap++
+		}
+	}
+
+	for name, n := range classes {
+		s.Classes = append(s.Classes, countView{Label: name, Count: n})
+	}
+	// Commonest first, then alphabetically so equal counts do not shuffle
+	// between page loads -- map iteration order is random, and a list that
+	// reorders itself on refresh looks broken.
+	sort.SliceStable(s.Classes, func(i, j int) bool {
+		if s.Classes[i].Count != s.Classes[j].Count {
+			return s.Classes[i].Count > s.Classes[j].Count
+		}
+		return s.Classes[i].Label < s.Classes[j].Label
+	})
+
+	return s
 }
 
 func realmLabel(m blizzard.GuildMember) string {
