@@ -75,7 +75,7 @@ var battleNetFormActions = []string{"https://*.battle.net"}
 
 // contentSecurityPolicy is assembled once, at package init.
 //
-// Server-rendered HTML with one local stylesheet and no JavaScript, so every
+// Server-rendered HTML, one local stylesheet and one local script, so every
 // other directive can stay as strict as it looks.
 var contentSecurityPolicy = buildContentSecurityPolicy(battleNetFormActions)
 
@@ -100,8 +100,9 @@ func buildContentSecurityPolicy(formActions []string) string {
 func (c *Core) securityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h := w.Header()
-		// Server-rendered HTML with one local stylesheet and no JavaScript, so
-		// the policy can be this strict (constitution Technology Constraints).
+		// Everything the page loads is served from this origin, so the policy
+		// can be this strict (constitution Technology Constraints). What it
+		// allows, and why, is with contentSecurityPolicy above.
 		h.Set("Content-Security-Policy", contentSecurityPolicy)
 		h.Set("X-Content-Type-Options", "nosniff")
 		h.Set("Referrer-Policy", "strict-origin-when-cross-origin")

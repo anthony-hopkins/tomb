@@ -120,22 +120,25 @@ func LoadConfig() (Config, error) {
 	}
 	c.SessionCookieSecure = secure
 
+	// A slice, not a map, so the error lists what is missing in the same order
+	// on every start. Alphabetical, because that is the order a person scans a
+	// list of environment variables in.
+	required := []struct{ name, value string }{
+		{"BNET_CLIENT_ID", c.BnetClientID},
+		{"BNET_CLIENT_SECRET", c.BnetClientSecret},
+		{"BNET_REDIRECT_URL", c.BnetRedirectURL},
+		{"BNET_REGION", c.BnetRegion},
+		{"DATABASE_URL", c.DatabaseURL},
+		{"TOMB_GUILD_NAME", c.GuildName},
+		{"TOMB_GUILD_REALM", c.GuildRealm},
+	}
 	var missing []string
-	for name, value := range map[string]string{
-		"BNET_CLIENT_ID":     c.BnetClientID,
-		"BNET_CLIENT_SECRET": c.BnetClientSecret,
-		"BNET_REDIRECT_URL":  c.BnetRedirectURL,
-		"BNET_REGION":        c.BnetRegion,
-		"TOMB_GUILD_NAME":    c.GuildName,
-		"TOMB_GUILD_REALM":   c.GuildRealm,
-		"DATABASE_URL":       c.DatabaseURL,
-	} {
-		if strings.TrimSpace(value) == "" {
-			missing = append(missing, name)
+	for _, v := range required {
+		if strings.TrimSpace(v.value) == "" {
+			missing = append(missing, v.name)
 		}
 	}
 	if len(missing) > 0 {
-		sortStrings(missing)
 		return Config{}, fmt.Errorf("%w: %s", ErrMissingConfig, strings.Join(missing, ", "))
 	}
 
@@ -154,14 +157,4 @@ func envOr(key, fallback string) string {
 		return v
 	}
 	return fallback
-}
-
-// sortStrings is a tiny insertion sort, used so config error messages list
-// missing variables in a stable order without importing sort for one call.
-func sortStrings(s []string) {
-	for i := 1; i < len(s); i++ {
-		for j := i; j > 0 && s[j] < s[j-1]; j-- {
-			s[j], s[j-1] = s[j-1], s[j]
-		}
-	}
 }

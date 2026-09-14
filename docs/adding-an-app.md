@@ -1,7 +1,7 @@
 # Adding an app
 
 The platform is a thin core plus independently addable apps (constitution
-Principle II). Adding one touches **three files**: your app's own package, and
+Principle II). Adding one touches **two places**: your app's own package, and
 one line in `cmd/tomb/main.go`. You never edit authentication, session handling,
 or another app — and there is a test that fails if you have to
 (`internal/platform/extensibility_test.go`).
@@ -93,7 +93,13 @@ mistake here should never reach a request.
   a.deps.RenderInLayout(w, r, http.StatusOK, "Roster", template.HTML(body.String()))
   ```
 
-- **Navigation.** Built from your `Meta()`. Nothing to register.
+- **Navigation.** Built from your `Meta()`, sorted by label. Nothing to
+  register. An empty `NavLabel` leaves the app out of the navigation without
+  making it unreachable.
+- **Home.** One app may set `Home: true`; that is where `/` sends a signed-in
+  viewer, where sign-in lands, and where the brand link goes. Give that app an
+  empty `NavLabel`, or it is listed beside a link that already goes there.
+  `Mount` refuses two apps claiming it.
 - **`Cache-Control: no-store`,** security headers, and structured request
   logging. All automatic.
 
@@ -117,6 +123,26 @@ business logic):
   the real core with a faked `blizzard.Client`. See
   `internal/apps/dashboard/integration_test.go`; it cannot be an internal test,
   because the core cannot import an app.
+
+## Shared building blocks
+
+`internal/armory` renders one character the way the in-game Armory does:
+portrait, summary, and every equipped item with its tooltip. Both existing apps
+use it, which is why a tooltip fix lands on both pages at once. To render it:
+
+```go
+tmpl, err := template.ParseFS(templateFS, "templates/roster.html")
+// ...
+tmpl, err = tmpl.ParseFS(armory.FS, "templates/armory.html")
+```
+
+then `{{template "armory-panel" .Panel}}` in your page with an `*armory.Panel`,
+built by `armory.Builder`: `Of` when you already hold the `blizzard.Character`,
+`For` when you know only the name and realm and need the profile fetched first.
+
+Parse the partial in the same function your tests use to build the template. A
+test that parses only your page renders a template the app never uses, and goes
+on passing while the real page fails on the missing partial.
 
 ## If you need something the core does not offer
 

@@ -30,7 +30,7 @@ func (s *stubApp) Routes(r Registrar) {
 			s.render(w, req, http.StatusOK, s.meta.NavLabel, template.HTML(s.body))
 			return
 		}
-		w.Write([]byte(s.body))
+		_, _ = w.Write([]byte(s.body))
 	}))
 }
 

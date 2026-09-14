@@ -65,6 +65,15 @@ type GuildMember struct {
 	Class string
 }
 
+// RealmLabel is the realm as a person would write it, falling back to the slug
+// when the roster carried no display name.
+func (m GuildMember) RealmLabel() string {
+	if m.RealmName != "" {
+		return m.RealmName
+	}
+	return m.RealmSlug
+}
+
 // classNames maps Blizzard's playable class ids to names.
 //
 // The roster returns an id and nothing else, and resolving each one properly
@@ -79,16 +88,7 @@ var classNames = map[int]string{
 
 // GuildNameSlug turns a guild's display name into the slug its API path uses.
 func GuildNameSlug(name string) string {
-	var b strings.Builder
-	for _, r := range strings.ToLower(strings.TrimSpace(name)) {
-		switch {
-		case r == ' ':
-			b.WriteByte('-')
-		default:
-			b.WriteRune(r)
-		}
-	}
-	return b.String()
+	return strings.ReplaceAll(strings.ToLower(strings.TrimSpace(name)), " ", "-")
 }
 
 // SortRoster orders a roster the way a guild page should read: by rank, guild
@@ -317,6 +317,31 @@ type Character struct {
 
 	// IsCurrent is set on exactly one character by the selection rule.
 	IsCurrent bool
+}
+
+// RealmLabel is the realm as a person would write it, falling back to the slug
+// when Blizzard sent no display name.
+//
+// Here rather than in each app that shows a realm, because three of them did,
+// and three copies of a two-line fallback is three places for the fallback to
+// differ.
+func (c Character) RealmLabel() string {
+	if c.RealmName != "" {
+		return c.RealmName
+	}
+	return c.RealmSlug
+}
+
+// GuildName is the character's guild, or empty when it has none.
+//
+// Shown on every card because it is the one field that makes the guild gate
+// legible from the outside: a member refused entry can see at a glance which
+// guild each character is actually in.
+func (c Character) GuildName() string {
+	if c.Guild == nil {
+		return ""
+	}
+	return c.Guild.Name
 }
 
 // InGuild reports whether this character belongs to the named guild on the

@@ -38,7 +38,7 @@ func TestUserInfo(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotAuth = r.Header.Get("Authorization")
 		gotPath = r.URL.Path
-		w.Write(fixture(t, "userinfo.json"))
+		_, _ = w.Write(fixture(t, "userinfo.json"))
 	}))
 	defer srv.Close()
 
@@ -66,7 +66,7 @@ func TestUserInfo(t *testing.T) {
 // empty subject would collide across accounts.
 func TestUserInfoRejectsMissingSubject(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(`{"battletag":"NoSub#0000"}`))
+		_, _ = w.Write([]byte(`{"battletag":"NoSub#0000"}`))
 	}))
 	defer srv.Close()
 
@@ -80,7 +80,7 @@ func TestAccountCharacters(t *testing.T) {
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotQuery = r.URL.RawQuery
-		w.Write(fixture(t, "account-profile-summary.json"))
+		_, _ = w.Write(fixture(t, "account-profile-summary.json"))
 	}))
 	defer srv.Close()
 
@@ -144,7 +144,7 @@ func TestCharacterProfile(t *testing.T) {
 			var gotPath string
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				gotPath = r.URL.Path
-				w.Write(fixture(t, tc.fixture))
+				_, _ = w.Write(fixture(t, tc.fixture))
 			}))
 			defer srv.Close()
 
@@ -193,7 +193,7 @@ func TestCharacterProfile(t *testing.T) {
 // would put every character's last login in 1970 and silently break FR-006.
 func TestCharacterProfileParsesMillisecondTimestamp(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write(fixture(t, "character-guilded.json"))
+		_, _ = w.Write(fixture(t, "character-guilded.json"))
 	}))
 	defer srv.Close()
 
@@ -276,7 +276,7 @@ func TestFailureMapping(t *testing.T) {
 					w.Header().Set("Retry-After", tc.retryAfter)
 				}
 				w.WriteHeader(tc.status)
-				w.Write([]byte(tc.body))
+				_, _ = w.Write([]byte(tc.body))
 			}))
 			defer srv.Close()
 

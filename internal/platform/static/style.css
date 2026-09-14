@@ -49,7 +49,7 @@ body {
   /* Hold the footer at the bottom of the page on short pages -- the landing
      page is one screen of content in a tall viewport, and without this the
      footer sat halfway up with the banner showing below it.
-     
+
      A column flex body with a growing main, rather than position: fixed: the
      footer belongs at the end of the PAGE, not stuck to the viewport, so on the
      roster it scrolls away under the cards like an ordinary footer instead of
@@ -62,7 +62,7 @@ body {
 
 /* The banner, held in the centre of the VIEWPORT -- position: fixed, so it
    stays put while the page scrolls -- and kept behind everything.
-   
+
    Its edges are feathered into --bg with a radial mask. Matching the page
    colour to the artwork's edge does most of the blending; the mask removes the
    last visible seam, so the image appears to hover rather than to be pasted on.
@@ -181,7 +181,7 @@ button:hover { border-color: var(--accent); }
 
 /* Roster: a left-hand list of characters with the detail card revealed on
    hover, in the shape of a console side-nav.
-   
+
    Entirely CSS. The site ships no JavaScript and the CSP has no script-src at
    all, so a scripted popover is not an option here -- which is fine, because
    :hover and :focus-within do the whole job. */
@@ -189,7 +189,7 @@ button:hover { border-color: var(--accent); }
 
 /* The dashboard is the one page that wants the whole width: its character list
    is a page-level rail, not part of the reading column.
-   
+
    :has() rather than a class on <main>, because the core owns the layout and an
    app supplies only its own content -- an app cannot put a class on <main>
    without the platform growing an API for it, and one app is not a reason to
@@ -264,7 +264,7 @@ main:has(.dashboard) { max-width: none; }
 .row-meta { color: var(--muted); font-size: 0.85rem; }
 
 /* The card, floated to the right of the row it belongs to.
-   
+
    Hidden with visibility and opacity rather than display:none so it can fade,
    and pointer-events:none so a card that is invisible can never intercept a
    click meant for the row underneath it. visibility is transitioned with a
@@ -302,7 +302,7 @@ main:has(.dashboard) { max-width: none; }
 }
 
 /* A transparent bridge across the gap between row and card.
-   
+
    Without it the pointer leaves the row on its way to the card, the card
    closes, and the link inside is unreachable by mouse -- the classic hover-menu
    failure. The card is a child of the row, so anything over this bridge still
@@ -323,12 +323,12 @@ main:has(.dashboard) { max-width: none; }
 .roster-hint { color: var(--muted); font-size: 0.9rem; margin: 0.25rem 0 0; }
 
 /* Guild roster: the same rail, grouped by rank.
-   
+
    The heading is what makes the order legible -- a roster sorted by rank with
    no headings reads as an arbitrary order to anyone who does not already know
    the ranks. */
 /* The roster is ONE panel with rank sections inside it, not a panel per rank.
-   
+
    Five stacked boxes read as five lists; one box with headings in it reads as
    one roster, which is what it is -- and matches the character rail exactly. */
 .roster-groups {
@@ -516,7 +516,7 @@ main:has(.dashboard) { max-width: none; }
 }
 
 /* The Armory panel: one character, shown the way the Armory shows one.
-   
+
    The image is Blizzard's own render of that character in its current gear,
    served from render.worldofwarcraft.com. No extracted game assets, no WebGL
    and no JavaScript -- the trade being that it is a still, not a model you can
@@ -594,7 +594,7 @@ main:has(.dashboard) { max-width: none; }
 }
 
 /* Item quality, the colours players read gear by.
-   
+
    Six are the game's own values unchanged. Rare and Epic are lightened:
    at #0070dd and #a335ee they land near 3:1 on this background, which is
    below AA and exactly the two qualities most gear is. The hue and
@@ -610,7 +610,7 @@ main:has(.dashboard) { max-width: none; }
 .q-heirloom { color: #00ccff; }
 
 /* Item tooltips.
-   
+
    Opened by CSS alone -- :hover and :focus-within -- so they work with the
    script blocked. tooltip.js only improves WHERE the box lands and lights up
    the other pieces of a set; it adds .tip-open and inline coordinates, which

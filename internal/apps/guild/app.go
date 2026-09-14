@@ -4,8 +4,9 @@
 // am I playing"; this answers "who is TOMB", which is the question a guild site
 // exists for.
 //
-// Only the roster rail is built. The panel beside it is deliberately empty
-// until there is something worth putting in it.
+// The rail lists every member; the panel beside it summarises the guild until a
+// name is clicked, and shows that member's Armory view after. The panel is the
+// same one My Characters renders, from internal/armory.
 package guild
 
 import (
@@ -263,7 +264,7 @@ func (a *App) group(members []blizzard.GuildMember) []rankGroup {
 		g := &groups[len(groups)-1]
 		g.Members = append(g.Members, memberView{
 			Name:  m.Name,
-			Realm: realmLabel(m),
+			Realm: m.RealmLabel(),
 			Level: m.Level,
 			Class: m.Class,
 			Rank:  g.Label,
@@ -295,16 +296,16 @@ func (a *App) summarise(members []blizzard.GuildMember, groups []rankGroup) *sum
 
 	classes := map[string]int{}
 	for _, m := range members {
-		if m.Level > s.CapLevel {
-			s.CapLevel = m.Level
+		switch {
+		case m.Level > s.CapLevel:
+			// A new high water mark: everyone counted so far was below it, so
+			// the count starts again at this one.
+			s.CapLevel, s.AtCap = m.Level, 1
+		case m.Level == s.CapLevel:
+			s.AtCap++
 		}
 		if m.Class != "" {
 			classes[m.Class]++
-		}
-	}
-	for _, m := range members {
-		if m.Level == s.CapLevel {
-			s.AtCap++
 		}
 	}
 
@@ -386,11 +387,4 @@ func (a *App) selectMember(r *http.Request, v *view, members []blizzard.GuildMem
 			}
 		}
 	}
-}
-
-func realmLabel(m blizzard.GuildMember) string {
-	if m.RealmName != "" {
-		return m.RealmName
-	}
-	return m.RealmSlug
 }

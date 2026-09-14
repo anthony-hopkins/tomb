@@ -47,6 +47,14 @@ jobs:
       - name: go vet
         run: go vet ./...
 
+      # The linter set in .golangci.yml, pinned to the same major the Makefile
+      # assumes. Runs after vet so a compile error is reported by the compiler
+      # rather than by a linter's less helpful rendering of it.
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v8
+        with:
+          version: v2.13
+
       # -race catches data races in the bounded character fan-out, which is the
       # one genuinely concurrent piece of this codebase (research.md D9).
       - name: go test

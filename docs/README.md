@@ -21,9 +21,11 @@ What runs on your machine is the merge gate, and nothing that serves:
 ```sh
 make check      # go build, go vet, go test ./..., docker build
 make test       # go test ./...
+make lint       # golangci-lint, the same set CI runs (.golangci.yml)
 ```
 
-All four `make check` steps must pass before merge.
+All four `make check` steps must pass before merge. CI additionally runs gofmt
+and golangci-lint and fails on any finding; `make lint` is the local equivalent.
 
 ## How a change reaches a running site
 
@@ -69,7 +71,8 @@ cmd/tomb/            Composition root: config, database, deps, app list, serve
 internal/platform/   The thin core — routing, sessions, guild gate, layout, health
 internal/auth/       Battle.net OAuth2 and session management
 internal/blizzard/   Blizzard API client (behind one narrow interface)
-internal/apps/       One directory per app: dashboard, comingsoon
+internal/apps/       One directory per app: guild (the home page), dashboard, comingsoon
+internal/armory/     The Armory panel both guild and dashboard render: one character, their render and gear
 deploy/              Production Compose project, Caddyfile, VM startup and deploy scripts
 tofu/                OpenTofu: the VM, network, disks and secrets
 docs/                Adding an app, the deployment pipeline, project art
@@ -96,7 +99,18 @@ for the one character on display. Fetching either per character would double a
 cost that is already re-paid on every view, which is why selecting a different
 character is a fresh request rather than something the page holds in reserve.
 Both degrade independently: losing the render still leaves the gear, losing the
-gear still leaves the character.
+gear still leaves the character. They are fetched in parallel, so the panel
+costs one round trip plus the icon fan-out rather than two.
+
+**The guild page costs one call until somebody clicks.** The roster is a single
+endpoint however large the guild, and the summary beside it is counted from that
+one response. Opening a member adds their profile, render and equipment -- the
+same calls My Characters makes for the character it shows, plus the profile,
+because the roster does not carry a spec or an item level. Only names on the
+roster can be opened: `?c=` is resolved against the list already fetched, never
+passed to Blizzard, so the page cannot be used as a proxy for the character API.
+The roster itself is live on every view; the last successful one is kept only
+as a fallback for when Blizzard is unreachable.
 
 **A session lasts exactly as long as the Blizzard token.** Battle.net issues no
 refresh token and its access tokens last about 24 hours. A longer site session

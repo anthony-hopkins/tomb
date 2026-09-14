@@ -16,6 +16,7 @@ import (
 	"embed"
 	"log/slog"
 	"strings"
+	"sync"
 
 	"golang.org/x/sync/errgroup"
 
@@ -117,19 +118,26 @@ type Builder struct {
 func (b *Builder) Of(ctx context.Context, token string, c blizzard.Character, badge string) *Panel {
 	p := &Panel{
 		Name:             c.Name,
-		RealmName:        realmLabel(&c),
+		RealmName:        c.RealmLabel(),
 		Class:            c.Class,
 		ActiveSpec:       c.ActiveSpec,
 		Level:            c.Level,
 		AverageItemLevel: c.AverageItemLevel,
 		LastLogin:        c.LastLogin.Format("2 Jan 2006, 15:04 MST"),
-		Guild:            guildLabel(&c),
+		Guild:            c.GuildName(),
 		Badge:            badge,
 	}
 
+	// The render and the gear are independent calls to independent endpoints,
+	// so they go out together. Back to back they were the two slowest things
+	// on the page, one after the other; side by side the panel costs one round
+	// trip plus the icon fan-out, not two. Each writes its own field, so there
+	// is nothing to lock.
 	ref := blizzard.CharacterRef{Name: c.Name, RealmSlug: c.RealmSlug}
-	p.Render = b.render(ctx, token, ref)
-	p.Gear = b.gear(ctx, token, ref)
+	var wg sync.WaitGroup
+	wg.Go(func() { p.Render = b.render(ctx, token, ref) })
+	wg.Go(func() { p.Gear = b.gear(ctx, token, ref) })
+	wg.Wait()
 	return p
 }
 
@@ -216,19 +224,29 @@ func (b *Builder) gear(ctx context.Context, token string, ref blizzard.Character
 
 // setKey turns a set's display name into something usable as an HTML id
 // fragment, so the pieces of one set can be grouped without putting the raw
-// name -- which comes from a remote API and contains apostrophes and spaces --
-// into an attribute selector.
+// name -- which comes from a remote API and contains apostrophes, parentheses
+// and spaces -- into an attribute selector.
+//
+// Letters and digits pass through; any run of anything else becomes a single
+// hyphen; the ends are trimmed. Two pieces of one set produce the same key
+// because Blizzard sends the same display string for both, so the mapping only
+// has to be deterministic and selector-safe, not reversible.
 func setKey(display string) string {
 	var b strings.Builder
+	pendingSep := false
 	for _, r := range strings.ToLower(display) {
 		switch {
 		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
+			if pendingSep && b.Len() > 0 {
+				b.WriteByte('-')
+			}
+			pendingSep = false
 			b.WriteRune(r)
-		case r == ' ' && b.Len() > 0:
-			b.WriteByte('-')
+		default:
+			pendingSep = true
 		}
 	}
-	return strings.Trim(b.String(), "-")
+	return b.String()
 }
 
 // resolveIcons fills in each item's icon URL, in parallel and bounded.
@@ -281,20 +299,4 @@ func (b *Builder) resolveIcons(ctx context.Context, token string, items []blizza
 		})
 	}
 	_ = g.Wait()
-}
-
-// guildLabel is the character's guild, or empty when it has none.
-func guildLabel(c *blizzard.Character) string {
-	if c.Guild == nil {
-		return ""
-	}
-	return c.Guild.Name
-}
-
-// realmLabel prefers the display name, falling back to the slug.
-func realmLabel(c *blizzard.Character) string {
-	if c.RealmName != "" {
-		return c.RealmName
-	}
-	return c.RealmSlug
 }
