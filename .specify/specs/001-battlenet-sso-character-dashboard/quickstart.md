@@ -6,6 +6,29 @@ How to bring the stack up and prove the feature works end to end. Every scenario
 maps to a numbered acceptance scenario in `spec.md`. Implementation belongs in
 `tasks.md` — this is the run-and-verify guide.
 
+> [!IMPORTANT]
+> **Partly superseded — the setup half no longer works.**
+>
+> This was written when Principle IV required the whole stack to come up with a
+> single `docker compose up`. Constitution 2.0.0 reversed that: there is no
+> supported local runtime environment, and the root `compose.yaml` and
+> `.env.example` this guide asks for have been deleted. **Prerequisites**,
+> **Environment file** and **Bring it up** below describe a stack you can no
+> longer run, and `http://localhost:8080` answers nothing.
+>
+> **The validation scenarios are still current.** Run them against the develop
+> environment — <https://dev.tombguild.com> — substituting that origin wherever
+> a scenario says `localhost:8080`. They still map to the numbered acceptance
+> scenarios in `spec.md`, and develop exists precisely so they can be run
+> against something that behaves like production: real TLS, a real reverse
+> proxy, and the real Battle.net callback.
+>
+> For current setup and deployment see
+> [docs/deployment.md](../../../docs/deployment.md).
+>
+> Everything below is left unedited, as the record of how this feature was
+> specified and validated at the time.
+
 ---
 
 ## Prerequisites
