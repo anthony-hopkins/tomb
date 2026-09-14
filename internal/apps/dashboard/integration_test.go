@@ -9,6 +9,7 @@ package dashboard_test
 
 import (
 	"context"
+	"html"
 	"io"
 	"log/slog"
 	"net/http"
@@ -150,16 +151,152 @@ func TestShowsMostRecentCharacter(t *testing.T) {
 	}
 
 	body := rec.Body.String()
-	if !strings.Contains(body, "Newest") {
-		t.Error("dashboard does not show the most recently played character (FR-006)")
+
+	// The roster shows every character now, so presence is no longer the
+	// question -- ORDER and the current marking are.
+	if !strings.Contains(body, "Newest") || !strings.Contains(body, "Older") {
+		t.Error("the roster should list every character on the account")
 	}
-	if strings.Contains(body, ">Older<") {
-		t.Error("dashboard shows a stale character as the current one")
+	if strings.Index(body, "Newest") > strings.Index(body, "Older") {
+		t.Error("the most recently played character should lead the roster (FR-006)")
 	}
+
+	// The first ROW must be the current one and must say so. is-current sits on
+	// the row rather than the card so the list still shows which character is
+	// the most recent while every card is closed. Splitting on the row class is
+	// what lets this assert about one row rather than the page as a whole,
+	// where both names appear either way.
+	rows := strings.Split(body, `class="character-row`)
+	if len(rows) < 3 {
+		t.Fatalf("expected two character rows, found %d", len(rows)-1)
+	}
+	if !strings.Contains(rows[1], "Newest") {
+		t.Error("the first row is not the most recently played character")
+	}
+	if !strings.Contains(rows[1], "is-current") {
+		t.Error("the most recently played row is not marked as current")
+	}
+	if strings.Contains(rows[2], "is-current") {
+		t.Error("a stale character is marked as the current one")
+	}
+
+	// Every row must be reachable without a mouse. The card is disclosed by
+	// :hover and :focus-within, and focus-within needs something focusable.
+	for i, row := range rows[1:] {
+		if !strings.Contains(row, "tabindex") {
+			t.Errorf("row %d is not focusable, so its card is keyboard-unreachable", i+1)
+		}
+	}
+
 	for _, want := range []string{"Area 52", "Warrior", "62", "410"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("dashboard is missing required field value %q (FR-007)", want)
 		}
+	}
+}
+
+// TestSpecializationIsItsOwnRow pins the card's label/value alignment.
+//
+// The class and spec used to share one row as "Death Knight (Blood)", which
+// wrapped for long class names and sat on one line for short ones -- so the
+// rows below it lined up differently from character to character. They are two
+// rows now, and the definition list keeps every label in the same column.
+func TestSpecializationIsItsOwnRow(t *testing.T) {
+	fake := &fakeBlizzard{
+		refs: refs("Main"),
+		profileFor: func(ref blizzard.CharacterRef) (blizzard.Character, error) {
+			c := character(ref.Name, time.Now(), 90, 700, "TOMB")
+			c.Class, c.ActiveSpec = "Death Knight", "Blood"
+			return c, nil
+		},
+	}
+
+	body := get(t, stack(t, fake, true), "/app/dashboard").Body.String()
+
+	for _, want := range []string{
+		"<dt>Class</dt>",
+		"<dd>Death Knight</dd>",
+		"<dt>Specialization</dt>",
+		"<dd>Blood</dd>",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the card is missing %q", want)
+		}
+	}
+
+	// The old inline form would still contain both words, so absence of the
+	// parenthetical is the assertion that actually distinguishes them.
+	if strings.Contains(body, "(Blood)") {
+		t.Error("the specialization is still rendered inline with the class")
+	}
+}
+
+// TestCharacterListIsANavigationPane covers the page shape: the roster is a
+// rail beside the content, not a block within it. Asserted through the markup
+// the stylesheet keys off, since CSS itself is not exercised here.
+func TestCharacterListIsANavigationPane(t *testing.T) {
+	fake := &fakeBlizzard{
+		refs: refs("Main"),
+		profileFor: func(ref blizzard.CharacterRef) (blizzard.Character, error) {
+			return character(ref.Name, time.Now(), 80, 600, "TOMB"), nil
+		},
+	}
+
+	body := get(t, stack(t, fake, true), "/app/dashboard").Body.String()
+
+	if !strings.Contains(body, `<aside class="character-nav"`) {
+		t.Error("the character list is not in an aside; main:has(.dashboard) and the " +
+			"rail styling both key off this structure")
+	}
+	if !strings.Contains(body, `class="dashboard`) {
+		t.Error("the dashboard wrapper is missing, so main will stay at its reading width")
+	}
+	// The rail must come before the content in source order, so it is the first
+	// grid column and the first thing a screen reader reaches.
+	if strings.Index(body, "character-nav") > strings.Index(body, "dashboard-main") {
+		t.Error("the rail is rendered after the content; it should lead")
+	}
+}
+
+// TestRoadmapIsListed covers the placeholder section at the foot of the
+// dashboard. It is copy rather than behaviour, but it is copy that makes
+// promises, so a silently empty list is worth catching.
+func TestRoadmapIsListed(t *testing.T) {
+	fake := &fakeBlizzard{
+		refs: refs("Main"),
+		profileFor: func(ref blizzard.CharacterRef) (blizzard.Character, error) {
+			return character(ref.Name, time.Now(), 80, 600, "TOMB"), nil
+		},
+	}
+
+	raw := get(t, stack(t, fake, true), "/app/dashboard").Body.String()
+
+	// Unescaped, so this asserts what a member reads rather than how
+	// html/template chose to encode it -- the apostrophe in "Guildmates'"
+	// arrives as &#39;, which is correct and not what the test is about.
+	body := html.UnescapeString(raw)
+
+	for _, want := range []string{
+		"Guildmates' characters",
+		"Guild calendar",
+		"Ask TOMB Bot",
+		"Combat log analysis",
+		"Gear analysis",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the roadmap is missing %q", want)
+		}
+	}
+
+	// The AI entries are tagged; the other two are not. Getting this backwards
+	// would advertise a calendar as AI-driven, which is a claim rather than a
+	// styling detail.
+	if n := strings.Count(raw, `class="tag-ai"`); n != 3 {
+		t.Errorf("found %d AI tags, want 3 (Ask TOMB Bot, combat log, gear)", n)
+	}
+
+	if !strings.Contains(body, "None of this is built yet") {
+		t.Error("the roadmap does not say it is unbuilt; that is the one thing it must say")
 	}
 }
 
@@ -215,7 +352,9 @@ func TestAnonymousRedirected(t *testing.T) {
 	}
 }
 
-// TestPartialDataNotice is research.md D9's user-visible half.
+// TestPartialDataNotice is research.md D9's user-visible half: a character that
+// Blizzard could not serve right now is worth telling the member about, because
+// it will probably be there next time.
 func TestPartialDataNotice(t *testing.T) {
 	fake := &fakeBlizzard{
 		refs: refs("Good", "Broken"),
@@ -223,8 +362,8 @@ func TestPartialDataNotice(t *testing.T) {
 			if ref.Name == "Broken" {
 				return blizzard.Character{}, &blizzard.APIError{
 					Endpoint:   "character-profile-summary",
-					StatusCode: http.StatusNotFound,
-					Outcome:    blizzard.OutcomeNotFound,
+					StatusCode: http.StatusInternalServerError,
+					Outcome:    blizzard.OutcomeUnavailable,
 				}
 			}
 			return character(ref.Name, time.Now(), 80, 600, "TOMB"), nil
@@ -242,6 +381,46 @@ func TestPartialDataNotice(t *testing.T) {
 	}
 	if !strings.Contains(body, "could not be loaded") {
 		t.Error("the page does not tell the member the data is incomplete")
+	}
+}
+
+// TestGoneCharactersAreIgnoredSilently is the other half of that judgement.
+//
+// Blizzard's account summary keeps listing characters that have been deleted,
+// renamed or transferred off the account, and their profiles answer 404 forever
+// after. Three of them turn up on a real account here. Treating that as
+// "incomplete data" puts a warning on the page on every single visit, for
+// characters that are never coming back -- which is how a notice becomes
+// wallpaper and stops being read when it matters.
+func TestGoneCharactersAreIgnoredSilently(t *testing.T) {
+	fake := &fakeBlizzard{
+		refs: refs("Live", "Deleted"),
+		profileFor: func(ref blizzard.CharacterRef) (blizzard.Character, error) {
+			if ref.Name == "Deleted" {
+				return blizzard.Character{}, &blizzard.APIError{
+					Endpoint:   "character-profile-summary",
+					StatusCode: http.StatusNotFound,
+					Outcome:    blizzard.OutcomeNotFound,
+				}
+			}
+			return character(ref.Name, time.Now(), 80, 600, "TOMB"), nil
+		},
+	}
+
+	rec := get(t, stack(t, fake, true), "/app/dashboard")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app/dashboard = %d, want 200", rec.Code)
+	}
+
+	body := rec.Body.String()
+	if !strings.Contains(body, "Live") {
+		t.Error("the character that does exist is not shown")
+	}
+	if strings.Contains(body, "Deleted") {
+		t.Error("a character Blizzard reports as gone was rendered anyway")
+	}
+	if strings.Contains(body, "could not be loaded") {
+		t.Error("a character that no longer exists produced an incomplete-data notice")
 	}
 }
 

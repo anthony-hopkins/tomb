@@ -1,30 +1,84 @@
 {{define "dashboard.html"}}
-{{if .Partial}}
-<p class="notice" role="status">
-  Some of your characters could not be loaded from Blizzard just now, so this
-  may not be your very latest character.
-</p>
-{{end}}
+{{/* Two columns for the whole page: a character rail on the left, everything
+     else to its right. The rail is a page-level navigation pane rather than
+     part of the reading column, which is why it sits outside .dashboard-main
+     and why the stylesheet widens <main> when this layout is present. */}}
+<div class="dashboard{{if not .Characters}} is-empty{{end}}">
 
-{{with .Character}}
-<section class="character-card">
-  <h1>{{.Name}}</h1>
-  <p class="realm">{{.RealmName}}</p>
-  <dl>
-    <dt>Class</dt>
-    <dd>{{.Class}}{{if .ActiveSpec}} <span class="spec">({{.ActiveSpec}})</span>{{end}}</dd>
-    <dt>Level</dt>
-    <dd>{{.Level}}</dd>
-    <dt>Average item level</dt>
-    <dd>{{.AverageItemLevel}}</dd>
-    <dt>Last played</dt>
-    <dd>{{.LastLogin}}</dd>
-  </dl>
-</section>
-{{else}}
-<section class="panel">
-  <h1>No characters found</h1>
-  <p>Blizzard did not return any World of Warcraft characters for this account.</p>
-</section>
-{{end}}
+  {{if .Characters}}
+  <aside class="character-nav" aria-label="Your characters">
+    <h1 class="roster-heading">My Characters</h1>
+
+    {{/* tabindex on each row is what makes this usable without a mouse: the
+         card is revealed by :hover OR :focus-within, so tabbing through the
+         list opens each card in turn. A hover-only disclosure is unreachable
+         by keyboard and unusable on a touch screen. */}}
+    <ul class="character-list">
+      {{range .Characters}}
+      <li class="character-row{{if .Current}} is-current{{end}}" tabindex="0">
+        <span class="row-name">{{.Name}}</span>
+        <span class="row-meta">{{.Level}} {{.Class}}{{if .Guild}} &middot; &lt;{{.Guild}}&gt;{{end}}</span>
+
+        <div class="character-card popover" role="group" aria-label="{{.Name}} details">
+          {{if .Current}}<p class="badge">Most recently played</p>{{end}}
+          <h2>{{.Name}}</h2>
+          <p class="realm">
+            {{.RealmName}}{{if .Guild}} &middot; &lt;{{.Guild}}&gt;{{end}}
+          </p>
+          <dl>
+            <dt>Class</dt>
+            <dd>{{.Class}}</dd>
+            {{if .ActiveSpec}}
+            <dt>Specialization</dt>
+            <dd>{{.ActiveSpec}}</dd>
+            {{end}}
+            <dt>Level</dt>
+            <dd>{{.Level}}</dd>
+            <dt>Average item level</dt>
+            <dd>{{.AverageItemLevel}}</dd>
+            <dt>Last played</dt>
+            <dd>{{.LastLogin}}</dd>
+          </dl>
+        </div>
+      </li>
+      {{end}}
+    </ul>
+  </aside>
+  {{end}}
+
+  <div class="dashboard-main">
+    {{if .Partial}}
+    <p class="notice" role="status">
+      Some of your characters could not be loaded from Blizzard just now, so
+      this roster may be incomplete.
+    </p>
+    {{end}}
+
+    {{if .Characters}}
+    <p class="roster-hint">Hover a character, or tab to it, for the details.</p>
+    {{else}}
+    <section class="panel">
+      <h1>No characters found</h1>
+      <p>Blizzard did not return any World of Warcraft characters for this account.</p>
+    </section>
+    {{end}}
+
+    {{if .Roadmap}}
+    <section class="panel roadmap">
+      <h2>Coming to TOMB</h2>
+      <p class="fineprint">
+        None of this is built yet — it is what the site is being pointed at.
+      </p>
+      <ul class="roadmap-list">
+        {{range .Roadmap}}
+        <li>
+          <h3>{{.Title}}{{if .AI}} <span class="tag-ai">AI</span>{{end}}</h3>
+          <p>{{.Blurb}}</p>
+        </li>
+        {{end}}
+      </ul>
+    </section>
+    {{end}}
+  </div>
+</div>
 {{end}}

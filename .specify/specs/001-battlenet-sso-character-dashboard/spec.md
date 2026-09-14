@@ -20,12 +20,19 @@ extensible with more in the future."
 
 ## User Scenarios & Testing *(mandatory)*
 
+### Session 2026-09-14
+
+- Q: Should the dashboard show only the most recently played character, or every character on the account? → A: Every character, as a card each, ordered by the FR-006 rule with the most recent first and visibly marked. The 1+N fetch already retrieves them all, so showing one and discarding the rest spent the cost without taking the benefit.
+- Q: Blizzard's account listing keeps returning characters whose profiles it no longer serves — deleted, renamed, or transferred away. How should those be treated? → A: Omitted silently. They are stale listing entries, not failures, and warning about them on every visit trains members to ignore the warning that matters. A character that fails for any other reason still counts as incomplete data.
+- Q: FR-013 configures a guild "name and realm". Which realm is that? → A: The realm the guild was founded on, as Blizzard reports it on each character profile. On a connected-realm cluster that is routinely not the realm the members' characters occupy.
+
 ### Primary User Story
 A TOMB guild member visits the guild website and signs in using their Battle.net
 account instead of creating a separate username/password. After authorizing the
-site with Blizzard, they land on their personal dashboard, which shows the World of
-Warcraft character they most recently played — so they (and, in later apps, their
-guildmates) can see "who they're currently playing" without asking in Discord.
+site with Blizzard, they land on their personal dashboard, which shows their World
+of Warcraft characters, most recently played first — so they (and, in later apps,
+their guildmates) can see "who they're currently playing" without asking in
+Discord.
 
 ### Acceptance Scenarios
 1. **Given** a visitor on the public landing page, **When** they click "Sign in with
@@ -37,8 +44,9 @@ guildmates) can see "who they're currently playing" without asking in Discord.
    on the guild site itself.
 3. **Given** an authenticated user whose account has multiple WoW characters across
    one or more realms, **When** their dashboard loads, **Then** the site displays
-   the single character with the most recent login time, including at minimum:
-   character name, realm, class, level, and average item level.
+   every retrieved character, each including at minimum: character name, realm,
+   class, level, and average item level; the character with the most recent login
+   time appears first and is visibly identified as the most recently played.
 4. **Given** a user who clicks "Log out", **When** the logout completes, **Then**
    their session is terminated and they are returned to the public landing page,
    with no cached character data remaining visible.
@@ -93,15 +101,19 @@ guildmates) can see "who they're currently playing" without asking in Discord.
   account password at any point.
 - **FR-005**: After authentication, the system MUST retrieve the user's list of WoW
   characters via Blizzard's Profile API.
-- **FR-006**: The system MUST identify the user's "most current" character as the
-  character with the most recent last-login timestamp available from Blizzard's
-  API data. When two or more characters share that same most-recent timestamp, the
-  system MUST break the tie deterministically in this order: highest level, then
-  highest average item level, then character name ascending alphabetically. This
-  ordering MUST be total, so the selected character is stable across repeated views
-  of identical data.
-- **FR-007**: The system MUST display the identified character's name, realm,
-  class, level, and average item level on the user's dashboard.
+- **FR-006**: The system MUST rank the user's characters by last-login timestamp,
+  most recent first, and MUST identify the first as the user's "most current"
+  character. When two or more characters share the same timestamp, the system MUST
+  break the tie deterministically in this order: highest level, then highest
+  average item level, then character name ascending alphabetically. This ordering
+  MUST be total, so both the ranking and the selected character are stable across
+  repeated views of identical data. One ordering serves both purposes: the "most
+  current" character is defined as the first of the ranked list, not computed
+  separately from it.
+- **FR-007**: The system MUST display every retrieved character on the user's
+  dashboard, each showing at minimum its name, realm, class, level, and average
+  item level, ordered per FR-006. The most current character MUST appear first and
+  MUST be visibly identified as the most recently played.
 - **FR-008**: The system MUST allow the user to explicitly log out, which MUST
   terminate the session and clear any locally displayed character data.
 - **FR-009**: The system MUST handle authorization denial or cancellation from
@@ -116,8 +128,12 @@ guildmates) can see "who they're currently playing" without asking in Discord.
   next use and prompt the user to re-authenticate rather than displaying stale
   character data.
 - **FR-013**: The system MUST verify TOMB guild membership by checking the
-  authenticated user's characters against the TOMB guild roster retrieved from
-  Blizzard's Profile API, using a configured guild name and realm.
+  authenticated user's characters against a configured guild name and realm, using
+  the guild each character reports in Blizzard's Profile API. The configured realm
+  is the realm the **guild** was founded on, as Blizzard reports it on the
+  character profile — on a connected-realm cluster this is routinely not the realm
+  the member's characters occupy, and configuring the member's realm instead
+  refuses every member indistinguishably from nobody being in the guild.
 - **FR-013a**: The system MUST deny site access to an authenticated user who is not a
   verified TOMB guild member, presenting a message stating the site is for TOMB
   members and a log-out action, and granting access to no app.
@@ -136,15 +152,23 @@ guildmates) can see "who they're currently playing" without asking in Discord.
   request. Because every view re-issues the per-character fetches, rate-limit and
   error responses MUST be handled per FR-010.
 
+- **FR-017**: Where Blizzard's account listing includes a character whose profile
+  it no longer serves — deleted, renamed, or transferred off the account — the
+  system MUST omit that character from the dashboard silently, presenting it
+  neither as an error nor as incomplete data. A character that fails to load for
+  any other reason MUST still be reported per FR-010, because the roster is then
+  genuinely incomplete and likely to be complete on a later view.
+
 ### Key Entities
 - **Guild Member (User)**: A person who has authenticated via Battle.net. Attributes:
   internal identifier, Blizzard account subject identifier, display name, guild
-  membership status (derived from the Blizzard guild roster, never hand-entered),
+  membership status (derived from the guild on the member's own characters, never
+  hand-entered),
   session state, timestamps for first/last login to the site.
 - **Character**: A WoW character belonging to a User's Battle.net account.
   Attributes: name, realm, region (the single configured region), class, active
   specialization (if available), level, average item level, last-played timestamp,
-  "is current character" flag. Per FR-016, Character data is transient — fetched
+  guild (name and realm, absent when unguilded), "is current character" flag. Per FR-016, Character data is transient — fetched
   from Blizzard per dashboard view and not persisted between views.
 - **Session**: Represents an authenticated browser session tied to a User.
   Attributes: token/identifier, issued time, absolute expiry (derived from the

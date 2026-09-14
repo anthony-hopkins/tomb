@@ -1,22 +1,87 @@
 /* Minimal server-rendered styling. No JavaScript, no CSS framework:
    constitution Technology Constraints keep the frontend plain. */
 
+/* Palette sampled from static/banner.jpg rather than eyeballed, so the page and
+   the artwork are literally the same colours:
+
+     --bg       the banner's own averaged edge colour
+     --panel    its dim aurora haze
+     --accent   its brightest mint
+     --accent-2 its brightest blue                                            */
 :root {
-  --bg: #14161a;
-  --panel: #1d2026;
-  --ink: #e8e6e3;
-  --muted: #9aa0a6;
-  --accent: #c8a45c;
-  --line: #2b2f36;
+  --bg: #000307;
+  --panel: #061019;
+  --ink: #e6f7f8;
+  --muted: #7e9bab;
+  --accent: #4af9e7;
+  --accent-2: #369ee8;
+  --line: #103048;
+
+  /* Surfaces are translucent so the banner reads through them. How far these
+     can be opened up is not a matter of taste -- it is bounded by contrast, and
+     the values below are the loosest that keep every pairing above WCAG AA
+     against the BRIGHTEST pixel in the artwork (which is pure white):
+
+       under a panel   body 13.7:1   muted 5.2:1
+       bare on the page  body  5.1:1   (the roster heading is the only such text)
+
+     Muted text is never placed bare over the page -- .tagline and .fineprint
+     live inside panels, .battletag and the footer have their own veil -- which
+     is what allows the panel veil to be this open. Putting muted text directly
+     on the background would break that, at roughly 2:1. */
+  --panel-veil: rgba(6, 16, 25, 0.72);
+  --bar-veil: rgba(0, 3, 7, 0.7);
 }
 
 * { box-sizing: border-box; }
 
+/* The page colour lives on the root, leaving body's own background transparent
+   so the fixed banner layer below can sit behind the content and in front of
+   the page colour. Painting --bg on body instead would bury it. */
+html { background-color: var(--bg); }
+
 body {
   margin: 0;
-  background: var(--bg);
+  background: transparent;
   color: var(--ink);
   font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+
+  /* Hold the footer at the bottom of the page on short pages -- the landing
+     page is one screen of content in a tall viewport, and without this the
+     footer sat halfway up with the banner showing below it.
+     
+     A column flex body with a growing main, rather than position: fixed: the
+     footer belongs at the end of the PAGE, not stuck to the viewport, so on the
+     roster it scrolls away under the cards like an ordinary footer instead of
+     hovering over them. */
+  min-height: 100vh;
+  min-height: 100dvh; /* honours mobile browser chrome; ignored where unsupported */
+  display: flex;
+  flex-direction: column;
+}
+
+/* The banner, held in the centre of the VIEWPORT -- position: fixed, so it
+   stays put while the page scrolls -- and kept behind everything.
+   
+   Its edges are feathered into --bg with a radial mask. Matching the page
+   colour to the artwork's edge does most of the blending; the mask removes the
+   last visible seam, so the image appears to hover rather than to be pasted on.
+   pointer-events: none so it can never swallow a click. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image: url("/static/banner.jpg");
+  background-repeat: no-repeat;
+  background-position: center center;
+  /* Sized to hover in the middle rather than fill: never taller than the
+     viewport, never wider than the page's comfortable measure. */
+  background-size: min(1100px, 92vw) auto;
+  opacity: 0.4;
+  -webkit-mask-image: radial-gradient(ellipse 62% 58% at center, #000 30%, transparent 74%);
+  mask-image: radial-gradient(ellipse 62% 58% at center, #000 30%, transparent 74%);
 }
 
 .site-header {
@@ -26,6 +91,7 @@ body {
   padding: 1rem 1.5rem;
   border-bottom: 1px solid var(--line);
   flex-wrap: wrap;
+  background: var(--bar-veil);
 }
 
 .brand {
@@ -45,7 +111,7 @@ body {
 }
 
 .site-header nav a { color: var(--ink); text-decoration: none; }
-.site-header nav a:hover { color: var(--accent); }
+.site-header nav a:hover { color: var(--accent-2); }
 
 .logout {
   margin-left: auto;
@@ -56,14 +122,24 @@ body {
 
 .battletag { color: var(--muted); font-size: 0.9rem; }
 
-main { max-width: 46rem; margin: 0 auto; padding: 2rem 1.5rem; }
+/* flex: 1 is what pushes the footer down; width still comes from the max-width
+   and the auto margins, which keep working inside a column flex container.
+   min-height: 0 lets it shrink below its content rather than overflowing. */
+main {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  max-width: 46rem;
+  margin: 0 auto;
+  padding: 2rem 1.5rem;
+}
 
 h1 { margin-top: 0; font-size: 1.6rem; }
 
 .tagline { color: var(--muted); }
 
 .hero, .panel, .character-card {
-  background: var(--panel);
+  background: var(--panel-veil);
   border: 1px solid var(--line);
   border-radius: 10px;
   padding: 1.75rem;
@@ -73,7 +149,7 @@ button, .primary-link {
   font: inherit;
   cursor: pointer;
   border: 1px solid var(--line);
-  background: #262a31;
+  background: rgba(16, 48, 72, 0.55);
   color: var(--ink);
   padding: 0.6rem 1rem;
   border-radius: 6px;
@@ -83,38 +159,236 @@ button, .primary-link {
 
 button.primary, .primary-link {
   background: var(--accent);
-  color: #1a1408;
+  color: #002b26;
   border-color: transparent;
   font-weight: 600;
 }
 
+button.primary:hover, .primary-link:hover { background: #6ffcec; }
+
 button:hover { border-color: var(--accent); }
 
 .notice {
-  background: #2a2417;
-  border: 1px solid #4a3f22;
+  background: rgba(54, 158, 232, 0.12);
+  border: 1px solid rgba(54, 158, 232, 0.45);
   border-radius: 6px;
   padding: 0.75rem 1rem;
-  color: #e8dcc0;
+  color: #cfe8fb;
 }
 
 .fineprint { color: var(--muted); font-size: 0.85rem; }
 .fineprint a { color: var(--accent); }
 
-.character-card .realm { color: var(--muted); margin-top: -0.5rem; }
-.character-card .spec { color: var(--muted); }
+/* Roster: a left-hand list of characters with the detail card revealed on
+   hover, in the shape of a console side-nav.
+   
+   Entirely CSS. The site ships no JavaScript and the CSP has no script-src at
+   all, so a scripted popover is not an option here -- which is fine, because
+   :hover and :focus-within do the whole job. */
+.roster-heading { margin: 0 0 1rem; font-size: 1.5rem; }
+
+/* The dashboard is the one page that wants the whole width: its character list
+   is a page-level rail, not part of the reading column.
+   
+   :has() rather than a class on <main>, because the core owns the layout and an
+   app supplies only its own content -- an app cannot put a class on <main>
+   without the platform growing an API for it, and one app is not a reason to
+   grow one (Principle II, Principle VII). Where :has() is unsupported the page
+   simply keeps the centred column it had before, which is a working layout
+   rather than a broken one. */
+main:has(.dashboard) { max-width: none; }
+
+.dashboard {
+  display: grid;
+  grid-template-columns: minmax(13rem, 17rem) minmax(0, 1fr);
+  gap: 2rem;
+  align-items: start;
+}
+
+/* No characters, no rail, no empty first column. */
+.dashboard.is-empty { grid-template-columns: minmax(0, 1fr); }
+
+/* Everything that is prose stays at a readable measure even though main no
+   longer constrains it. */
+.dashboard-main { max-width: 46rem; }
+
+/* Sticky, so the roster stays to hand while the roadmap scrolls past it --
+   which is the whole point of a navigation pane. */
+.character-nav { position: sticky; top: 1.5rem; }
+
+.character-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  background: var(--panel-veil);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  /* The popover has to escape this box; never set overflow here. */
+}
+
+.character-row {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding: 0.7rem 0.9rem;
+  border-left: 3px solid transparent;
+  cursor: default;
+}
+
+.character-row + .character-row { border-top: 1px solid var(--line); }
+.character-row:first-child { border-radius: 9px 9px 0 0; }
+.character-row:last-child { border-radius: 0 0 9px 9px; }
+
+/* is-current is on the row so the roster still says which character is the
+   most recently played without needing the card open. */
+.character-row.is-current { border-left-color: var(--accent-2); }
+
+.character-row:hover,
+.character-row:focus,
+.character-row:focus-within {
+  background: rgba(54, 158, 232, 0.12);
+  border-left-color: var(--accent);
+  outline: none;
+}
+
+.row-name { font-weight: 600; }
+.row-meta { color: var(--muted); font-size: 0.85rem; }
+
+/* The card, floated to the right of the row it belongs to.
+   
+   Hidden with visibility and opacity rather than display:none so it can fade,
+   and pointer-events:none so a card that is invisible can never intercept a
+   click meant for the row underneath it. visibility is transitioned with a
+   delay on the way out only, which is what stops it being focusable while
+   invisible. */
+.character-card.popover {
+  position: absolute;
+  top: -1px;
+  left: calc(100% + 1.5rem);
+  z-index: 5;
+  width: 22rem;
+  max-width: min(22rem, 70vw);
+  /* More opaque than a normal panel: this one overlays other content, so the
+     artwork behind it must not compete with the text on it. */
+  background: rgba(6, 16, 25, 0.94);
+  box-shadow: 0 18px 40px -16px #000;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateX(-0.4rem);
+  pointer-events: none;
+  transition: opacity 120ms ease, transform 120ms ease, visibility 0s linear 120ms;
+}
+
+.character-row:hover .popover,
+.character-row:focus .popover,
+.character-row:focus-within .popover {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(0);
+  transition-delay: 0s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .character-card.popover { transition: none; transform: none; }
+}
+
+.roster-hint { color: var(--muted); font-size: 0.9rem; margin: 0.25rem 0 0; }
+
+/* Narrow screens have no room beside the list, and no hover either. The card
+   drops inline beneath its row and opens on tap, which focus-within gives us
+   for free. display, not opacity, so a closed card takes up no space. */
+@media (max-width: 48rem) {
+  .dashboard { grid-template-columns: 1fr; }
+  .character-nav { position: static; }
+  .roster-hint { display: none; }
+
+  .character-card.popover {
+    position: static;
+    display: none;
+    width: auto;
+    max-width: none;
+    margin-top: 0.6rem;
+    opacity: 1;
+    visibility: visible;
+    transform: none;
+    box-shadow: none;
+  }
+
+  .character-row:hover .popover,
+  .character-row:focus .popover,
+  .character-row:focus-within .popover { display: block; }
+}
+
+.character-card.is-current {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px rgba(74, 249, 231, 0.18), 0 0 28px -12px var(--accent);
+}
+
+.character-card .badge {
+  margin: 0 0 0.5rem;
+  color: var(--accent);
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.character-card h2 { margin: 0; font-size: 1.25rem; }
+
+.character-card .realm { color: var(--muted); margin-top: 0.25rem; }
 
 .character-card dl {
   display: grid;
   grid-template-columns: max-content 1fr;
   gap: 0.4rem 1.5rem;
-  margin: 1.25rem 0 0;
+  margin: 1rem 0 0;
 }
 
 .character-card dt { color: var(--muted); }
 .character-card dd { margin: 0; font-variant-numeric: tabular-nums; }
 
+/* Roadmap: placeholder copy for things that do not exist yet. Styled plainly
+   on purpose -- it should read as a list of intentions, not as navigation
+   somebody will try to click. */
+.roadmap { margin-top: 2rem; }
+.roadmap h2 { margin-top: 0; font-size: 1.3rem; }
+
+.roadmap-list {
+  list-style: none;
+  margin: 1.25rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 1.1rem;
+}
+
+.roadmap-list li {
+  border-left: 2px solid var(--line);
+  padding-left: 1rem;
+}
+
+.roadmap-list h3 {
+  margin: 0 0 0.2rem;
+  font-size: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.roadmap-list p { margin: 0; color: var(--muted); }
+
+.tag-ai {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #002b26;
+  background: var(--accent);
+  border-radius: 999px;
+  padding: 0.1rem 0.5rem;
+}
+
 .site-footer {
+  background: var(--bar-veil);
   border-top: 1px solid var(--line);
   padding: 1.25rem 1.5rem;
   color: var(--muted);
