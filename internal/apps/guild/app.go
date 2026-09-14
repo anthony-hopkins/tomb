@@ -57,11 +57,23 @@ func (a *App) Routes(r platform.Registrar) {
 }
 
 // memberView is one character on the roster.
+//
+// Everything here comes from the roster endpoint. There is deliberately no item
+// level, specialisation or last-played time: those live on the per-character
+// profile, which would be one call per member on every view -- a hundred calls
+// for a hundred-member guild, re-paid each time somebody opens the page. The
+// card shows what a roster knows.
 type memberView struct {
 	Name  string
 	Realm string
 	Level int
 	Class string
+
+	// Rank is the label of the rank this character holds, repeated onto the
+	// member so the card can name it. The heading above the group says it too,
+	// but a card that opens over other groups should not make you look up to
+	// find out which rank it belongs to.
+	Rank string
 }
 
 // rankGroup is one rank and everybody holding it.
@@ -157,6 +169,7 @@ func (a *App) group(members []blizzard.GuildMember) []rankGroup {
 			Realm: realmLabel(m),
 			Level: m.Level,
 			Class: m.Class,
+			Rank:  g.Label,
 		})
 	}
 	return groups
