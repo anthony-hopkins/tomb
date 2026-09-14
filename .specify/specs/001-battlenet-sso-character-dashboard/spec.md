@@ -121,6 +121,14 @@ Discord.
   dashboard, each showing at minimum its name, realm, class, level, and average
   item level, ordered per FR-006. The most current character MUST appear first and
   MUST be visibly identified as the most recently played.
+
+  Each character MUST also show its season standing where it has one: its
+  in-game Mythic+ rating, and its progress in each of the current expansion's
+  raids per difficulty ("8/8 H · 3/8 M"). These come from two further Blizzard
+  endpoints per character, fetched live with the same bounds as FR-016's
+  fan-out. A character with no rating or no raid kills shows no such row rather
+  than a zero. The rating is Blizzard's own; it is not a Raider.IO score, which
+  is a third party's number.
 - **FR-008**: The system MUST allow the user to explicitly log out, which MUST
   terminate the session and clear any locally displayed character data.
 - **FR-009**: The system MUST handle authorization denial or cancellation from
@@ -161,9 +169,10 @@ Discord.
 
 - **FR-018**: The guild page MUST show each roster member the same card My
   Characters shows for one of the viewer's own characters: realm and guild,
-  class, specialisation, level, average item level and last played. The roster
-  endpoint carries only the first four of those; the rest are on each member's
-  profile, one call per member.
+  class, specialisation, level, average item level, last played, Mythic+ rating
+  and raid progress. The roster endpoint carries only the first four of those;
+  the rest are on each member's profile and two further endpoints, three calls
+  per member.
 
   The system MUST therefore take the roster and every member's profile summary
   together as one snapshot, keep it, and refresh it in the background once it
@@ -202,7 +211,9 @@ Discord.
 - **Character**: A WoW character belonging to a User's Battle.net account.
   Attributes: name, realm, region (the single configured region), class, active
   specialization (if available), level, average item level, last-played timestamp,
-  guild (name and realm, absent when unguilded), "is current character" flag. Per FR-016, Character data is transient — fetched
+  guild (name and realm, absent when unguilded), "is current character" flag,
+  Mythic+ rating (zero when unrated), raid progress per current raid and
+  difficulty. Per FR-016, Character data is transient — fetched
   from Blizzard per dashboard view and not persisted between views.
 - **Session**: Represents an authenticated browser session tied to a User.
   Attributes: token/identifier, issued time, absolute expiry (derived from the

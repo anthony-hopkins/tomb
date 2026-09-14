@@ -14,6 +14,8 @@ import (
 	"net/http"
 	"strings"
 
+	"golang.org/x/sync/errgroup"
+
 	"github.com/anthony-hopkins/tomb/internal/armory"
 	"github.com/anthony-hopkins/tomb/internal/blizzard"
 	"github.com/anthony-hopkins/tomb/internal/platform"
@@ -21,6 +23,10 @@ import (
 
 //go:embed templates/dashboard.html
 var templateFS embed.FS
+
+// maxConcurrentProgressFetches bounds the per-character standing fan-out, on
+// the same reasoning as the platform's character fan-out.
+const maxConcurrentProgressFetches = 8
 
 // App is the Character Dashboard.
 type App struct {
@@ -92,6 +98,11 @@ type characterView struct {
 	LastLogin        string
 	Guild            string
 
+	// MythicPlusRating and Raids are this season's standing. Zero and empty
+	// when the character has none; the card leaves those rows out.
+	MythicPlusRating int
+	Raids            []blizzard.RaidProgress
+
 	// Key identifies this character in a URL, so its name can link to its own
 	// Armory panel. Raw, not escaped: html/template knows it lands in a URL
 	// query and escapes it correctly there.
@@ -135,9 +146,10 @@ func selectIndex(ranked []blizzard.Character, key string) int {
 
 // show renders the member's roster, most recently played first (FR-006, FR-007).
 //
-// The characters were fetched once by the core for this request, so this
-// handler makes no Blizzard calls of its own — a view still costs exactly one
-// 1+N fetch (FR-016), whether it renders one card or twenty.
+// The characters were fetched once by the core for this request. What this
+// handler adds is each character's season standing -- Mythic+ rating and raid
+// progress, two endpoints the profile does not carry -- so a view costs the
+// core's 1+N plus 2N here, all bounded, all live (FR-016).
 func (a *App) show(w http.ResponseWriter, r *http.Request) {
 	profile, ok := platform.ProfileFrom(r.Context())
 	if !ok {
@@ -157,9 +169,11 @@ func (a *App) show(w http.ResponseWriter, r *http.Request) {
 		chosen = selectIndex(ranked, r.URL.Query().Get("c"))
 	}
 
+	standing := a.progress(r, ranked)
 	for i, c := range ranked {
 		cv := newCharacterView(c)
 		cv.Selected = i == chosen
+		cv.MythicPlusRating, cv.Raids = standing[i].MythicPlusRating, standing[i].Raids
 		v.Characters = append(v.Characters, cv)
 	}
 
@@ -191,6 +205,31 @@ func newCharacterView(c blizzard.Character) characterView {
 		Current:          c.IsCurrent,
 		Key:              characterKey(c),
 	}
+}
+
+// progress fetches every character's season standing, bounded and in
+// parallel, aligned with chars by index. A character whose calls fail gets a
+// zero Progress and a card without those rows; the roster is never the
+// casualty of a missing rating.
+func (a *App) progress(r *http.Request, chars []blizzard.Character) []blizzard.Progress {
+	out := make([]blizzard.Progress, len(chars))
+	session, ok := platform.SessionFrom(r.Context())
+	if !ok {
+		return out
+	}
+
+	b := &armory.Builder{Client: a.deps.Blizzard, Logger: a.deps.Logger}
+	g, gctx := errgroup.WithContext(r.Context())
+	g.SetLimit(maxConcurrentProgressFetches)
+	for i, c := range chars {
+		g.Go(func() error {
+			out[i] = b.Progress(gctx, session.AccessToken,
+				blizzard.CharacterRef{Name: c.Name, RealmSlug: c.RealmSlug})
+			return nil
+		})
+	}
+	_ = g.Wait()
+	return out
 }
 
 // panel builds the Armory panel for the selected character.

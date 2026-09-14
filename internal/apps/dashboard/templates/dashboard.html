@@ -38,6 +38,17 @@
             <dd>{{.AverageItemLevel}}</dd>
             <dt>Last played</dt>
             <dd>{{.LastLogin}}</dd>
+            {{/* This season's standing: the in-game Mythic+ rating, and each
+                 current raid as "8/8 H · 3/8 M". Rows appear only when there
+                 is something to say. */}}
+            {{if .MythicPlusRating}}
+            <dt>Mythic+ rating</dt>
+            <dd>{{.MythicPlusRating}}</dd>
+            {{end}}
+            {{range .Raids}}
+            <dt>{{.Name}}</dt>
+            <dd>{{.Summary}}</dd>
+            {{end}}
           </dl>
         </div>
       </li>

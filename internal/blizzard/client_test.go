@@ -319,3 +319,103 @@ func TestTransportFailureIsRetryable(t *testing.T) {
 		t.Errorf("OutcomeOf() = %v, want %v", got, OutcomeUnavailable)
 	}
 }
+
+// --- Season standing --------------------------------------------------------
+
+// TestMythicPlusRatingIsRounded: the API carries decimals, the game shows a
+// whole number, and the card shows what the game shows.
+func TestMythicPlusRatingIsRounded(t *testing.T) {
+	var gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		_, _ = w.Write([]byte(`{"current_mythic_rating":{"rating":2431.62,"color":{"r":255,"g":128,"b":0,"a":1}}}`))
+	}))
+	defer srv.Close()
+
+	got, err := newTestClient(srv).MythicPlusRating(context.Background(), "t",
+		CharacterRef{Name: "Nekromoo", RealmSlug: "Area-52"})
+	if err != nil {
+		t.Fatalf("MythicPlusRating: %v", err)
+	}
+	if got != 2432 {
+		t.Errorf("rating = %d, want 2432 (rounded)", got)
+	}
+	if gotPath != "/profile/wow/character/area-52/nekromoo/mythic-keystone-profile" {
+		t.Errorf("path = %q; realm and name must be lowercased", gotPath)
+	}
+}
+
+// TestUnratedCharacterIsZeroNotAnError: Blizzard answers 404 for a character
+// who has never run a key. That is a fact about the character, not a failure,
+// and it must not cost the card its other rows.
+func TestUnratedCharacterIsZeroNotAnError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	got, err := newTestClient(srv).MythicPlusRating(context.Background(), "t",
+		CharacterRef{Name: "fresh", RealmSlug: "area-52"})
+	if err != nil {
+		t.Fatalf("a 404 surfaced as an error: %v", err)
+	}
+	if got != 0 {
+		t.Errorf("rating = %d, want 0", got)
+	}
+}
+
+// TestRaidProgressionReadsTheCurrentExpansion holds the parse to what the card
+// needs: the newest expansion only, each raid with any kills, difficulties
+// easiest first, nothing killed omitted.
+func TestRaidProgressionReadsTheCurrentExpansion(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasSuffix(r.URL.Path, "/encounters/raids") {
+			t.Errorf("path = %q, want .../encounters/raids", r.URL.Path)
+		}
+		_, _ = w.Write([]byte(`{"expansions":[
+		  {"expansion":{"id":503,"name":"Dragonflight"},"instances":[
+		    {"instance":{"name":"Amirdrassil"},"modes":[
+		      {"difficulty":{"type":"HEROIC"},"progress":{"completed_count":9,"total_count":9}}]}]},
+		  {"expansion":{"id":505,"name":"The War Within"},"instances":[
+		    {"instance":{"name":"Liberation of Undermine"},"modes":[
+		      {"difficulty":{"type":"MYTHIC"},"progress":{"completed_count":3,"total_count":8}},
+		      {"difficulty":{"type":"LFR"},"progress":{"completed_count":0,"total_count":8}},
+		      {"difficulty":{"type":"HEROIC"},"progress":{"completed_count":8,"total_count":8}},
+		      {"difficulty":{"type":"NORMAL"},"progress":{"completed_count":8,"total_count":8}}]},
+		    {"instance":{"name":"Untouched Raid"},"modes":[
+		      {"difficulty":{"type":"NORMAL"},"progress":{"completed_count":0,"total_count":8}}]}]}
+		]}`))
+	}))
+	defer srv.Close()
+
+	got, err := newTestClient(srv).RaidProgression(context.Background(), "t",
+		CharacterRef{Name: "nekromoo", RealmSlug: "area-52"})
+	if err != nil {
+		t.Fatalf("RaidProgression: %v", err)
+	}
+
+	if len(got) != 1 {
+		t.Fatalf("got %d raids, want 1: the older expansion and the untouched raid are left out (%+v)", len(got), got)
+	}
+	if got[0].Name != "Liberation of Undermine" {
+		t.Errorf("raid = %q, want Liberation of Undermine", got[0].Name)
+	}
+	if s := got[0].Summary(); s != "8/8 N · 8/8 H · 3/8 M" {
+		t.Errorf("Summary() = %q, want easiest first with LFR (no kills) omitted", s)
+	}
+}
+
+// TestNeverRaidedIsEmptyNotAnError mirrors the unrated case: a 404 from the
+// encounters endpoint is a character with no raid history.
+func TestNeverRaidedIsEmptyNotAnError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	got, err := newTestClient(srv).RaidProgression(context.Background(), "t",
+		CharacterRef{Name: "fresh", RealmSlug: "area-52"})
+	if err != nil || got != nil {
+		t.Errorf("RaidProgression = (%v, %v), want (nil, nil)", got, err)
+	}
+}

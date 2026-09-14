@@ -65,6 +65,12 @@ type Panel struct {
 	// because it is the one thing that genuinely differs between the two pages.
 	Badge string
 
+	// MythicPlusRating and Raids are this season's standing, from two
+	// endpoints the profile does not cover. Zero and empty when the character
+	// has none, which the template reads as "leave the row out".
+	MythicPlusRating int
+	Raids            []blizzard.RaidProgress
+
 	// Render is Blizzard's own image of this character in its current gear, or
 	// empty when there is none. Empty is normal, not an error: a character
 	// Blizzard has never rendered simply has no assets.
@@ -136,15 +142,51 @@ func (b *Builder) Of(ctx context.Context, token string, c blizzard.Character, ba
 		Badge:            badge,
 	}
 
-	// The render and the gear are independent calls to independent endpoints,
-	// so they go out together. Back to back they were the two slowest things
-	// on the page, one after the other; side by side the panel costs one round
-	// trip plus the icon fan-out, not two. Each writes its own field, so there
-	// is nothing to lock.
+	// The render, the gear and the season's standing are independent calls to
+	// independent endpoints, so they go out together: the panel costs one
+	// round trip plus the icon fan-out, not four. Each writes its own fields,
+	// so there is nothing to lock.
 	ref := blizzard.CharacterRef{Name: c.Name, RealmSlug: c.RealmSlug}
 	var wg sync.WaitGroup
 	wg.Go(func() { p.Render = b.render(ctx, token, ref) })
 	wg.Go(func() { p.Gear = b.gear(ctx, token, ref) })
+	wg.Go(func() {
+		pr := b.Progress(ctx, token, ref)
+		p.MythicPlusRating, p.Raids = pr.MythicPlusRating, pr.Raids
+	})
+	wg.Wait()
+	return p
+}
+
+// Progress fetches where a character stands this season: their Mythic+ rating
+// and their raid progress, two endpoints, in parallel.
+//
+// Shared by every card on the site rather than only the panel, because the
+// question "how far along is this character" is one people ask of a roster,
+// not only of the one they have opened. Either call failing leaves its half
+// empty and the card omits that row; logged at debug because on a roster of
+// two hundred a warning each would be a page of them.
+func (b *Builder) Progress(ctx context.Context, token string, ref blizzard.CharacterRef) blizzard.Progress {
+	var p blizzard.Progress
+	var wg sync.WaitGroup
+	wg.Go(func() {
+		rating, err := b.Client.MythicPlusRating(ctx, token, ref)
+		if err != nil {
+			b.Logger.Debug("mythic+ rating unavailable",
+				"realm", ref.RealmSlug, "outcome", blizzard.OutcomeOf(err).String())
+			return
+		}
+		p.MythicPlusRating = rating
+	})
+	wg.Go(func() {
+		raids, err := b.Client.RaidProgression(ctx, token, ref)
+		if err != nil {
+			b.Logger.Debug("raid progression unavailable",
+				"realm", ref.RealmSlug, "outcome", blizzard.OutcomeOf(err).String())
+			return
+		}
+		p.Raids = raids
+	})
 	wg.Wait()
 	return p
 }

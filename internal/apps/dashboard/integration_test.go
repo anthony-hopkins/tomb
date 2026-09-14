@@ -39,6 +39,25 @@ type fakeBlizzard struct {
 	refs       []blizzard.CharacterRef
 	profileFor func(ref blizzard.CharacterRef) (blizzard.Character, error)
 	calls      atomic.Int32
+
+	// ratingFor and raidsFor drive the season-standing lookups; nil means
+	// "none", which is what an unrated or unraided character returns.
+	ratingFor func(ref blizzard.CharacterRef) (int, error)
+	raidsFor  func(ref blizzard.CharacterRef) ([]blizzard.RaidProgress, error)
+}
+
+func (f *fakeBlizzard) MythicPlusRating(_ context.Context, _ string, ref blizzard.CharacterRef) (int, error) {
+	if f.ratingFor == nil {
+		return 0, nil
+	}
+	return f.ratingFor(ref)
+}
+
+func (f *fakeBlizzard) RaidProgression(_ context.Context, _ string, ref blizzard.CharacterRef) ([]blizzard.RaidProgress, error) {
+	if f.raidsFor == nil {
+		return nil, nil
+	}
+	return f.raidsFor(ref)
 }
 
 func (f *fakeBlizzard) UserInfo(context.Context, string) (blizzard.Identity, error) {
@@ -918,5 +937,50 @@ func TestDashboardRequiresGuild(t *testing.T) {
 	}
 	if meta.RoutePrefix != "/app/"+meta.Slug {
 		t.Errorf("RoutePrefix = %q, want /app/%s", meta.RoutePrefix, meta.Slug)
+	}
+}
+
+// TestDashboardCardsShowSeasonStanding: the dashboard fetches each character's
+// rating and raid progress itself -- the core's fan-out does not -- and the
+// card shows them, omitting the rows for a character with none.
+func TestDashboardCardsShowSeasonStanding(t *testing.T) {
+	when := time.Date(2026, 9, 14, 7, 5, 0, 0, time.UTC)
+	fake := &fakeBlizzard{
+		refs: refs("Nekromoo", "Fresh"),
+		profileFor: func(ref blizzard.CharacterRef) (blizzard.Character, error) {
+			// Nekromoo played last, so the panel is Nekromoo's: FR-006 would
+			// otherwise break the tie alphabetically and select Fresh.
+			played := when
+			if ref.Name == "Nekromoo" {
+				played = when.Add(time.Hour)
+			}
+			return character(ref.Name, played, 90, 311, "TOMB"), nil
+		},
+		ratingFor: func(ref blizzard.CharacterRef) (int, error) {
+			if ref.Name == "Nekromoo" {
+				return 2431, nil
+			}
+			return 0, nil
+		},
+		raidsFor: func(ref blizzard.CharacterRef) ([]blizzard.RaidProgress, error) {
+			if ref.Name != "Nekromoo" {
+				return nil, nil
+			}
+			return []blizzard.RaidProgress{{Name: "Liberation of Undermine",
+				Modes: []blizzard.RaidMode{{Difficulty: "MYTHIC", Completed: 3, Total: 8}}}}, nil
+		},
+	}
+
+	body := html.UnescapeString(get(t, stack(t, fake, true), "/app/dashboard").Body.String())
+
+	for _, want := range []string{"Mythic+ rating", "2431", "Liberation of Undermine", "3/8 M"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the dashboard is missing %q", want)
+		}
+	}
+	// Nekromoo's card and the Armory panel both show the rating; Fresh's card
+	// must not show a zero. So: exactly two rating rows.
+	if n := strings.Count(body, "Mythic+ rating"); n != 2 {
+		t.Errorf("found %d rating rows, want 2 (card + panel); an unrated character must not get a zero", n)
 	}
 }
