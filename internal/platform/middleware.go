@@ -3,6 +3,7 @@ package platform
 import (
 	"errors"
 	"net/http"
+	"net/url"
 	"strconv"
 	"time"
 
@@ -47,14 +48,51 @@ func (s *statusRecorder) Write(b []byte) (int, error) {
 	return s.ResponseWriter.Write(b)
 }
 
+// contentSecurityPolicy is assembled once, at package init.
+//
+// form-action has to name Battle.net explicitly, and the reason is not obvious.
+// The sign-in control is a form posting to /auth/login, which answers 302 to the
+// Battle.net authorize URL. Browsers check form-action against the REDIRECT
+// TARGET of a form submission, not only against the initial action, so
+// `form-action 'self'` alone lets the POST through and then silently refuses to
+// follow the redirect.
+//
+// The symptom is the worst kind: clicking "Sign in with Battle.net" does
+// nothing at all. No error page, no failed request -- the network tab shows the
+// POST succeeding with a 302, and the browser simply declines to navigate. The
+// only trace is a console violation. Sign-in is the entire front door of this
+// site (FR-001), and it was shut by a header.
+//
+// The permitted origin is derived from auth.BattleNetEndpoint rather than
+// written out again, so the policy cannot drift from the endpoint it exists to
+// permit.
+var contentSecurityPolicy = buildContentSecurityPolicy(auth.BattleNetEndpoint.AuthURL)
+
+// buildContentSecurityPolicy returns the policy, permitting form submissions to
+// resolve at authURL's origin. A malformed authURL contributes no origin rather
+// than a broken directive: failing closed here costs sign-in, which is visible,
+// whereas emitting a malformed policy could silently weaken every other rule.
+func buildContentSecurityPolicy(authURL string) string {
+	formAction := "'self'"
+	if u, err := url.Parse(authURL); err == nil && u.Scheme != "" && u.Host != "" {
+		formAction += " " + u.Scheme + "://" + u.Host
+	}
+
+	return "default-src 'none'; " +
+		"style-src 'self'; " +
+		"img-src 'self' https://render.worldofwarcraft.com; " +
+		"form-action " + formAction + "; " +
+		"base-uri 'none'; " +
+		"frame-ancestors 'none'"
+}
+
 // securityHeaders applies baseline hardening to every response.
 func (c *Core) securityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h := w.Header()
 		// Server-rendered HTML with one local stylesheet and no JavaScript, so
 		// the policy can be this strict (constitution Technology Constraints).
-		h.Set("Content-Security-Policy",
-			"default-src 'none'; style-src 'self'; img-src 'self' https://render.worldofwarcraft.com; form-action 'self'; base-uri 'none'; frame-ancestors 'none'")
+		h.Set("Content-Security-Policy", contentSecurityPolicy)
 		h.Set("X-Content-Type-Options", "nosniff")
 		h.Set("Referrer-Policy", "strict-origin-when-cross-origin")
 		h.Set("X-Frame-Options", "DENY")
