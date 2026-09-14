@@ -133,8 +133,11 @@ func TestUnavailableRosterSaysSo(t *testing.T) {
 	}
 }
 
-// TestMetaIsTheHome pins the registration contract. Being first in cmd/tomb is
-// what makes this the landing page, and the core sends "/" to the first app.
+// TestMetaIsTheHome pins the registration contract: this app is what the TOMB
+// brand link leads to, and it is deliberately absent from the navigation.
+//
+// Absent because it would otherwise be the same destination listed twice, right
+// next to itself.
 func TestMetaIsTheHome(t *testing.T) {
 	meta := (&App{}).Meta()
 
@@ -144,7 +147,10 @@ func TestMetaIsTheHome(t *testing.T) {
 	if !meta.RequiresGuild {
 		t.Error("RequiresGuild is false; a guild roster is guild business")
 	}
-	if meta.NavLabel == "" {
-		t.Error("no NavLabel, so the page would be unreachable from the nav")
+	if !meta.Home {
+		t.Error("Home is false, so signing in would not land here")
+	}
+	if meta.NavLabel != "" {
+		t.Errorf("NavLabel = %q, want empty: the brand link already goes here", meta.NavLabel)
 	}
 }

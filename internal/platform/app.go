@@ -29,7 +29,18 @@ type App interface {
 type AppMeta struct {
 	// Slug is a URL-safe id, unique across apps, e.g. "dashboard".
 	Slug string
-	// NavLabel is the human label shown in navigation, e.g. "My Character".
+	// Home marks the app a signed-in viewer lands on from "/".
+	//
+	// At most one app may set it; Mount refuses two. An app that is Home is
+	// usually reached by the site's brand link rather than a nav entry, which
+	// is why Home and an empty NavLabel go together.
+	Home bool
+
+	// NavLabel is the human label shown in navigation, e.g. "My Characters".
+	//
+	// Empty leaves the app out of the navigation entirely. That is not the same
+	// as unreachable: a Home app is reached through the brand link, and an app
+	// could be linked from another page. It only means "do not list me".
 	NavLabel string
 	// RoutePrefix must equal "/app/" + Slug. Mount rejects anything else.
 	RoutePrefix string
