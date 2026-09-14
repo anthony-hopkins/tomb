@@ -1,7 +1,12 @@
 {{define "guild.html"}}
 {{/* The same two-column shape as My Characters -- roster rail on the left,
-     panel on the right -- so the two pages read as one site. The panel is
-     deliberately empty for now. */}}
+     panel on the right -- so the two pages read as one site.
+
+     The rail behaves identically to the one on My Characters, down to the
+     link: clicking a name is a plain GET to ?c=<realm>/<name>, so it is
+     bookmarkable, works without JavaScript, and the back button does what it
+     should. The panel shows the guild summary until a name is clicked, and
+     that member's Armory view after. */}}
 <div class="dashboard{{if not .Groups}} is-empty{{end}}">
 
   {{if .Groups}}
@@ -25,10 +30,9 @@
       <ul class="character-list">
       {{range .Members}}
       {{/* Identical to a row in My Characters: the same classes, the same
-           tabindex, and a card revealed by the same :hover and :focus-within
-           rules in the stylesheet. Nothing here is guild-specific except what
-           the card can say, which is what a roster knows. */}}
-      <li class="character-row" tabindex="0">
+           tabindex, the same card revealed by the same :hover and
+           :focus-within rules, and the same linked name inside it. */}}
+      <li class="character-row{{if .Selected}} is-selected{{end}}" tabindex="0"{{if .Selected}} aria-current="true"{{end}}>
         <span class="row-name">{{.Name}}</span>
         <span class="row-meta">
           {{if .Level}}{{.Level}}{{end}}{{if .Class}} {{.Class}}{{end}}
@@ -37,7 +41,7 @@
 
         <div class="character-card popover" role="group" aria-label="{{.Name}} details">
           {{if .Rank}}<p class="badge">{{.Rank}}</p>{{end}}
-          <h2>{{.Name}}</h2>
+          <h2><a href="?c={{.Key}}">{{.Name}}</a></h2>
           {{if .Realm}}<p class="realm">{{.Realm}}</p>{{end}}
           <dl>
             {{if .Class}}
@@ -63,6 +67,29 @@
   {{end}}
 
   <div class="dashboard-main">
+    {{with .NotFound}}
+    <p class="notice" role="status">
+      No character called <strong>{{.}}</strong> is on the roster. They may have
+      left the guild, transferred, or been renamed.
+    </p>
+    {{end}}
+
+    {{with .Unreachable}}
+    <p class="notice" role="status">
+      Blizzard would not return <strong>{{.}}</strong>'s profile just now. The
+      roster is still here; try that character again shortly.
+    </p>
+    {{end}}
+
+    {{if .Selected}}
+    {{/* Back to the guild itself. Without this, opening a member is a one-way
+         trip -- the brand link goes home, but home is now this member. An
+         absolute path, because a relative one resolves against /app/guild and
+         lands on /app/. */}}
+    <p class="armory-back"><a href="{{$.Home}}">&larr; Guild overview</a></p>
+    {{template "armory-panel" .Selected}}
+    {{end}}
+
     {{with .Summary}}
     <section class="panel guild-summary" aria-label="Guild summary">
       <h2>{{.Name}}</h2>

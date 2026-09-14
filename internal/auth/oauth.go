@@ -177,7 +177,13 @@ func (h *Handlers) Callback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.Logger.Info("login complete", "user_id", user.ID)
-	http.Redirect(w, r, "/app/dashboard", http.StatusFound)
+
+	// To "/", not to a named app. "/" already means "send a signed-in viewer
+	// home", and home is whichever app declares AppMeta.Home -- so there is one
+	// place that knows where home is, and this is not it. Hardcoding
+	// /app/dashboard here is exactly how signing in kept landing on My
+	// Characters after the guild overview became the front page.
+	http.Redirect(w, r, "/", http.StatusFound)
 }
 
 // Logout terminates the session (FR-008).

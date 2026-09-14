@@ -32,12 +32,11 @@ func TestRoadmapIsListed(t *testing.T) {
 	raw := render(t)
 
 	// Unescaped, so this asserts what a member reads rather than how
-	// html/template chose to encode it -- the apostrophe in "Guildmates'"
-	// arrives as &#39;, which is correct and not what the test is about.
+	// html/template chose to encode it: an apostrophe arrives as &#39;, which
+	// is correct and not what the test is about.
 	body := html.UnescapeString(raw)
 
 	for _, want := range []string{
-		"Guildmates' characters",
 		"Guild calendar",
 		"Ask TOMB Bot",
 		"Combat log analysis",
@@ -62,11 +61,10 @@ func TestRoadmapIsListed(t *testing.T) {
 // entries carry it is asserted by name rather than by count alone.
 func TestOnlyAIEntriesAreTagged(t *testing.T) {
 	want := map[string]bool{
-		"Guildmates' characters": false,
-		"Guild calendar":         false,
-		"Ask TOMB Bot":           true,
-		"Combat log analysis":    true,
-		"Gear analysis":          true,
+		"Guild calendar":      false,
+		"Ask TOMB Bot":        true,
+		"Combat log analysis": true,
+		"Gear analysis":       true,
 	}
 
 	if len(Roadmap) != len(want) {

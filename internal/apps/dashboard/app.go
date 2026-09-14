@@ -14,8 +14,7 @@ import (
 	"net/http"
 	"strings"
 
-	"golang.org/x/sync/errgroup"
-
+	"github.com/anthony-hopkins/tomb/internal/armory"
 	"github.com/anthony-hopkins/tomb/internal/blizzard"
 	"github.com/anthony-hopkins/tomb/internal/platform"
 )
@@ -35,6 +34,12 @@ var _ platform.App = (*App)(nil)
 // New builds the app from the dependencies the core lends it.
 func New(deps platform.Deps) (*App, error) {
 	tmpl, err := template.ParseFS(templateFS, "templates/dashboard.html")
+	if err != nil {
+		return nil, err
+	}
+	// The Armory panel is shared with the guild overview, so it is parsed in
+	// rather than duplicated here.
+	tmpl, err = tmpl.ParseFS(armory.FS, "templates/armory.html")
 	if err != nil {
 		return nil, err
 	}
@@ -65,7 +70,7 @@ type view struct {
 
 	// Selected is the character shown in the Armory-style panel: the most
 	// recently played one, or whichever the URL asks for.
-	Selected *armoryView
+	Selected *armory.Panel
 
 	// Partial reports that some characters could not be loaded, so the page can
 	// say so rather than quietly showing an incomplete roster (research.md D9).
@@ -100,50 +105,6 @@ type characterView struct {
 	// Current marks the most recently played character, which the roster still
 	// leads with and calls out (FR-006, FR-007).
 	Current bool
-}
-
-// armoryView is the selected character, shown the way the Armory shows one.
-type armoryView struct {
-	characterView
-
-	// Render is Blizzard's own image of this character in its current gear, or
-	// empty when there is none. Empty is normal, not an error: a character
-	// Blizzard has never rendered simply has no assets.
-	Render string
-
-	// Gear is what the character is wearing, in the game's own slot order.
-	Gear []gearView
-}
-
-// gearView is one equipped item, ready for the template.
-type gearView struct {
-	Slot    string
-	Name    string
-	Level   int
-	Quality string
-
-	// QualityClass is the CSS class for the item's colour, pre-computed so the
-	// template does not have to lowercase anything. Empty for an unknown
-	// quality, which renders in the ordinary text colour rather than guessing.
-	QualityClass string
-
-	// The tooltip. Blizzard's own display strings, carried through unchanged.
-	Icon         string
-	Subclass     string
-	Binding      string
-	Armor        string
-	Stats        []string
-	Enchantments []string
-	Sockets      []blizzard.Socket
-	Transmog     string
-	Durability   string
-	Requirement  string
-	Set          *blizzard.ItemSet
-
-	// SetKey groups the pieces of one tier set, so hovering a set line can
-	// highlight the other pieces the character is wearing. Empty when the item
-	// is not part of a set.
-	SetKey string
 }
 
 // characterKey identifies a character in a URL. Realm first, because a
@@ -203,11 +164,7 @@ func (a *App) show(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if chosen >= 0 {
-		v.Selected = &armoryView{
-			characterView: a.characterView(ranked[chosen]),
-			Render:        a.render(r, ranked[chosen]),
-			Gear:          a.gear(r, ranked[chosen]),
-		}
+		v.Selected = a.panel(r, ranked[chosen])
 	}
 
 	var body bytes.Buffer
@@ -236,175 +193,27 @@ func (a *App) characterView(c blizzard.Character) characterView {
 	}
 }
 
-// render fetches Blizzard's image of one character.
+// panel builds the Armory panel for the selected character.
 //
-// One call, for the one character on display -- never for the roster, which
-// would double the per-view fan-out that FR-016 already re-pays on every view.
-//
-// A failure here costs the picture and nothing else. The page is about the
-// character's data, which is already in hand; refusing to render it because an
-// image was unavailable would turn a cosmetic outage into a broken site.
-func (a *App) render(r *http.Request, c blizzard.Character) string {
-	session, ok := platform.SessionFrom(r.Context())
-	if !ok {
-		return ""
-	}
-
-	media, err := a.deps.Blizzard.CharacterMedia(
-		r.Context(), session.AccessToken,
-		blizzard.CharacterRef{Name: c.Name, RealmSlug: c.RealmSlug},
-	)
-	if err != nil {
-		a.deps.Logger.Warn("character media unavailable",
-			"realm", c.RealmSlug,
-			"outcome", blizzard.OutcomeOf(err).String(),
-		)
-		return ""
-	}
-	return media.Hero()
-}
-
-// maxConcurrentIconFetches bounds the icon fan-out, on the same reasoning as
-// the character fan-out in the platform: far inside Blizzard's 100/second.
-const maxConcurrentIconFetches = 8
-
-// knownQualities are the item qualities the stylesheet has a colour for.
-//
-// A map rather than trusting the API's string straight into a class name: that
-// value reaches the page, and building a CSS class out of unvalidated input is
-// how markup gets injected. Anything unrecognised renders uncoloured.
-var knownQualities = map[string]string{
-	"POOR": "q-poor", "COMMON": "q-common", "UNCOMMON": "q-uncommon",
-	"RARE": "q-rare", "EPIC": "q-epic", "LEGENDARY": "q-legendary",
-	"ARTIFACT": "q-artifact", "HEIRLOOM": "q-heirloom",
-}
-
-// gear fetches what the character is wearing.
-//
-// One call, for the one character on display -- the same argument as render.
-// Failing costs the gear list and nothing else: everything above it on the page
-// is already in hand, and a missing equipment endpoint is no reason to refuse
-// to show somebody their character.
-func (a *App) gear(r *http.Request, c blizzard.Character) []gearView {
+// Of rather than For: the account summary fetched for this request already
+// carried this character, so there is nothing to look up before the render and
+// the gear. The guild overview cannot say that, which is why the shared builder
+// offers both paths.
+func (a *App) panel(r *http.Request, c blizzard.Character) *armory.Panel {
 	session, ok := platform.SessionFrom(r.Context())
 	if !ok {
 		return nil
 	}
 
-	items, err := a.deps.Blizzard.CharacterEquipment(
-		r.Context(), session.AccessToken,
-		blizzard.CharacterRef{Name: c.Name, RealmSlug: c.RealmSlug},
-	)
-	if err != nil {
-		a.deps.Logger.Warn("character equipment unavailable",
-			"realm", c.RealmSlug,
-			"outcome", blizzard.OutcomeOf(err).String(),
-		)
-		return nil
+	// FR-007: the most recently played character is called out wherever it
+	// appears, and on this page that line is the panel's badge.
+	var badge string
+	if c.IsCurrent {
+		badge = "Most recently played"
 	}
 
-	a.resolveIcons(r, items)
-
-	gear := make([]gearView, 0, len(items))
-	for _, it := range items {
-		g := gearView{
-			Slot:         it.SlotName,
-			Name:         it.Name,
-			Level:        it.Level,
-			Quality:      it.Quality,
-			QualityClass: knownQualities[it.Quality],
-			Icon:         it.IconURL,
-			Subclass:     it.Subclass,
-			Binding:      it.Binding,
-			Armor:        it.Armor,
-			Stats:        it.Stats,
-			Enchantments: it.Enchantments,
-			Sockets:      it.Sockets,
-			Transmog:     it.Transmog,
-			Durability:   it.Durability,
-			Requirement:  it.Requirement,
-			Set:          it.Set,
-		}
-		if it.Set != nil {
-			g.SetKey = setKey(it.Set.Display)
-		}
-		gear = append(gear, g)
-	}
-	return gear
-}
-
-// setKey turns a set's display name into something usable as an HTML id
-// fragment, so the pieces of one set can be grouped without putting the raw
-// name -- which comes from a remote API and contains apostrophes and spaces --
-// into an attribute selector.
-func setKey(display string) string {
-	var b strings.Builder
-	for _, r := range strings.ToLower(display) {
-		switch {
-		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
-			b.WriteRune(r)
-		case r == ' ' && b.Len() > 0:
-			b.WriteByte('-')
-		}
-	}
-	return strings.Trim(b.String(), "-")
-}
-
-// resolveIcons fills in each item's icon URL, in parallel and bounded.
-//
-// Sixteen items is sixteen calls the first time a member looks at a character.
-// After that the client's cache answers them, because an item's icon never
-// changes -- so the cost is paid once per process, not once per view.
-//
-// A failure is per-item and silent in the page: an item without an icon renders
-// without one. Losing a picture is not a reason to lose a tooltip.
-func (a *App) resolveIcons(r *http.Request, items []blizzard.EquippedItem) {
-	session, ok := platform.SessionFrom(r.Context())
-	if !ok {
-		return
-	}
-
-	// Collect what needs an icon first -- the items, and the gems sitting in
-	// their sockets -- so both kinds fan out together under one limit rather
-	// than in two passes. A gem is an item, and resolves through the same cache.
-	type target struct {
-		mediaID int
-		assign  func(string)
-	}
-	var targets []target
-
-	for i := range items {
-		if items[i].MediaID != 0 {
-			targets = append(targets, target{items[i].MediaID, func(u string) { items[i].IconURL = u }})
-		}
-		for j := range items[i].Sockets {
-			if items[i].Sockets[j].MediaID != 0 {
-				targets = append(targets, target{
-					items[i].Sockets[j].MediaID,
-					func(u string) { items[i].Sockets[j].IconURL = u },
-				})
-			}
-		}
-	}
-
-	g, gctx := errgroup.WithContext(r.Context())
-	g.SetLimit(maxConcurrentIconFetches)
-
-	for _, t := range targets {
-		g.Go(func() error {
-			icon, err := a.deps.Blizzard.ItemIcon(gctx, session.AccessToken, t.mediaID)
-			if err != nil {
-				a.deps.Logger.Warn("icon unavailable",
-					"media_id", t.mediaID,
-					"outcome", blizzard.OutcomeOf(err).String(),
-				)
-				return nil
-			}
-			t.assign(icon)
-			return nil
-		})
-	}
-	_ = g.Wait()
+	b := &armory.Builder{Client: a.deps.Blizzard, Logger: a.deps.Logger}
+	return b.Of(r.Context(), session.AccessToken, c, badge)
 }
 
 // guildLabel is the character's guild, or empty when it has none.

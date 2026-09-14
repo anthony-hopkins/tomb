@@ -1,0 +1,117 @@
+{{/* The Armory panel: one character, their render, and their gear.
+
+     Defined here rather than in either app because both render it. The dot is
+     an *armory.Panel. Nothing in here knows which page it is on -- the one
+     thing that differs between them, the line above the name, arrives as
+     .Badge. */}}
+{{define "armory-panel"}}
+<section class="armory" aria-label="{{.Name}}">
+  <div class="armory-figure">
+    {{if .Render}}
+    {{/* Blizzard's own render of this character in its current gear, served
+         from render.worldofwarcraft.com, which the page's CSP already allows.
+         No game assets, no WebGL, no JavaScript. */}}
+    <img src="{{.Render}}" alt="{{.Name}} in their current gear" loading="lazy">
+    {{else}}
+    <p class="armory-norender">
+      Blizzard has no render for this character yet.
+    </p>
+    {{end}}
+  </div>
+
+  <div class="armory-detail">
+    {{with .Badge}}<p class="badge">{{.}}</p>{{end}}
+    <h2>{{.Name}}</h2>
+    <p class="realm">
+      {{.RealmName}}{{if .Guild}} &middot; &lt;{{.Guild}}&gt;{{end}}
+    </p>
+    <dl>
+      <dt>Class</dt>
+      <dd>{{.Class}}</dd>
+      {{if .ActiveSpec}}
+      <dt>Specialization</dt>
+      <dd>{{.ActiveSpec}}</dd>
+      {{end}}
+      <dt>Level</dt>
+      <dd>{{.Level}}</dd>
+      <dt>Average item level</dt>
+      <dd>{{.AverageItemLevel}}</dd>
+      <dt>Last played</dt>
+      <dd>{{.LastLogin}}</dd>
+    </dl>
+
+    {{if .Gear}}
+    <h3 class="gear-heading">Equipped</h3>
+    {{/* Each row owns its tooltip. The tooltip opens on :hover and
+         :focus-within in CSS alone, so it works with JavaScript disabled; the
+         script only improves where it is placed and lights up the other pieces
+         of a set. data-set groups the pieces of one tier set. */}}
+    <ul class="gear-list">
+      {{range .Gear}}
+      <li class="gear-item"{{if .SetKey}} data-set="{{.SetKey}}"{{end}}>
+        <button type="button" class="gear-row" aria-describedby="">
+          {{if .Icon}}
+          <img class="gear-icon" src="{{.Icon}}" alt="" width="28" height="28" loading="lazy">
+          {{else}}
+          <span class="gear-icon gear-icon-blank" aria-hidden="true"></span>
+          {{end}}
+          <span class="gear-slot">{{.Slot}}</span>
+          <span class="gear-name {{.QualityClass}}">{{.Name}}</span>
+          {{if .Sockets}}
+          {{/* Sockets beside the name, as the Armory shows them: the gem's icon
+               when one is set, an empty outline when the socket is still open.
+               Jewellery is where this is usually the point. */}}
+          <span class="gear-gems">
+            {{range .Sockets}}
+            {{if .IconURL}}
+            <img class="gem" src="{{.IconURL}}" alt="{{.GemName}}" title="{{.GemName}}"
+                 width="16" height="16" loading="lazy">
+            {{else}}
+            <span class="gem gem-empty" title="{{.Display}}" aria-label="{{.Display}}"></span>
+            {{end}}
+            {{end}}
+          </span>
+          {{end}}
+          <span class="gear-ilvl">{{if .Level}}{{.Level}}{{end}}</span>
+        </button>
+
+        <div class="item-tooltip" role="tooltip">
+          <p class="tt-name {{.QualityClass}}">{{.Name}}</p>
+          {{if .Level}}<p class="tt-ilvl">Item Level {{.Level}}</p>{{end}}
+          {{with .Transmog}}<p class="tt-transmog">{{.}}</p>{{end}}
+          {{with .Binding}}<p class="tt-line">{{.}}</p>{{end}}
+
+          <p class="tt-line tt-split">
+            <span>{{.Slot}}</span>{{with .Subclass}}<span>{{.}}</span>{{end}}
+          </p>
+
+          {{with .Armor}}<p class="tt-line">{{.}}</p>{{end}}
+          {{range .Stats}}<p class="tt-stat">{{.}}</p>{{end}}
+
+          {{range .Sockets}}
+          <p class="tt-socket{{if .Empty}} is-empty{{end}}">
+            {{if .IconURL}}<img class="gem" src="{{.IconURL}}" alt="" width="14" height="14">{{end}}
+            {{if .GemName}}{{.GemName}}{{else}}{{.Display}}{{end}}
+            {{if and .Type .GemName}}<span class="tt-socket-type">{{.Type}}</span>{{end}}
+          </p>
+          {{end}}
+          {{range .Enchantments}}<p class="tt-enchant">{{.}}</p>{{end}}
+
+          {{with .Set}}
+          <p class="tt-set-name">{{.Display}}</p>
+          {{range .Pieces}}
+          <p class="tt-set-piece{{if not .Equipped}} is-missing{{end}}">{{.Name}}</p>
+          {{end}}
+          {{range .Effects}}<p class="tt-set-effect">{{.}}</p>{{end}}
+          {{end}}
+
+          {{with .Durability}}<p class="tt-line tt-dim">{{.}}</p>{{end}}
+          {{with .Requirement}}<p class="tt-line tt-dim">{{.}}</p>{{end}}
+        </div>
+      </li>
+      {{end}}
+    </ul>
+    {{end}}
+  </div>
+</section>
+{{end}}
