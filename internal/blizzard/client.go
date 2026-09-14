@@ -35,6 +35,31 @@ type HTTPClient struct {
 	// expiry: the only way an entry becomes wrong is if Blizzard reissues an
 	// icon under the same id, which they do not.
 	iconCache sync.Map
+
+	// RosterTTL is how long a fetched guild roster is served before it is
+	// fetched again. Zero means DefaultRosterTTL.
+	RosterTTL time.Duration
+
+	rosterMu    sync.Mutex
+	rosterCache map[string]rosterEntry
+}
+
+// DefaultRosterTTL is how long a guild roster is considered fresh.
+//
+// A roster is one call however large the guild, so this is not about rate
+// limits -- it is about the front page. The guild overview is what every member
+// lands on, and without a cache each of those loads waits on Blizzard. An hour
+// removes essentially all of that while keeping the roster current enough that
+// somebody who joined this morning is listed by lunchtime.
+//
+// Guild membership changes in days, not seconds. The FR-013 access check is a
+// separate path and stays live, so a cached roster never gates anybody in or
+// out -- it only decides who is drawn on a page.
+const DefaultRosterTTL = time.Hour
+
+type rosterEntry struct {
+	members []GuildMember
+	fetched time.Time
 }
 
 // NewHTTPClient builds a client with sane timeouts.
@@ -384,6 +409,70 @@ func (c *HTTPClient) CharacterEquipment(ctx context.Context, token string, ref C
 }
 
 func (c *HTTPClient) GuildRoster(ctx context.Context, token, realmSlug, guildName string) ([]GuildMember, error) {
+	key := strings.ToLower(realmSlug) + "/" + GuildNameSlug(guildName)
+
+	if members, ok, fresh := c.cachedRoster(key); ok && fresh {
+		return members, nil
+	}
+
+	members, err := c.fetchRoster(ctx, token, realmSlug, guildName)
+	if err != nil {
+		// Serve a stale roster rather than nothing. The alternative is that one
+		// bad minute at Blizzard empties the front page of the site, and a
+		// roster from an hour ago is a far better answer than "unavailable" --
+		// nobody joined or left in the meantime, almost certainly.
+		if stale, ok, _ := c.cachedRoster(key); ok {
+			return stale, nil
+		}
+		return nil, err
+	}
+
+	c.storeRoster(key, members)
+	return members, nil
+}
+
+// cachedRoster returns a copy of the cached roster, whether there is one at
+// all, and whether it is still within its TTL.
+//
+// Present and fresh are two different questions, and collapsing them into one
+// bool is how the stale-on-failure path quietly stops working: the caller asks
+// "is it fresh" on the way in and "is there anything at all" on the way out.
+//
+// A copy, because the cached slice outlives the request and callers sort and
+// group what they are handed; sharing it would let one request reorder
+// another's data.
+func (c *HTTPClient) cachedRoster(key string) (members []GuildMember, present, fresh bool) {
+	c.rosterMu.Lock()
+	defer c.rosterMu.Unlock()
+
+	entry, ok := c.rosterCache[key]
+	if !ok {
+		return nil, false, false
+	}
+
+	ttl := c.RosterTTL
+	if ttl <= 0 {
+		ttl = DefaultRosterTTL
+	}
+
+	out := make([]GuildMember, len(entry.members))
+	copy(out, entry.members)
+	return out, true, time.Since(entry.fetched) < ttl
+}
+
+func (c *HTTPClient) storeRoster(key string, members []GuildMember) {
+	c.rosterMu.Lock()
+	defer c.rosterMu.Unlock()
+
+	if c.rosterCache == nil {
+		c.rosterCache = make(map[string]rosterEntry)
+	}
+	stored := make([]GuildMember, len(members))
+	copy(stored, members)
+	c.rosterCache[key] = rosterEntry{members: stored, fetched: time.Now()}
+}
+
+func (c *HTTPClient) fetchRoster(ctx context.Context, token, realmSlug, guildName string) ([]GuildMember, error) {
 	const endpoint = "guild-roster"
 
 	var payload struct {
