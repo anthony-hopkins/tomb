@@ -102,15 +102,19 @@ Both degrade independently: losing the render still leaves the gear, losing the
 gear still leaves the character. They are fetched in parallel, so the panel
 costs one round trip plus the icon fan-out rather than two.
 
-**The guild page costs one call until somebody clicks.** The roster is a single
-endpoint however large the guild, and the summary beside it is counted from that
-one response. Opening a member adds their profile, render and equipment -- the
-same calls My Characters makes for the character it shows, plus the profile,
-because the roster does not carry a spec or an item level. Only names on the
-roster can be opened: `?c=` is resolved against the list already fetched, never
-passed to Blizzard, so the page cannot be used as a proxy for the character API.
-The roster itself is live on every view; the last successful one is kept only
-as a fallback for when Blizzard is unreachable.
+**The guild page is served from a snapshot, refreshed in the background.** Each
+member's card shows what My Characters shows -- spec, item level, last played --
+and those live on the per-character profile, one call per member. For a
+roster of two hundred that cannot be paid per view, so the roster and every
+profile are taken together, kept, and refreshed once they are older than
+`TOMB_GUILD_ROSTER_TTL` (an hour by default). A view is handed the last snapshot
+at once and the refresh runs after it; only the first view after a start waits,
+and concurrent first views share one load (`singleflight`). The fan-out is
+bounded at 8, off the request path. The summary beside the rail is counted from
+the snapshot. Opening a member is live: their profile, render and equipment are
+fetched then, and only names on the roster can be opened -- `?c=` is resolved
+against the snapshot, never passed to Blizzard, so the page cannot be used as a
+proxy for the character API.
 
 **A session lasts exactly as long as the Blizzard token.** Battle.net issues no
 refresh token and its access tokens last about 24 hours. A longer site session

@@ -10,7 +10,10 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/anthony-hopkins/tomb/internal/auth"
 	"github.com/anthony-hopkins/tomb/internal/blizzard"
@@ -53,7 +56,7 @@ func TestGroupsFollowTheRoster(t *testing.T) {
 		{Name: "Alpha", Rank: 1, Level: 90},
 		{Name: "Beta", Rank: 1, Level: 90},
 		{Name: "Zed", Rank: 3, Level: 71},
-	})
+	}, nil)
 
 	if len(groups) != 3 {
 		t.Fatalf("got %d rank groups, want 3 (ranks 0, 1 and 3)", len(groups))
@@ -82,7 +85,7 @@ func TestRosterRendersRankHeadings(t *testing.T) {
 		Groups: a.group([]blizzard.GuildMember{
 			{Name: "Nekromoo", Rank: 0, Level: 90, Class: "Death Knight", RealmName: "Area 52"},
 			{Name: "Lazzlowe", Rank: 1, Level: 90, Class: "Paladin", RealmName: "Area 52"},
-		}),
+		}, nil),
 		Total: 2,
 	}
 
@@ -120,7 +123,7 @@ func TestRosterRowsBehaveLikeCharacterRows(t *testing.T) {
 		Groups: a.group([]blizzard.GuildMember{
 			{Name: "Nekromoo", Rank: 0, Level: 90, Class: "Death Knight", RealmName: "Area 52"},
 			{Name: "Lazzlowe", Rank: 1, Level: 90, Class: "Paladin", RealmName: "Area 52"},
-		}),
+		}, nil),
 		Total: 2,
 	}
 
@@ -161,7 +164,7 @@ func TestRosterIsOnePanel(t *testing.T) {
 			{Name: "Arcanost", Rank: 1, Level: 90},
 			{Name: "Azelora", Rank: 1, Level: 90},
 			{Name: "Someone", Rank: 2, Level: 71},
-		}),
+		}, nil),
 		Total: 4,
 	}
 
@@ -197,7 +200,7 @@ func TestSummaryCountsTheRoster(t *testing.T) {
 		{Name: "Azelora", Rank: 1, Level: 90, Class: "Mage"},
 		{Name: "Boodytv", Rank: 1, Level: 64, Class: "Hunter"},
 	}
-	groups := a.group(members)
+	groups := a.group(members, nil)
 	sum := a.summarise(members, groups)
 
 	if sum == nil {
@@ -241,7 +244,7 @@ func TestClassOrderIsStable(t *testing.T) {
 
 	var first []string
 	for i := 0; i < 20; i++ {
-		sum := a.summarise(members, a.group(members))
+		sum := a.summarise(members, a.group(members, nil))
 		var order []string
 		for _, c := range sum.Classes {
 			order = append(order, c.Label)
@@ -267,9 +270,9 @@ func TestSummaryRenders(t *testing.T) {
 	a := appWith([]string{"Guild Master"})
 	members := []blizzard.GuildMember{{Name: "Cwds", Rank: 0, Level: 90, Class: "Monk"}}
 	v := view{
-		Groups:  a.group(members),
+		Groups:  a.group(members, nil),
 		Total:   1,
-		Summary: a.summarise(members, a.group(members)),
+		Summary: a.summarise(members, a.group(members, nil)),
 	}
 
 	body := html.UnescapeString(render(t, v))
@@ -300,7 +303,7 @@ func TestUnnamedRanksSaySo(t *testing.T) {
 	a := appWith(nil)
 	v := view{
 		RanksUnnamed: true,
-		Groups:       a.group([]blizzard.GuildMember{{Name: "Someone", Rank: 4, Level: 80}}),
+		Groups:       a.group([]blizzard.GuildMember{{Name: "Someone", Rank: 4, Level: 80}}, nil),
 		Total:        1,
 	}
 
@@ -361,17 +364,47 @@ func TestMetaIsTheHome(t *testing.T) {
 type fakeClient struct {
 	blizzard.Client // embedded: the methods these tests never call stay nil
 
+	mu       sync.Mutex
 	profiled []blizzard.CharacterRef
 	profile  blizzard.Character
 	profErr  error
+
+	// byName answers CharacterProfile per character when set, so a snapshot
+	// test can give each member their own spec and item level; otherwise
+	// every call returns profile.
+	byName map[string]blizzard.Character
+
+	roster     []blizzard.GuildMember
+	rosterErr  error
+	rosterGets atomic.Int32
 }
 
 func (f *fakeClient) CharacterProfile(_ context.Context, _ string, ref blizzard.CharacterRef) (blizzard.Character, error) {
+	f.mu.Lock()
 	f.profiled = append(f.profiled, ref)
+	f.mu.Unlock()
 	if f.profErr != nil {
 		return blizzard.Character{}, f.profErr
 	}
+	if f.byName != nil {
+		c, ok := f.byName[strings.ToLower(ref.Name)]
+		if !ok {
+			return blizzard.Character{}, errors.New("no such character")
+		}
+		return c, nil
+	}
 	return f.profile, nil
+}
+
+func (f *fakeClient) GuildRoster(context.Context, string, string, string) ([]blizzard.GuildMember, error) {
+	f.rosterGets.Add(1)
+	return f.roster, f.rosterErr
+}
+
+func (f *fakeClient) profileCalls() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return len(f.profiled)
 }
 
 func (f *fakeClient) CharacterMedia(context.Context, string, blizzard.CharacterRef) (blizzard.Media, error) {
@@ -395,7 +428,7 @@ func selecting(t *testing.T, f *fakeClient, ranks []string, key string, members 
 	r := httptest.NewRequest(http.MethodGet, "/app/guild?c="+key, nil)
 	r = r.WithContext(platform.ContextWithSession(r.Context(), auth.Session{AccessToken: "t"}))
 
-	v := view{Groups: a.group(members), Total: len(members)}
+	v := view{Groups: a.group(members, nil), Total: len(members)}
 	a.selectMember(r, &v, members, key)
 	return v
 }
@@ -409,7 +442,7 @@ var twoMembers = []blizzard.GuildMember{
 // guild card is a link, exactly as it is on My Characters.
 func TestNamesLinkToTheirArmory(t *testing.T) {
 	a := appWith([]string{"Guild Master", "Officer"})
-	body := render(t, view{Groups: a.group(twoMembers), Total: 2, Home: routePrefix})
+	body := render(t, view{Groups: a.group(twoMembers, nil), Total: 2, Home: routePrefix})
 
 	// %2f, not "/": html/template escapes the separator inside a URL query,
 	// and r.URL.Query().Get decodes it again on the way back in. Asserting the
@@ -552,5 +585,241 @@ func TestBackLinkIsAbsolute(t *testing.T) {
 
 	if got := render(t, v); !strings.Contains(got, "href=\"/app/guild\"") {
 		t.Error("the way back out of a member's panel is not an absolute path")
+	}
+}
+
+// --- The card, and the snapshot behind it -----------------------------------
+
+func signedIn(t *testing.T) *http.Request {
+	t.Helper()
+	r := httptest.NewRequest(http.MethodGet, "/app/guild", nil)
+	return r.WithContext(platform.ContextWithSession(r.Context(), auth.Session{AccessToken: "t"}))
+}
+
+func snapshotApp(f *fakeClient, refresh time.Duration) *App {
+	return &App{
+		deps: platform.Deps{
+			Guild:    platform.GuildConfig{Name: "TOMB", RealmSlug: "elune", Ranks: []string{"Guild Master", "Officer"}},
+			Blizzard: f,
+			Logger:   slog.New(slog.NewTextHandler(io.Discard, nil)),
+		},
+		refreshEvery: refresh,
+	}
+}
+
+var profiled = map[string]blizzard.Character{
+	"nekromoo": {Name: "Nekromoo", RealmSlug: "area-52", RealmName: "Area 52", Class: "Death Knight",
+		ActiveSpec: "Blood", Level: 90, AverageItemLevel: 311, LastLogin: time.Date(2026, 9, 14, 7, 5, 0, 0, time.UTC)},
+	"lazzlowe": {Name: "Lazzlowe", RealmSlug: "elune", RealmName: "Elune", Class: "Paladin",
+		ActiveSpec: "Retribution", Level: 90, AverageItemLevel: 298, LastLogin: time.Date(2026, 9, 10, 20, 0, 0, 0, time.UTC)},
+}
+
+// byKey re-keys a name-keyed profile map the way group expects it -- by
+// memberKey, realm first -- which is also how load builds the real one.
+func byKey(m map[string]blizzard.Character) map[string]blizzard.Character {
+	out := make(map[string]blizzard.Character, len(m))
+	for _, c := range m {
+		out[c.RealmSlug+"/"+strings.ToLower(c.Name)] = c
+	}
+	return out
+}
+
+// TestCardsMatchMyCharacters is the request that produced this: the guild rail's
+// card was missing specialisation, item level and last played, which My
+// Characters shows. The rows the two cards have must be the same rows.
+func TestCardsMatchMyCharacters(t *testing.T) {
+	a := snapshotApp(&fakeClient{}, time.Hour)
+	groups := a.group(twoMembers, byKey(profiled))
+
+	nek := groups[0].Members[0]
+	if nek.ActiveSpec != "Blood" || nek.AverageItemLevel != 311 || nek.LastLogin != "14 Sep 2026, 07:05 UTC" {
+		t.Errorf("card = spec %q ilvl %d played %q; want Blood, 311, 14 Sep 2026, 07:05 UTC",
+			nek.ActiveSpec, nek.AverageItemLevel, nek.LastLogin)
+	}
+	// The profile's realm display name, not the roster's slug.
+	if nek.Realm != "Area 52" {
+		t.Errorf("realm = %q, want the display name from the profile", nek.Realm)
+	}
+
+	body := html.UnescapeString(render(t, view{Groups: groups, Total: 2, Home: routePrefix}))
+	for _, want := range []string{
+		"Specialization", "Blood", "Retribution",
+		"Average item level", "311", "298",
+		"Last played", "14 Sep 2026, 07:05 UTC",
+		"Area 52 · <TOMB>", // the realm line reads exactly as it does on My Characters
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the guild card is missing %q", want)
+		}
+	}
+}
+
+// TestMissingProfileKeepsTheRosterRow: a member Blizzard would not serve a
+// profile for is still on the roster, with what the roster knows and nothing
+// invented for the rest.
+func TestMissingProfileKeepsTheRosterRow(t *testing.T) {
+	a := snapshotApp(&fakeClient{}, time.Hour)
+	only := byKey(map[string]blizzard.Character{"nekromoo": profiled["nekromoo"]})
+	groups := a.group(twoMembers, only)
+
+	laz := groups[1].Members[0]
+	if laz.Name != "Lazzlowe" || laz.Level != 90 || laz.Class != "Paladin" {
+		t.Errorf("roster fields lost: %+v", laz)
+	}
+	if laz.ActiveSpec != "" || laz.AverageItemLevel != 0 || laz.LastLogin != "" {
+		t.Errorf("profile fields invented for a member with no profile: %+v", laz)
+	}
+
+	// And the card omits the rows rather than printing a zero.
+	body := render(t, view{Groups: groups, Total: 2, Home: routePrefix})
+	if strings.Count(body, "Average item level") != 1 {
+		t.Errorf("expected exactly one item-level row (Nekromoo's), the card for the profile-less member should omit it")
+	}
+}
+
+// TestSnapshotLoadsOnceAndIsReused: the first view pays for the roster and
+// every profile; the next view within the interval pays for nothing.
+func TestSnapshotLoadsOnceAndIsReused(t *testing.T) {
+	f := &fakeClient{roster: twoMembers, byName: profiled}
+	a := snapshotApp(f, time.Hour)
+
+	first, err := a.snapshot(signedIn(t))
+	if err != nil {
+		t.Fatalf("first snapshot: %v", err)
+	}
+	if f.rosterGets.Load() != 1 || f.profileCalls() != len(twoMembers) {
+		t.Fatalf("first view made %d roster and %d profile calls; want 1 and %d",
+			f.rosterGets.Load(), f.profileCalls(), len(twoMembers))
+	}
+	if len(first.profiles) != 2 {
+		t.Errorf("snapshot holds %d profiles, want 2", len(first.profiles))
+	}
+
+	second, err := a.snapshot(signedIn(t))
+	if err != nil {
+		t.Fatalf("second snapshot: %v", err)
+	}
+	if second != first {
+		t.Error("a fresh snapshot was replaced rather than reused")
+	}
+	if f.rosterGets.Load() != 1 || f.profileCalls() != len(twoMembers) {
+		t.Errorf("a view inside the interval fetched again: %d roster, %d profile calls",
+			f.rosterGets.Load(), f.profileCalls())
+	}
+}
+
+// TestStaleSnapshotIsServedWhileRefreshing is the property that keeps the
+// front page fast: a view after the interval gets the OLD snapshot at once,
+// and the new one arrives behind it.
+func TestStaleSnapshotIsServedWhileRefreshing(t *testing.T) {
+	f := &fakeClient{roster: twoMembers, byName: profiled}
+	a := snapshotApp(f, time.Hour)
+
+	old, err := a.snapshot(signedIn(t))
+	if err != nil {
+		t.Fatalf("initial snapshot: %v", err)
+	}
+	// Age it past the interval by hand.
+	a.mu.Lock()
+	a.snap.fetched = time.Now().Add(-2 * time.Hour)
+	a.mu.Unlock()
+
+	got, err := a.snapshot(signedIn(t))
+	if err != nil {
+		t.Fatalf("stale snapshot: %v", err)
+	}
+	if got != old {
+		t.Error("a stale view waited for the refresh instead of being served the last snapshot")
+	}
+
+	// The refresh lands shortly after, on its own.
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		a.mu.Lock()
+		replaced := a.snap != old
+		a.mu.Unlock()
+		if replaced {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the background refresh never replaced the stale snapshot")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if f.rosterGets.Load() != 2 {
+		t.Errorf("roster fetched %d times, want 2 (load + one refresh)", f.rosterGets.Load())
+	}
+}
+
+// TestFailedRefreshKeepsTheSnapshot: a bad minute at Blizzard must not empty
+// the front page. The stale snapshot stands until a refresh succeeds.
+func TestFailedRefreshKeepsTheSnapshot(t *testing.T) {
+	f := &fakeClient{roster: twoMembers, byName: profiled}
+	a := snapshotApp(f, time.Hour)
+
+	old, err := a.snapshot(signedIn(t))
+	if err != nil {
+		t.Fatalf("initial snapshot: %v", err)
+	}
+	f.rosterErr = errors.New("blizzard is down")
+	a.mu.Lock()
+	a.snap.fetched = time.Now().Add(-2 * time.Hour)
+	a.mu.Unlock()
+
+	if _, err := a.snapshot(signedIn(t)); err != nil {
+		t.Fatalf("a stale view errored instead of serving the last snapshot: %v", err)
+	}
+
+	// Wait for the refresh goroutine to give up.
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		a.mu.Lock()
+		busy := a.refreshing
+		a.mu.Unlock()
+		if !busy {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("refresh never finished")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	a.mu.Lock()
+	kept := a.snap == old
+	a.mu.Unlock()
+	if !kept {
+		t.Error("a failed refresh replaced the snapshot")
+	}
+}
+
+// TestFirstViewsShareOneLoad: with nothing cached yet, concurrent views must
+// not each start their own two-hundred-call fan-out.
+func TestFirstViewsShareOneLoad(t *testing.T) {
+	f := &fakeClient{roster: twoMembers, byName: profiled}
+	a := snapshotApp(f, time.Hour)
+
+	var wg sync.WaitGroup
+	for range 8 {
+		wg.Go(func() {
+			if _, err := a.snapshot(signedIn(t)); err != nil {
+				t.Errorf("snapshot: %v", err)
+			}
+		})
+	}
+	wg.Wait()
+
+	if f.rosterGets.Load() != 1 {
+		t.Errorf("eight first views fetched the roster %d times, want 1", f.rosterGets.Load())
+	}
+}
+
+// TestNoSnapshotAndNoRosterIsUnavailable: with nothing kept and Blizzard down,
+// the page says so rather than showing an empty guild.
+func TestNoSnapshotAndNoRosterIsUnavailable(t *testing.T) {
+	f := &fakeClient{rosterErr: errors.New("down")}
+	a := snapshotApp(f, time.Hour)
+
+	if _, err := a.snapshot(signedIn(t)); err == nil {
+		t.Error("expected an error with no snapshot and no roster")
 	}
 }

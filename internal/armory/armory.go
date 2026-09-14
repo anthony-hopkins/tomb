@@ -17,6 +17,7 @@ import (
 	"log/slog"
 	"strings"
 	"sync"
+	"time"
 
 	"golang.org/x/sync/errgroup"
 
@@ -104,6 +105,13 @@ type Item struct {
 	SetKey string
 }
 
+// LastPlayed formats a last-login time the way every card on the site shows
+// it. One place, because three did, and a date that reads differently between
+// the rail and the panel looks like two different characters.
+func LastPlayed(t time.Time) string {
+	return t.Format("2 Jan 2006, 15:04 MST")
+}
+
 // Builder fetches the parts of a panel that are not already in hand.
 type Builder struct {
 	Client blizzard.Client
@@ -123,7 +131,7 @@ func (b *Builder) Of(ctx context.Context, token string, c blizzard.Character, ba
 		ActiveSpec:       c.ActiveSpec,
 		Level:            c.Level,
 		AverageItemLevel: c.AverageItemLevel,
-		LastLogin:        c.LastLogin.Format("2 Jan 2006, 15:04 MST"),
+		LastLogin:        LastPlayed(c.LastLogin),
 		Guild:            c.GuildName(),
 		Badge:            badge,
 	}

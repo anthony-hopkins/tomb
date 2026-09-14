@@ -31,13 +31,16 @@ type Config struct {
 	// name shows as "Rank N", which is honest rather than wrong.
 	GuildRanks []string
 
-	// GuildRosterTTL is how long a fetched guild roster may be reused before it
-	// is fetched again, from TOMB_GUILD_ROSTER_TTL as a Go duration ("30m",
-	// "3h"). Zero -- the default -- fetches live every time.
+	// GuildRosterTTL is how often the guild page refreshes its roster and its
+	// members' profile summaries, from TOMB_GUILD_ROSTER_TTL as a Go duration
+	// ("30m", "3h"). Zero -- the default -- leaves it to the guild app's own
+	// default of an hour. The refresh runs in the background, so this is how
+	// stale the rail may be, never how long a view waits.
 	//
-	// Separate from FR-016's ban on caching character data: this is the guild's
-	// membership list, which changes in days, and the FR-013 access check is a
-	// different path that stays live regardless.
+	// Separate from FR-016's ban on caching character data, which governs My
+	// Characters and the Armory panel: those stay live. This is the guild's
+	// membership list and each member's headline stats, which change in days,
+	// and the FR-013 access check is a different path that stays live too.
 	GuildRosterTTL time.Duration
 
 	DatabaseURL string

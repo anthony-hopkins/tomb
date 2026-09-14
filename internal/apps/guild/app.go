@@ -11,11 +11,17 @@ package guild
 
 import (
 	"bytes"
+	"context"
 	"embed"
 	"html/template"
 	"net/http"
 	"sort"
 	"strings"
+	"sync"
+	"time"
+
+	"golang.org/x/sync/errgroup"
+	"golang.org/x/sync/singleflight"
 
 	"github.com/anthony-hopkins/tomb/internal/armory"
 	"github.com/anthony-hopkins/tomb/internal/blizzard"
@@ -31,10 +37,39 @@ var templateFS embed.FS
 // bare "." resolves to /app/, not back to the roster.
 const routePrefix = "/app/guild"
 
+const (
+	// defaultRefresh is how old the roster snapshot may be before a view
+	// triggers a background refresh, when TOMB_GUILD_ROSTER_TTL is unset.
+	//
+	// An hour, because the data it covers changes on the scale of a day --
+	// who is in the guild, what spec they play, when they last logged in --
+	// and because refreshing it costs one call per member. See snapshot.
+	defaultRefresh = time.Hour
+
+	// loadTimeout bounds one roster-and-profiles load. A guild of two hundred
+	// at eight in flight is well under a minute; this is the ceiling for a
+	// bad day at Blizzard, not the expectation.
+	loadTimeout = 2 * time.Minute
+
+	// maxConcurrentProfileFetches bounds the per-member fan-out, on the same
+	// reasoning as the platform's character fan-out: far inside Blizzard's
+	// 100/second, and a refresh is not on anybody's request path.
+	maxConcurrentProfileFetches = 8
+)
+
 // App is the guild overview.
 type App struct {
 	deps platform.Deps
 	tmpl *template.Template
+
+	// refreshEvery is how old a snapshot may be before it is refreshed. Zero
+	// -- as in a bare test construction -- means every view finds it stale.
+	refreshEvery time.Duration
+
+	mu         sync.Mutex
+	snap       *rosterSnapshot
+	refreshing bool
+	flight     singleflight.Group
 }
 
 var _ platform.App = (*App)(nil)
@@ -45,7 +80,20 @@ func New(deps platform.Deps) (*App, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &App{deps: deps, tmpl: tmpl}, nil
+	refresh := deps.Config.GuildRosterTTL
+	if refresh <= 0 {
+		refresh = defaultRefresh
+	}
+	return &App{deps: deps, tmpl: tmpl, refreshEvery: refresh}, nil
+}
+
+// rosterSnapshot is the roster and every member's profile summary, as of one
+// refresh. Profiles is keyed by memberKey and is missing any member whose
+// profile Blizzard would not serve; the roster row still stands for them.
+type rosterSnapshot struct {
+	members  []blizzard.GuildMember
+	profiles map[string]blizzard.Character
+	fetched  time.Time
 }
 
 // parseTemplates builds this app's template set.
@@ -81,18 +129,27 @@ func (a *App) Routes(r platform.Registrar) {
 	r.Handle("GET /", http.HandlerFunc(a.show))
 }
 
-// memberView is one character on the roster.
+// memberView is one character on the roster, carrying what its card shows.
 //
-// Everything here comes from the roster endpoint. There is deliberately no item
-// level, specialisation or last-played time: those live on the per-character
-// profile, which would be one call per member on every view -- a hundred calls
-// for a hundred-member guild, re-paid each time somebody opens the page. The
-// card shows what a roster knows.
+// Name, realm, level, class and rank come from the roster endpoint. The rest
+// -- specialisation, item level, when they last played -- is on the
+// per-character profile, fetched for every member as part of the snapshot so
+// the card reads exactly like the one on My Characters. When a member's
+// profile was unavailable those fields are empty and the card omits them
+// rather than showing a zero.
 type memberView struct {
 	Name  string
 	Realm string
 	Level int
 	Class string
+
+	// Guild is the configured guild name, on every card for the same reason
+	// My Characters puts it on its cards: the two lists should look the same.
+	Guild string
+
+	ActiveSpec       string
+	AverageItemLevel int
+	LastLogin        string
 
 	// Rank is the label of the rank this character holds, repeated onto the
 	// member so the card can name it. The heading above the group says it too,
@@ -194,11 +251,12 @@ func (a *App) show(w http.ResponseWriter, r *http.Request) {
 		Home:         routePrefix,
 	}
 
-	members, err := a.roster(r)
+	snap, err := a.snapshot(r)
 	if err != nil {
 		v.Unavailable = true
 	} else {
-		v.Groups = a.group(members)
+		members := snap.members
+		v.Groups = a.group(members, snap.profiles)
 		v.Total = len(members)
 
 		if key := r.URL.Query().Get("c"); key != "" {
@@ -222,21 +280,91 @@ func (a *App) show(w http.ResponseWriter, r *http.Request) {
 	a.deps.RenderInLayout(w, r, http.StatusOK, "Guild", template.HTML(body.String()))
 }
 
-// roster fetches the guild's characters.
+// snapshot returns the roster and its members' profiles, refreshing them
+// without making the viewer wait.
 //
-// One call, however large the guild: the roster is a single endpoint rather
-// than a per-character fetch, so this costs the same for thirty members as for
-// three hundred.
-func (a *App) roster(r *http.Request) ([]blizzard.GuildMember, error) {
+// WHY THIS IS KEPT BETWEEN VIEWS WHEN CHARACTER DATA ELSEWHERE IS NOT.
+//
+// The rail shows each member what My Characters shows: specialisation, item
+// level, when they last played. None of that is on the roster endpoint; each
+// is on the per-character profile, so a guild of two hundred is two hundred
+// calls. My Characters re-pays its fan-out on every view (FR-016) because it
+// is your handful of characters. Re-paying two hundred on the page every
+// member lands on would be tens of seconds a view and a real share of the
+// hourly limit, for data that changes on the scale of a day (FR-018).
+//
+// So the roster and the profiles are taken together, kept, and refreshed in
+// the background once they have aged out: a view after that gets the last
+// snapshot at once and quietly starts the next. Only the very first view after
+// a start waits, and concurrent first views share that one load. The selected
+// member's Armory panel is still fetched live, because that is the thing
+// somebody is actually reading.
+func (a *App) snapshot(r *http.Request) (*rosterSnapshot, error) {
 	session, ok := platform.SessionFrom(r.Context())
 	if !ok {
 		return nil, http.ErrNoLocation
 	}
+	token := session.AccessToken
 
-	members, err := a.deps.Blizzard.GuildRoster(
-		r.Context(), session.AccessToken,
-		a.deps.Guild.RealmSlug, a.deps.Guild.Name,
-	)
+	a.mu.Lock()
+	snap := a.snap
+	fresh := snap != nil && a.refreshEvery > 0 && time.Since(snap.fetched) < a.refreshEvery
+	if snap != nil && !fresh && !a.refreshing {
+		a.refreshing = true
+		go a.refresh(token)
+	}
+	a.mu.Unlock()
+
+	if snap != nil {
+		return snap, nil
+	}
+
+	// Detached from the request's cancellation: several first views may be
+	// sharing this load, and the one whose viewer navigated away must not
+	// cancel it for the rest.
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), loadTimeout)
+	defer cancel()
+
+	loaded, err, _ := a.flight.Do("roster", func() (any, error) {
+		s, err := a.load(ctx, token)
+		if err != nil {
+			return nil, err
+		}
+		a.mu.Lock()
+		a.snap = s
+		a.mu.Unlock()
+		return s, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return loaded.(*rosterSnapshot), nil
+}
+
+// refresh replaces the snapshot in the background. A failure keeps the one in
+// hand: a bad minute at Blizzard is not a reason to empty the front page.
+func (a *App) refresh(token string) {
+	defer func() {
+		a.mu.Lock()
+		a.refreshing = false
+		a.mu.Unlock()
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), loadTimeout)
+	defer cancel()
+
+	s, err := a.load(ctx, token)
+	if err != nil {
+		return // load already logged it
+	}
+	a.mu.Lock()
+	a.snap = s
+	a.mu.Unlock()
+}
+
+// load fetches the roster and then every member's profile.
+func (a *App) load(ctx context.Context, token string) (*rosterSnapshot, error) {
+	members, err := a.deps.Blizzard.GuildRoster(ctx, token, a.deps.Guild.RealmSlug, a.deps.Guild.Name)
 	if err != nil {
 		a.deps.Logger.Warn("guild roster unavailable",
 			"guild", a.deps.Guild.Name+"@"+a.deps.Guild.RealmSlug,
@@ -244,15 +372,56 @@ func (a *App) roster(r *http.Request) ([]blizzard.GuildMember, error) {
 		)
 		return nil, err
 	}
-	return members, nil
+	return &rosterSnapshot{
+		members:  members,
+		profiles: a.profiles(ctx, token, members),
+		fetched:  time.Now(),
+	}, nil
 }
 
-// group turns the sorted roster into rank groups.
+// profiles fetches each member's profile summary, bounded and in parallel.
+//
+// A member whose profile Blizzard will not serve -- renamed, transferred, or
+// just not right now -- keeps their roster row and loses the detail. That is
+// counted and logged once per refresh rather than once per member: at roster
+// scale, a line each is a page of warnings nobody reads.
+func (a *App) profiles(ctx context.Context, token string, members []blizzard.GuildMember) map[string]blizzard.Character {
+	fetched := make([]*blizzard.Character, len(members))
+
+	g, gctx := errgroup.WithContext(ctx)
+	g.SetLimit(maxConcurrentProfileFetches)
+	for i, m := range members {
+		g.Go(func() error {
+			c, err := a.deps.Blizzard.CharacterProfile(gctx, token,
+				blizzard.CharacterRef{Name: m.Name, RealmSlug: m.RealmSlug})
+			if err == nil {
+				fetched[i] = &c
+			}
+			return nil
+		})
+	}
+	_ = g.Wait()
+
+	out := make(map[string]blizzard.Character, len(members))
+	for i, m := range members {
+		if fetched[i] != nil {
+			out[memberKey(m)] = *fetched[i]
+		}
+	}
+	if missing := len(members) - len(out); missing > 0 {
+		a.deps.Logger.Warn("guild member profiles unavailable",
+			"missing", missing, "of", len(members))
+	}
+	return out
+}
+
+// group turns the sorted roster into rank groups, filling each card from the
+// member's profile where one was fetched.
 //
 // The roster arrives already ordered -- by rank, then alphabetically within
 // each rank -- so this only has to notice where one rank ends and the next
 // begins. Doing the ordering here as well would be two places to get it wrong.
-func (a *App) group(members []blizzard.GuildMember) []rankGroup {
+func (a *App) group(members []blizzard.GuildMember, profiles map[string]blizzard.Character) []rankGroup {
 	var groups []rankGroup
 	current := -1
 
@@ -262,14 +431,33 @@ func (a *App) group(members []blizzard.GuildMember) []rankGroup {
 			groups = append(groups, rankGroup{Label: a.deps.Guild.RankLabel(m.Rank)})
 		}
 		g := &groups[len(groups)-1]
-		g.Members = append(g.Members, memberView{
+
+		mv := memberView{
 			Name:  m.Name,
 			Realm: m.RealmLabel(),
 			Level: m.Level,
 			Class: m.Class,
+			Guild: a.deps.Guild.Name,
 			Rank:  g.Label,
 			Key:   memberKey(m),
-		})
+		}
+		if c, ok := profiles[mv.Key]; ok {
+			// The profile carries the realm's display name; the roster only
+			// its slug. "Area 52", not "area-52", the same as My Characters.
+			mv.Realm = c.RealmLabel()
+			if c.Class != "" {
+				mv.Class = c.Class
+			}
+			if c.Level > 0 {
+				mv.Level = c.Level
+			}
+			mv.ActiveSpec = c.ActiveSpec
+			mv.AverageItemLevel = c.AverageItemLevel
+			if c.LastLogin.Unix() > 0 {
+				mv.LastLogin = armory.LastPlayed(c.LastLogin)
+			}
+		}
+		g.Members = append(g.Members, mv)
 	}
 	return groups
 }

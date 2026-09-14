@@ -186,7 +186,7 @@ func newCharacterView(c blizzard.Character) characterView {
 		ActiveSpec:       c.ActiveSpec,
 		Level:            c.Level,
 		AverageItemLevel: c.AverageItemLevel,
-		LastLogin:        c.LastLogin.Format("2 Jan 2006, 15:04 MST"),
+		LastLogin:        armory.LastPlayed(c.LastLogin),
 		Guild:            c.GuildName(),
 		Current:          c.IsCurrent,
 		Key:              characterKey(c),

@@ -46,6 +46,10 @@ The rows work exactly like the ones on My Characters:
   Blizzard's render of them in their current gear, their spec, level and item
   level, and every equipped slot with its tooltip, gems and set pieces.
 
+The card is the same one your own characters get — class, specialisation,
+level, average item level and when they last played — so you can size up a
+guildmate without opening them.
+
 It is the same panel your own characters get, because it is literally the same
 page component — so anything that improves one improves the other.
 
@@ -61,9 +65,14 @@ A few things worth knowing:
 - **Ranks show as numbers until they are named.** Guild ranks have no names in
   Blizzard's data, only positions, so the site has to be told them. Until it is,
   the headings read "Rank 1", "Rank 2" and the page says why.
-- **It is live, like everything else.** The roster is fetched from Blizzard each
-  time the page is opened. If Blizzard cannot be reached, the last roster that
-  did arrive is shown rather than an empty guild.
+- **The roster refreshes itself about once an hour.** Each member's card needs
+  their own profile from Blizzard, and with a couple of hundred characters on
+  the roster that is too many calls to make every time someone opens the page.
+  So the whole roster is refreshed in the background and you always see the
+  last one, instantly. A member's Armory view, when you click them, is live.
+- **A card missing its item level or last played** means Blizzard would not
+  return that character's profile at the last refresh — usually a recent
+  rename or transfer. The roster row itself is still right.
 
 ## My Characters
 

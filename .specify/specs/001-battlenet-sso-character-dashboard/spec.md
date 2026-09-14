@@ -30,6 +30,7 @@ extensible with more in the future."
 
 - Q: FR-016 forbids caching character data. Does that reach the guild roster? → A: No — FR-016 exists so nobody is shown stale character state (gear, item level, last login), which changes every time somebody plays, whereas guild membership changes in days. But the question turned out to be moot: the roster is ONE call regardless of guild size, nowhere near the rate limits, so there is nothing worth saving by reusing it. It is fetched live, and reuse is available as an off-by-default option for a deployment that would rather have the page speed.
 - Q: If the roster is fetched live, what happens when that fetch fails? → A: The last successfully fetched roster is served instead of an error. That is not caching to avoid a call — the call was made and failed — and an empty guild on the site's home page is a worse answer than a roster from the previous load.
+- Q: The guild rail was asked to show each member the same card My Characters shows — specialisation, item level, last played — and only the per-character profile carries those. Is that fetched live? → A: No. It is one call per member, so for a guild of two hundred it is two hundred calls, which cannot be paid on the page every member lands on. The roster and every member's profile are taken together as one snapshot, kept, and refreshed in the background once they are older than a configurable interval (an hour by default). A view never waits on the refresh; only the first view after a start does. The selected member's Armory panel is still fetched live.
 - Q: Does caching the roster weaken the FR-013a access check? → A: No. Membership is derived from the signing-in member's own characters on every request, which is a different call on a different path. A cached roster decides who is DRAWN on a page, never who is let in, so somebody who leaves TOMB still loses access on their next page view.
 
 ### Primary User Story
@@ -158,14 +159,24 @@ Discord.
   request. Because every view re-issues the per-character fetches, rate-limit and
   error responses MUST be handled per FR-010.
 
-- **FR-018**: The guild roster MUST be fetched live by default. It is a single
-  API call regardless of guild size, nowhere near the published rate limits, so
-  there is nothing to be saved by reusing it that is worth showing a stale list
-  of who is in the guild.
+- **FR-018**: The guild page MUST show each roster member the same card My
+  Characters shows for one of the viewer's own characters: realm and guild,
+  class, specialisation, level, average item level and last played. The roster
+  endpoint carries only the first four of those; the rest are on each member's
+  profile, one call per member.
 
-  The system MAY reuse a fetched roster for a bounded, configurable lifetime,
-  off by default, for a deployment that would rather trade freshness for page
-  speed.
+  The system MUST therefore take the roster and every member's profile summary
+  together as one snapshot, keep it, and refresh it in the background once it
+  is older than a bounded, configurable interval — one hour unless configured.
+  A view MUST NOT wait on that refresh; it is served the last snapshot and the
+  refresh proceeds after. Only the first view after a process start may wait,
+  and concurrent first views MUST share one load rather than each start their
+  own. A member whose profile cannot be fetched keeps their roster row with
+  the roster's fields and no invented values for the rest.
+
+  The Armory panel for a selected member is not part of the snapshot and MUST
+  be fetched live, per FR-016: it is the one thing on the page somebody is
+  actually reading.
 
   Independently of that: where a fetch FAILS and a previously fetched roster is
   held, the system SHOULD serve that rather than an error. This is not caching
