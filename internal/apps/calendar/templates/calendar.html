@@ -1,14 +1,14 @@
 {{define "calendar.html"}}
 {{/* The guild's schedule. Everyone reads it; the forms appear only for the
      guild master and officers, and every write is a POST carrying the site's
-     CSRF token. Times are UTC, and the page says so. */}}
+     CSRF token. Times are in the guild's zone, and the page says which. */}}
 <section class="panel calendar" aria-label="Guild calendar">
   {{if .Editing}}
   <h1>Edit event</h1>
   {{else}}
   <h1>Calendar</h1>
   <p class="fineprint">
-    What is happening, and when. All times are UTC.
+    What is happening, and when. All times are {{.ZoneName}}.
     {{if .Officer}}As an officer you can add, change and remove events; every change is recorded.{{end}}
   </p>
   {{end}}
@@ -24,11 +24,11 @@
     </div>
     <div class="form-row form-row--split">
       <div>
-        <label for="ev-starts">Starts (UTC)</label>
+        <label for="ev-starts">Starts ({{$.ZoneName}})</label>
         <input id="ev-starts" name="starts" type="datetime-local" value="{{.Starts}}" required>
       </div>
       <div>
-        <label for="ev-ends">Ends (UTC, optional)</label>
+        <label for="ev-ends">Ends ({{$.ZoneName}}, optional)</label>
         <input id="ev-ends" name="ends" type="datetime-local" value="{{.Ends}}">
       </div>
     </div>

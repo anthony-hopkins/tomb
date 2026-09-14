@@ -7,9 +7,9 @@
 // accepted one is written to the audit trail before the viewer is sent back
 // to the schedule.
 //
-// Times are UTC throughout. The site shows every other time in UTC, the
-// guild is spread across time zones, and a schedule that silently meant
-// "the officer's local time" would be wrong for most of the people reading it.
+// Times are in the guild's zone throughout -- TOMB_TIMEZONE, Eastern by
+// default -- both shown and typed. The zone's name is on the page, so a
+// schedule never silently means somebody else's local time.
 package calendar
 
 import (
@@ -23,6 +23,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/anthony-hopkins/tomb/internal/armory"
 	"github.com/anthony-hopkins/tomb/internal/platform"
 )
 
@@ -109,9 +110,13 @@ type formView struct {
 type view struct {
 	Home    string
 	Officer bool
-	CSRF    struct{ Field, Token string }
-	Days    []dayView
-	Form    *formView // the add form on the schedule, or the edit form alone
+
+	// ZoneName is the zone's abbreviation right now -- "EDT", "EST" -- for
+	// the page to say which zone its times are in.
+	ZoneName string
+	CSRF     struct{ Field, Token string }
+	Days     []dayView
+	Form     *formView // the add form on the schedule, or the edit form alone
 
 	// Editing is true on the edit page, which shows the form and not the
 	// schedule.
@@ -120,9 +125,15 @@ type view struct {
 	Unavailable bool
 }
 
+// zone is the guild's zone, UTC when unconfigured (as in a test).
+func (a *App) zone() *time.Location {
+	return armory.Zone(a.deps.Config.Timezone)
+}
+
 func (a *App) base(r *http.Request) view {
 	profile, _ := platform.ProfileFrom(r.Context())
 	v := view{Home: routePrefix, Officer: profile.Membership.IsOfficer}
+	v.ZoneName = a.now().In(a.zone()).Format("MST")
 	v.CSRF.Field = platform.CSRFFieldName
 	v.CSRF.Token = platform.CSRFTokenFrom(r.Context())
 	return v
@@ -137,10 +148,12 @@ func (a *App) show(w http.ResponseWriter, r *http.Request) {
 	a.render(w, r, http.StatusOK, v)
 }
 
-// fillDays lists what is coming from the start of today, grouped by day.
+// fillDays lists what is coming from the start of today -- today in the
+// guild's zone -- grouped by day.
 func (a *App) fillDays(r *http.Request, v *view) {
-	now := a.now().UTC()
-	from := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	loc := a.zone()
+	now := a.now().In(loc)
+	from := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc)
 
 	events, err := a.store.Upcoming(r.Context(), from)
 	if err != nil {
@@ -148,15 +161,15 @@ func (a *App) fillDays(r *http.Request, v *view) {
 		v.Unavailable = true
 		return
 	}
-	v.Days = groupByDay(events)
+	v.Days = groupByDay(events, loc)
 }
 
-// groupByDay turns a soonest-first list into days, in order.
-func groupByDay(events []Event) []dayView {
+// groupByDay turns a soonest-first list into days, in order, in the zone.
+func groupByDay(events []Event, loc *time.Location) []dayView {
 	var days []dayView
 	current := ""
 	for _, e := range events {
-		day := e.StartsAt.UTC().Format("Monday, 2 Jan 2006")
+		day := e.StartsAt.In(loc).Format("Monday, 2 Jan 2006")
 		if day != current {
 			current = day
 			days = append(days, dayView{Label: day})
@@ -165,7 +178,7 @@ func groupByDay(events []Event) []dayView {
 		d.Events = append(d.Events, eventView{
 			ID:       e.ID,
 			Title:    e.Title,
-			Time:     timeRange(e),
+			Time:     timeRange(e, loc),
 			Location: e.Location,
 			Notes:    e.Notes,
 			EditPath: fmt.Sprintf("%s/%d/edit", routePrefix, e.ID),
@@ -174,12 +187,12 @@ func groupByDay(events []Event) []dayView {
 	return days
 }
 
-func timeRange(e Event) string {
-	s := e.StartsAt.UTC().Format("15:04")
+func timeRange(e Event, loc *time.Location) string {
+	s := e.StartsAt.In(loc).Format("15:04")
 	if e.EndsAt == nil {
 		return s
 	}
-	return s + "–" + e.EndsAt.UTC().Format("15:04")
+	return s + "–" + e.EndsAt.In(loc).Format("15:04")
 }
 
 // officer refuses anyone below the rank, with the same page the core uses
@@ -211,7 +224,7 @@ func (a *App) create(w http.ResponseWriter, r *http.Request) {
 	if !a.guarded(w, r) {
 		return
 	}
-	e, form, err := parseForm(r)
+	e, form, err := parseForm(r, a.zone())
 	if err != nil {
 		v := a.base(r)
 		form.Action = routePrefix + "/new"
@@ -230,7 +243,7 @@ func (a *App) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	e.ID = id
-	a.audit(r, "calendar.create", e.Title, describe(e))
+	a.audit(r, "calendar.create", e.Title, describe(e, a.zone()))
 	http.Redirect(w, r, routePrefix, http.StatusSeeOther)
 }
 
@@ -244,7 +257,7 @@ func (a *App) editForm(w http.ResponseWriter, r *http.Request) {
 	}
 	v := a.base(r)
 	v.Editing = true
-	form := formOf(e)
+	form := formOf(e, a.zone())
 	v.Form = &form
 	a.render(w, r, http.StatusOK, v)
 }
@@ -257,7 +270,7 @@ func (a *App) update(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	after, form, err := parseForm(r)
+	after, form, err := parseForm(r, a.zone())
 	if err != nil {
 		v := a.base(r)
 		v.Editing = true
@@ -275,7 +288,7 @@ func (a *App) update(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "The event could not be saved.", http.StatusInternalServerError)
 		return
 	}
-	a.audit(r, "calendar.update", after.Title, changes(before, after))
+	a.audit(r, "calendar.update", after.Title, changes(before, after, a.zone()))
 	http.Redirect(w, r, routePrefix, http.StatusSeeOther)
 }
 
@@ -292,7 +305,7 @@ func (a *App) remove(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "The event could not be removed.", http.StatusInternalServerError)
 		return
 	}
-	a.audit(r, "calendar.delete", e.Title, describe(e))
+	a.audit(r, "calendar.delete", e.Title, describe(e, a.zone()))
 	http.Redirect(w, r, routePrefix, http.StatusSeeOther)
 }
 
@@ -342,9 +355,10 @@ func (a *App) audit(r *http.Request, action, subject, detail string) {
 	}
 }
 
-// parseForm reads an event from the form, returning the event and the form
-// as submitted -- so a rejected one can be shown back with what was typed.
-func parseForm(r *http.Request) (Event, formView, error) {
+// parseForm reads an event from the form, in the zone the form's times were
+// typed in, returning the event and the form as submitted -- so a rejected
+// one can be shown back with what was typed.
+func parseForm(r *http.Request, loc *time.Location) (Event, formView, error) {
 	form := formView{
 		Title:    strings.TrimSpace(r.PostFormValue("title")),
 		Starts:   strings.TrimSpace(r.PostFormValue("starts")),
@@ -357,13 +371,13 @@ func parseForm(r *http.Request) (Event, formView, error) {
 	if e.Title == "" {
 		return e, form, errors.New("an event needs a title")
 	}
-	starts, err := time.ParseInLocation(formTime, form.Starts, time.UTC)
+	starts, err := time.ParseInLocation(formTime, form.Starts, loc)
 	if err != nil {
 		return e, form, errors.New("an event needs a start date and time")
 	}
 	e.StartsAt = starts
 	if form.Ends != "" {
-		ends, err := time.ParseInLocation(formTime, form.Ends, time.UTC)
+		ends, err := time.ParseInLocation(formTime, form.Ends, loc)
 		if err != nil {
 			return e, form, errors.New("the end is not a date and time")
 		}
@@ -375,26 +389,26 @@ func parseForm(r *http.Request) (Event, formView, error) {
 	return e, form, nil
 }
 
-func formOf(e Event) formView {
+func formOf(e Event, loc *time.Location) formView {
 	f := formView{
 		ID:       e.ID,
 		Title:    e.Title,
-		Starts:   e.StartsAt.UTC().Format(formTime),
+		Starts:   e.StartsAt.In(loc).Format(formTime),
 		Location: e.Location,
 		Notes:    e.Notes,
 		Action:   fmt.Sprintf("%s/%d/edit", routePrefix, e.ID),
 	}
 	if e.EndsAt != nil {
-		f.Ends = e.EndsAt.UTC().Format(formTime)
+		f.Ends = e.EndsAt.In(loc).Format(formTime)
 	}
 	return f
 }
 
-// describe is an event in one line, for the trail.
-func describe(e Event) string {
-	s := e.StartsAt.UTC().Format("2 Jan 2006, 15:04 MST")
+// describe is an event in one line, for the trail, in the zone.
+func describe(e Event, loc *time.Location) string {
+	s := e.StartsAt.In(loc).Format(armory.Stamp)
 	if e.EndsAt != nil {
-		s += " to " + e.EndsAt.UTC().Format("15:04 MST")
+		s += " to " + e.EndsAt.In(loc).Format("15:04 MST")
 	}
 	if e.Location != "" {
 		s += " at " + e.Location
@@ -403,8 +417,8 @@ func describe(e Event) string {
 }
 
 // changes is what an update changed, field by field, for the trail. Only
-// fields that changed: "starts: 2 Jan 2026, 20:00 UTC → 3 Jan 2026, 20:00 UTC".
-func changes(before, after Event) string {
+// fields that changed: "starts: 2 Jan 2026, 20:00 EST → 3 Jan 2026, 20:00 EST".
+func changes(before, after Event, loc *time.Location) string {
 	var parts []string
 	add := func(name, was, now string) {
 		if was != now {
@@ -412,8 +426,8 @@ func changes(before, after Event) string {
 		}
 	}
 	add("title", before.Title, after.Title)
-	add("starts", before.StartsAt.UTC().Format("2 Jan 2006, 15:04 MST"), after.StartsAt.UTC().Format("2 Jan 2006, 15:04 MST"))
-	add("ends", endOf(before), endOf(after))
+	add("starts", before.StartsAt.In(loc).Format(armory.Stamp), after.StartsAt.In(loc).Format(armory.Stamp))
+	add("ends", endOf(before, loc), endOf(after, loc))
 	add("location", before.Location, after.Location)
 	add("notes", before.Notes, after.Notes)
 	if len(parts) == 0 {
@@ -422,11 +436,11 @@ func changes(before, after Event) string {
 	return strings.Join(parts, "; ")
 }
 
-func endOf(e Event) string {
+func endOf(e Event, loc *time.Location) string {
 	if e.EndsAt == nil {
 		return ""
 	}
-	return e.EndsAt.UTC().Format("2 Jan 2006, 15:04 MST")
+	return e.EndsAt.In(loc).Format(armory.Stamp)
 }
 
 func orNone(s string) string {

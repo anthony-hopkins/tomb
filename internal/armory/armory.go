@@ -126,17 +126,34 @@ func ClassSlug(class string) string {
 	return strings.ReplaceAll(strings.ToLower(class), " ", "-")
 }
 
-// LastPlayed formats a last-login time the way every card on the site shows
-// it. One place, because three did, and a date that reads differently between
-// the rail and the panel looks like two different characters.
-func LastPlayed(t time.Time) string {
-	return t.Format("2 Jan 2006, 15:04 MST")
+// Stamp is how every time on the site is written: "14 Sep 2026, 20:15 EDT".
+// The zone abbreviation is part of it, so a reader is never left guessing
+// which zone a time is in.
+const Stamp = "2 Jan 2006, 15:04 MST"
+
+// LastPlayed formats a time the way every card on the site shows one, in the
+// given zone. One place, because three did, and a date that reads differently
+// between the rail and the panel looks like two different characters. A nil
+// zone is UTC, which is what a test without configuration gets.
+func LastPlayed(t time.Time, loc *time.Location) string {
+	return t.In(Zone(loc)).Format(Stamp)
+}
+
+// Zone is loc, or UTC when there is none.
+func Zone(loc *time.Location) *time.Location {
+	if loc == nil {
+		return time.UTC
+	}
+	return loc
 }
 
 // Builder fetches the parts of a panel that are not already in hand.
 type Builder struct {
 	Client blizzard.Client
 	Logger *slog.Logger
+
+	// Zone is what the panel's times are shown in; nil is UTC.
+	Zone *time.Location
 }
 
 // Of builds the panel for a character whose summary the caller already has.
@@ -153,7 +170,7 @@ func (b *Builder) Of(ctx context.Context, token string, c blizzard.Character, ba
 		ActiveSpec:       c.ActiveSpec,
 		Level:            c.Level,
 		AverageItemLevel: c.AverageItemLevel,
-		LastLogin:        LastPlayed(c.LastLogin),
+		LastLogin:        LastPlayed(c.LastLogin, b.Zone),
 		Guild:            c.GuildName(),
 		Badge:            badge,
 	}

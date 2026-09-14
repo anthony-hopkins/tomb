@@ -48,6 +48,13 @@ type Config struct {
 	// (0) and the rank below. See GuildConfig.OfficerRank.
 	GuildOfficerRank int
 
+	// Timezone is the zone every time on the site is shown in and every
+	// time typed into a form is read in, from TOMB_TIMEZONE as an IANA name.
+	// America/New_York by default: the guild runs on Eastern time, and a
+	// named zone rather than a fixed offset so it follows daylight saving
+	// -- EDT in summer, EST in winter -- on its own.
+	Timezone *time.Location
+
 	DatabaseURL string
 
 	// SessionCookieSecure defaults to true. It may only be false for local
@@ -127,6 +134,17 @@ func LoadConfig() (Config, error) {
 		secure = parsed
 	}
 	c.SessionCookieSecure = secure
+
+	// The zone. Refused rather than defaulted when it is not a zone the
+	// database knows, because every time on the site would silently be wrong.
+	// The binary embeds the zone database (time/tzdata, in main) so this works
+	// on the distroless image, which ships none of its own.
+	zone := envOr("TOMB_TIMEZONE", "America/New_York")
+	loc, err := time.LoadLocation(zone)
+	if err != nil {
+		return Config{}, fmt.Errorf("TOMB_TIMEZONE %q is not a known zone: %w", zone, err)
+	}
+	c.Timezone = loc
 
 	// The officer threshold. Garbage is refused rather than defaulted: a typo
 	// here silently decides who may edit the calendar.

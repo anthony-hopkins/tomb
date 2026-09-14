@@ -338,3 +338,37 @@ func TestMetaIsGuildGatedNotOfficerOnly(t *testing.T) {
 	}
 	_ = strconv.Itoa // keep the import honest if assertions above change
 }
+
+// TestFormTimesAreReadInTheGuildZone: an officer types 19:30 meaning
+// Eastern; it is stored as the instant that is, shown back as 19:30, and
+// described on the trail as 19:30 EDT.
+func TestFormTimesAreReadInTheGuildZone(t *testing.T) {
+	eastern, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		t.Fatalf("America/New_York: %v", err)
+	}
+	store, audit := &memStore{}, &memAudit{}
+	a := newApp(store, audit, true)
+	a.deps.Config.Timezone = eastern
+
+	rec := post(a, true, a.create, "/app/calendar/new", "", url.Values{
+		"title": {"Raid night"}, "starts": {"2026-09-18T19:30"}, "ends": {"2026-09-18T22:00"},
+	})
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("create = %d", rec.Code)
+	}
+	// 19:30 EDT is 23:30 UTC.
+	if got := store.events[0].StartsAt.UTC(); got != time.Date(2026, 9, 18, 23, 30, 0, 0, time.UTC) {
+		t.Errorf("stored start = %v, want 23:30 UTC", got)
+	}
+	if !strings.Contains(audit.entries[0].Detail, "18 Sep 2026, 19:30 EDT to 22:00 EDT") {
+		t.Errorf("audit detail = %q", audit.entries[0].Detail)
+	}
+
+	body := get(a, true, "/app/calendar").Body.String()
+	for _, want := range []string{"19:30–22:00", "Friday, 18 Sep 2026", "All times are EDT", "Starts (EDT)"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the calendar is missing %q", want)
+		}
+	}
+}
