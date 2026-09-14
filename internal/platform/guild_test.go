@@ -127,3 +127,41 @@ func TestCharacterInGuild(t *testing.T) {
 		})
 	}
 }
+
+// TestRankOfTakesTheBestCharacter: the officer's alt does not demote them, an
+// unlisted character does not count, and the match needs the realm too.
+func TestRankOfTakesTheBestCharacter(t *testing.T) {
+	g := GuildConfig{Name: "TOMB", RealmSlug: "area-52", OfficerRank: 1}
+	roster := []blizzard.GuildMember{
+		{Name: "Main", RealmSlug: "area-52", Rank: 1},
+		{Name: "Alt", RealmSlug: "area-52", Rank: 7},
+		{Name: "Main", RealmSlug: "stormrage", Rank: 0}, // a namesake, not them
+	}
+
+	tests := []struct {
+		name string
+		have []blizzard.Character
+		want int
+	}{
+		{"officer main and trainee alt", []blizzard.Character{
+			{Name: "alt", RealmSlug: "area-52"}, {Name: "MAIN", RealmSlug: "area-52"}}, 1},
+		{"only the alt", []blizzard.Character{{Name: "Alt", RealmSlug: "area-52"}}, 7},
+		{"nothing on the roster", []blizzard.Character{{Name: "Nobody", RealmSlug: "area-52"}}, -1},
+		{"namesake on another realm is not them", []blizzard.Character{{Name: "Main", RealmSlug: "elune"}}, -1},
+		{"no characters", nil, -1},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := g.RankOf(roster, tc.have); got != tc.want {
+				t.Errorf("RankOf = %d, want %d", got, tc.want)
+			}
+		})
+	}
+
+	// And what those ranks mean.
+	for rank, want := range map[int]bool{0: true, 1: true, 2: false, 7: false, -1: false} {
+		if got := g.IsOfficer(rank); got != want {
+			t.Errorf("IsOfficer(%d) = %v, want %v", rank, got, want)
+		}
+	}
+}

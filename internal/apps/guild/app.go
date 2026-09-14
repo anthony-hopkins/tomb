@@ -230,6 +230,22 @@ type summaryView struct {
 	// Boards are the leaderboards beside the summary, in the order shown.
 	// Absent entirely until the snapshot carries member detail.
 	Boards []boardView
+
+	// RoleShare is the guild as tanks, healers and DPS: a part-to-whole of
+	// every member whose active specialisation is known. Absent until the
+	// snapshot carries member detail. Percentages sum to exactly 100.
+	RoleShare []roleShare
+	RoleTotal int
+}
+
+// roleShare is one role's slice of the guild, ready for the stacked bar:
+// its width and where it starts, both as percentages of the whole.
+type roleShare struct {
+	Role   blizzard.Role
+	Class  string // CSS slug: "tank", "healer", "dps"
+	Count  int
+	Pct    int
+	Offset int
 }
 
 // barView is one row of a horizontal bar chart.
@@ -482,12 +498,11 @@ func (a *App) refresh(token string) {
 
 // load fetches the roster and then every member's profile.
 func (a *App) load(ctx context.Context, token string) (*rosterSnapshot, error) {
-	members, err := a.deps.Blizzard.GuildRoster(ctx, token, a.deps.Guild.RealmSlug, a.deps.Guild.Name)
+	// The roster itself comes from the core's cache, which the rank check
+	// shares; this app adds the per-member detail on top. The cache has
+	// already logged a failure, so there is nothing to add here.
+	members, err := a.deps.Roster.Members(ctx, token)
 	if err != nil {
-		a.deps.Logger.Warn("guild roster unavailable",
-			"guild", a.deps.Guild.Name+"@"+a.deps.Guild.RealmSlug,
-			"outcome", blizzard.OutcomeOf(err).String(),
-		)
 		return nil, err
 	}
 	return &rosterSnapshot{
@@ -507,7 +522,7 @@ func (a *App) load(ctx context.Context, token string) (*rosterSnapshot, error) {
 // scale, a line each is a page of warnings nobody reads.
 func (a *App) details(ctx context.Context, token string, members []blizzard.GuildMember) map[string]memberDetail {
 	fetched := make([]*memberDetail, len(members))
-	b := &armory.Builder{Client: a.deps.Blizzard, Logger: a.deps.Logger}
+	b := &armory.Builder{Client: a.deps.Blizzard, Logger: a.deps.Logger, Zone: a.deps.Config.Timezone}
 
 	g, gctx := errgroup.WithContext(ctx)
 	g.SetLimit(maxConcurrentProfileFetches)
@@ -577,7 +592,7 @@ func (a *App) group(members []blizzard.GuildMember, details map[string]memberDet
 			mv.ActiveSpec = d.ActiveSpec
 			mv.AverageItemLevel = d.AverageItemLevel
 			if d.LastLogin.Unix() > 0 {
-				mv.LastLogin = armory.LastPlayed(d.LastLogin)
+				mv.LastLogin = armory.LastPlayed(d.LastLogin, a.deps.Config.Timezone)
 			}
 			mv.MythicPlusRating = d.MythicPlusRating
 			mv.Raids = d.Raids
@@ -654,15 +669,18 @@ func (a *App) summarise(members []blizzard.GuildMember, groups []rankGroup, deta
 		}
 	}
 
+	totals := map[blizzard.Role]int{}
 	for name, n := range classes {
 		b := barView{Label: name, Count: n, Class: armory.ClassSlug(name)}
 		for _, r := range blizzard.Roles {
 			if k := roles[name][r]; k > 0 {
 				b.Roles = append(b.Roles, roleCount{Role: r, Count: k})
+				totals[r] += k
 			}
 		}
 		s.Classes = append(s.Classes, b)
 	}
+	s.RoleShare, s.RoleTotal = shareOf(totals)
 	// Commonest first, then alphabetically so equal counts do not shuffle
 	// between page loads -- map iteration order is random, and a list that
 	// reorders itself on refresh looks broken.
@@ -680,6 +698,56 @@ func (a *App) summarise(members []blizzard.GuildMember, groups []rankGroup, deta
 	s.Boards = a.boards(members, details)
 
 	return s
+}
+
+// shareOf turns role totals into slices of a stacked bar whose percentages
+// sum to exactly 100.
+//
+// Rounding each share to the nearest whole percent can leave the bar at 99 or
+// 101, which shows: a gap at the end, or a slice pushed off it. Largest
+// remainder fixes that -- floor every share, then hand the leftover points to
+// the shares that lost the most in flooring -- so the numbers a member reads
+// add up, which is the first thing anyone checks on a chart of percentages.
+func shareOf(totals map[blizzard.Role]int) ([]roleShare, int) {
+	total := 0
+	for _, n := range totals {
+		total += n
+	}
+	if total == 0 {
+		return nil, 0
+	}
+
+	var shares []roleShare
+	remainders := make([]int, 0, len(blizzard.Roles))
+	assigned := 0
+	for _, r := range blizzard.Roles {
+		n := totals[r]
+		if n == 0 {
+			continue
+		}
+		exact := n * 100
+		pct := exact / total
+		shares = append(shares, roleShare{Role: r, Class: strings.ToLower(string(r)), Count: n, Pct: pct})
+		remainders = append(remainders, exact%total)
+		assigned += pct
+	}
+	for left := 100 - assigned; left > 0; left-- {
+		best := 0
+		for i := range remainders {
+			if remainders[i] > remainders[best] {
+				best = i
+			}
+		}
+		shares[best].Pct++
+		remainders[best] = -1
+	}
+
+	offset := 0
+	for i := range shares {
+		shares[i].Offset = offset
+		offset += shares[i].Pct
+	}
+	return shares, total
 }
 
 // scaleBars sets each bar's length as a percentage of the longest.
@@ -923,7 +991,7 @@ func (a *App) selectMember(r *http.Request, v *view, members []blizzard.GuildMem
 	}
 	m := members[idx]
 
-	b := &armory.Builder{Client: a.deps.Blizzard, Logger: a.deps.Logger}
+	b := &armory.Builder{Client: a.deps.Blizzard, Logger: a.deps.Logger, Zone: a.deps.Config.Timezone}
 	panel, err := b.For(
 		r.Context(), session.AccessToken,
 		blizzard.CharacterRef{Name: m.Name, RealmSlug: m.RealmSlug},

@@ -1,0 +1,90 @@
+{{define "calendar.html"}}
+{{/* The guild's schedule. Everyone reads it; the forms appear only for the
+     guild master and officers, and every write is a POST carrying the site's
+     CSRF token. Times are in the guild's zone, and the page says which. */}}
+<section class="panel calendar" aria-label="Guild calendar">
+  {{if .Editing}}
+  <h1>Edit event</h1>
+  {{else}}
+  <h1>Calendar</h1>
+  <p class="fineprint">
+    What is happening, and when. All times are {{.ZoneName}}.
+    {{if .Officer}}As an officer you can add, change and remove events; every change is recorded.{{end}}
+  </p>
+  {{end}}
+
+  {{with .Form}}
+  <form class="event-form" method="post" action="{{.Action}}">
+    <input type="hidden" name="{{$.CSRF.Field}}" value="{{$.CSRF.Token}}">
+    {{with .Error}}<p class="notice form-error" role="alert">{{.}}</p>{{end}}
+
+    <div class="form-row">
+      <label for="ev-title">Title</label>
+      <input id="ev-title" name="title" value="{{.Title}}" required maxlength="120" autocomplete="off">
+    </div>
+    <div class="form-row form-row--split">
+      <div>
+        <label for="ev-starts">Starts ({{$.ZoneName}})</label>
+        <input id="ev-starts" name="starts" type="datetime-local" value="{{.Starts}}" required>
+      </div>
+      <div>
+        <label for="ev-ends">Ends ({{$.ZoneName}}, optional)</label>
+        {{/* min is the start, so the picker offers nothing earlier. The
+             server still refuses an end at or before the start; this keeps a
+             person from being able to try. tooltip.js moves min as the start
+             is typed and adds a validity message; without it, min is what the
+             server last rendered. */}}
+        <input id="ev-ends" name="ends" type="datetime-local" value="{{.Ends}}"{{if .Starts}} min="{{.Starts}}"{{end}}>
+      </div>
+    </div>
+    <div class="form-row">
+      <label for="ev-location">Where (optional)</label>
+      <input id="ev-location" name="location" value="{{.Location}}" maxlength="120" autocomplete="off">
+    </div>
+    <div class="form-row">
+      <label for="ev-notes">Notes (optional)</label>
+      <textarea id="ev-notes" name="notes" rows="3" maxlength="2000">{{.Notes}}</textarea>
+    </div>
+    <div class="form-actions">
+      <button type="submit" class="primary">{{if $.Editing}}Save changes{{else}}Add event{{end}}</button>
+      {{if $.Editing}}<a class="form-cancel" href="{{$.Home}}">Cancel</a>{{end}}
+    </div>
+  </form>
+  {{end}}
+
+  {{if not .Editing}}
+  {{if .Unavailable}}
+  <p class="notice" role="status">The calendar could not be read just now. Try again shortly.</p>
+  {{else if not .Days}}
+  <p class="fineprint calendar-empty">Nothing scheduled yet.</p>
+  {{else}}
+  {{range .Days}}
+  <section class="cal-day" aria-label="{{.Label}}">
+    <h2 class="cal-day-label">{{.Label}}</h2>
+    <ul class="cal-events">
+      {{range .Events}}
+      <li class="cal-event">
+        <span class="cal-time">{{.Time}}</span>
+        <div class="cal-body">
+          <h3 class="cal-title">{{.Title}}</h3>
+          {{with .Location}}<p class="cal-where">{{.}}</p>{{end}}
+          {{with .Notes}}<p class="cal-notes">{{.}}</p>{{end}}
+        </div>
+        {{if $.Officer}}
+        <div class="cal-actions">
+          <a class="cal-edit" href="{{.EditPath}}">Edit</a>
+          <form method="post" action="{{$.Home}}/{{.ID}}/delete" class="cal-delete">
+            <input type="hidden" name="{{$.CSRF.Field}}" value="{{$.CSRF.Token}}">
+            <button type="submit" aria-label="Remove {{.Title}}">Remove</button>
+          </form>
+        </div>
+        {{end}}
+      </li>
+      {{end}}
+    </ul>
+  </section>
+  {{end}}
+  {{end}}
+  {{end}}
+</section>
+{{end}}

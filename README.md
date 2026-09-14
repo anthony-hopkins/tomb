@@ -61,9 +61,10 @@ It is the same panel your own characters get, because it is literally the same
 page component — so anything that improves one improves the other.
 
 Until you click someone, the panel shows the guild at a glance: how many
-characters are on the roster, how many are at max level, and the breakdown by
-class as a bar chart — with, under each class, how many of them are tanks,
-healers and DPS by their current specialisation. Beside it are three leaderboards — top item
+characters are on the roster, how many are at max level, the guild's split
+between tanks, healers and DPS, and the breakdown by class as a bar chart —
+with, under each class, how many of them are tanks, healers and DPS by their
+current specialisation. Beside it are three leaderboards — top item
 level, top Mythic+ rating, and most raid bosses down (mythic kills first, then
 heroic, then normal) — each naming the top ten, with every name a link to that
 character's Armory view. All of it is counted from the roster the site already
@@ -115,13 +116,28 @@ A few things worth knowing:
 - **Not every character has a render.** If Blizzard has never generated an image
   for one, the panel says so and shows everything else as normal.
 
+## Calendar
+
+The guild's schedule, under **Calendar** in the navigation: what is happening
+and when, by day. All times on the site — the calendar, when a character last
+played, the logs — are Eastern, the zone the guild runs on. It follows
+daylight saving on its own, so it reads EDT in summer and EST in winter.
+
+The guild master and officers can add, change and remove events; everyone else
+reads. Every change is recorded in the Logs: who, when, and what changed.
+
+## Logs (guild master and officers)
+
+Officers have a **Logs** entry in the navigation that nobody else sees or can
+open. It is the audit trail: who signed in and out, and every change to the
+calendar — what was changed, by whom, and when — newest first, filterable by
+kind. Nothing in it can be edited or removed, by anyone,
+and the database is set up to refuse it even if somebody tried.
+
 ## Coming to TOMB
 
 None of this is built yet — it is what the site is being pointed at. There is a
 **Coming Soon** page in the top navigation with the same list.
-
-**Guild calendar.** Raid nights, key pushes and transmog runs in one place, with
-sign-ups that survive being scrolled past in Discord.
 
 **Ask TOMB Bot** *(AI)*. An agent that knows *this* guild. Ask what is running
 this week, who normally tanks, what the loot rules are, or for advice on a spec

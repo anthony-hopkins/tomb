@@ -1,6 +1,7 @@
 package platform
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -24,6 +25,12 @@ import (
 // signed-in guild member, so gated app routes can be exercised.
 func sessionedCore(t *testing.T, member bool, apps ...App) (*Core, http.Handler) {
 	t.Helper()
+	return sessionedCoreWith(t, member, Config{}, apps...)
+}
+
+// sessionedCoreWith is sessionedCore with a Config on the core's Deps.
+func sessionedCoreWith(t *testing.T, member bool, cfg Config, apps ...App) (*Core, http.Handler) {
+	t.Helper()
 
 	templates, err := LoadTemplates()
 	if err != nil {
@@ -43,7 +50,7 @@ func sessionedCore(t *testing.T, member bool, apps ...App) (*Core, http.Handler)
 	}
 
 	core := &Core{
-		Deps:      Deps{Logger: discardLogger(), Blizzard: fake},
+		Deps:      Deps{Logger: discardLogger(), Blizzard: fake, Config: cfg},
 		Sessions:  &auth.SessionManager{Store: &auth.Store{}},
 		Profiles:  newFetcher(fake),
 		CSRF:      &CSRF{},
@@ -244,4 +251,228 @@ func (r *recordingApp) Routes(reg Registrar) {
 		*r.reached = true
 		_, _ = w.Write([]byte("should not happen"))
 	}))
+}
+
+// --- Rank, officers, and the officer-only gate (FR-020, FR-021) -----------------
+
+// rankedClient is the extensibility fake plus a roster, so a core built on it
+// can resolve the viewer's rank.
+type rankedClient struct {
+	*fakeClient
+	roster []blizzard.GuildMember
+}
+
+func (c *rankedClient) GuildRoster(context.Context, string, string, string) ([]blizzard.GuildMember, error) {
+	return c.roster, nil
+}
+
+// officerCore is sessionedCore with the viewer's one character on the roster
+// at the given rank.
+func officerCore(t *testing.T, rank int, apps ...App) http.Handler {
+	t.Helper()
+	return officerCoreWith(t, rank, Config{}, apps...)
+}
+
+// officerCoreWith is officerCore with a Config on the core's Deps.
+func officerCoreWith(t *testing.T, rank int, cfg Config, apps ...App) http.Handler {
+	t.Helper()
+
+	templates, err := LoadTemplates()
+	if err != nil {
+		t.Fatalf("LoadTemplates() error = %v", err)
+	}
+
+	base := &fakeClient{
+		refs: refsFor("Maintank"),
+		profileFor: func(ref blizzard.CharacterRef) (blizzard.Character, error) {
+			return memberOf(ref.Name, "TOMB"), nil
+		},
+	}
+	me := memberOf("Maintank", "TOMB")
+	fake := &rankedClient{fakeClient: base, roster: []blizzard.GuildMember{
+		{Name: "Somebody", RealmSlug: me.RealmSlug, Rank: 0},
+		{Name: me.Name, RealmSlug: me.RealmSlug, Rank: rank},
+	}}
+
+	guild := GuildConfig{Name: "TOMB", RealmSlug: "area-52", OfficerRank: 1}
+	roster := &RosterCache{Client: fake, Guild: guild, Logger: discardLogger()}
+	fetcher := &ProfileFetcher{Client: fake, Guild: guild, Logger: discardLogger(), Roster: roster}
+
+	core := &Core{
+		Deps:      Deps{Logger: discardLogger(), Blizzard: fake, Roster: roster, Config: cfg},
+		Sessions:  &auth.SessionManager{Store: &auth.Store{}},
+		Profiles:  fetcher,
+		CSRF:      &CSRF{},
+		Templates: templates,
+	}
+	core.Deps.RenderInLayout = core.RenderInLayout
+	for _, a := range apps {
+		if stub, ok := a.(*stubApp); ok {
+			stub.render = core.RenderInLayout
+		}
+	}
+
+	handler, err := Mount(core, &auth.Handlers{Logger: discardLogger()}, apps)
+	if err != nil {
+		t.Fatalf("Mount() error = %v", err)
+	}
+	// The same fake session sessionedCore injects.
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r = withSession(r, auth.Session{
+			User:        auth.User{ID: 1, BnetSub: "sub", BattleTag: "Tester#1234"},
+			AccessToken: "token",
+			ExpiresAt:   time.Now().Add(time.Hour),
+		})
+		handler.ServeHTTP(w, r)
+	})
+}
+
+func officerStub() *stubApp {
+	return &stubApp{meta: AppMeta{
+		Slug: "logs", NavLabel: "Logs", RoutePrefix: "/app/logs",
+		RequiresGuild: true, OfficerOnly: true, NavOrder: 40,
+	}, body: "the logs"}
+}
+
+// TestOfficerOnlyAppIsHiddenAndRefusedBelowRank: for a rank-5 member the Logs
+// entry is not in the navigation and the route answers with the officers page,
+// not the members page and not the app.
+func TestOfficerOnlyAppIsHiddenAndRefusedBelowRank(t *testing.T) {
+	handler := officerCore(t, 5, newStub("dashboard", "My Characters", "dash", true), officerStub())
+
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app/dashboard", nil))
+	if body := rec.Body.String(); strings.Contains(body, `href="/app/logs"`) {
+		t.Error("a rank-5 member can see the Logs entry in the navigation")
+	}
+
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app/logs", nil))
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("GET /app/logs as rank 5 = %d, want 403", rec.Code)
+	}
+	body := rec.Body.String()
+	if strings.Contains(body, "the logs") {
+		t.Error("the officer-only app rendered for a rank-5 member")
+	}
+	if !strings.Contains(body, "officers") {
+		t.Error("the refusal does not say it is about officers")
+	}
+	if strings.Contains(body, "TOMB members only") {
+		t.Error("a member below rank was told they are not a member")
+	}
+}
+
+// TestOfficerSeesAndReachesOfficerOnlyApp: rank 1 -- an officer under the
+// default threshold -- gets the entry and the page.
+func TestOfficerSeesAndReachesOfficerOnlyApp(t *testing.T) {
+	for _, rank := range []int{0, 1} {
+		handler := officerCore(t, rank, newStub("dashboard", "My Characters", "dash", true), officerStub())
+
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app/dashboard", nil))
+		if !strings.Contains(rec.Body.String(), `href="/app/logs"`) {
+			t.Errorf("rank %d: the Logs entry is missing from the navigation", rank)
+		}
+
+		rec = httptest.NewRecorder()
+		handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app/logs", nil))
+		if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "the logs") {
+			t.Errorf("rank %d: GET /app/logs = %d, want 200 with the app", rank, rec.Code)
+		}
+	}
+}
+
+// TestRankFailsClosedWithoutARoster: a member the roster cannot vouch for is
+// not an officer, however senior they may be.
+func TestRankFailsClosedWithoutARoster(t *testing.T) {
+	_, handler := sessionedCore(t, true, newStub("dashboard", "My Characters", "dash", true), officerStub())
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app/logs", nil))
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("with no roster, GET /app/logs = %d, want 403", rec.Code)
+	}
+}
+
+// TestNavigationFollowsNavOrder: the bar is ordered by NavOrder, not label.
+// "Coming Soon" sorts before "My Characters" alphabetically and must not.
+func TestNavigationFollowsNavOrder(t *testing.T) {
+	soon := newStub("coming-soon", "Coming Soon", "soon", true)
+	soon.meta.NavOrder = 20
+	dash := newStub("dashboard", "My Characters", "dash", true)
+	dash.meta.NavOrder = 10
+
+	_, handler := sessionedCore(t, true, soon, dash)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app/dashboard", nil))
+	body := rec.Body.String()
+	if strings.Index(body, `href="/app/dashboard"`) > strings.Index(body, `href="/app/coming-soon"`) {
+		t.Error("My Characters is listed after Coming Soon; navigation must follow NavOrder")
+	}
+}
+
+// TestMountRefusesOfficerOnlyWithoutGuild: officer-only means guild-gated, and
+// an app that claims one without the other is a mistake worth failing on.
+func TestMountRefusesOfficerOnlyWithoutGuild(t *testing.T) {
+	bad := &stubApp{meta: AppMeta{Slug: "x", NavLabel: "X", RoutePrefix: "/app/x", OfficerOnly: true}}
+	if _, err := Mount(testCore(t), emptyAuthHandlers(), []App{bad}); err == nil {
+		t.Error("Mount accepted an officer-only app that is not guild-gated")
+	}
+}
+
+// --- The administrator (FR-025) ---------------------------------------------
+
+// TestAdministratorPassesEveryGateWhateverTheRank: a rank-5 member configured
+// as the administrator sees and reaches the officer-only app; the same member
+// unconfigured does not.
+func TestAdministratorPassesEveryGateWhateverTheRank(t *testing.T) {
+	handler := officerCoreWith(t, 5, Config{Admin: "Tester#1234"},
+		newStub("dashboard", "My Characters", "dash", true), officerStub())
+
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app/dashboard", nil))
+	if !strings.Contains(rec.Body.String(), `href="/app/logs"`) {
+		t.Error("the administrator does not see the Logs entry")
+	}
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app/logs", nil))
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "the logs") {
+		t.Errorf("the administrator got %d from the officer-only app", rec.Code)
+	}
+
+	// Somebody else configured: nothing changes for this rank-5 member.
+	handler = officerCoreWith(t, 5, Config{Admin: "Somebody#0001"},
+		newStub("dashboard", "My Characters", "dash", true), officerStub())
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app/logs", nil))
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("a non-administrator at rank 5 got %d, want 403", rec.Code)
+	}
+}
+
+// TestAdministratorOutsideTheGuildStillGetsIn: the administrator runs the
+// site whether or not a character of theirs is in the guild.
+func TestAdministratorOutsideTheGuildStillGetsIn(t *testing.T) {
+	_, handler := sessionedCoreWith(t, false, Config{Admin: "Tester#1234"},
+		newStub("dashboard", "My Characters", "dash", true))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app/dashboard", nil))
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "dash") {
+		t.Errorf("the administrator, not in the guild, got %d", rec.Code)
+	}
+}
+
+// TestNothingSaysAdministrator: the pages an administrator sees never say so.
+// Administration is a fact about running the site, not a standing in the guild,
+// and the interface must not conflate the two.
+func TestNothingSaysAdministrator(t *testing.T) {
+	handler := officerCoreWith(t, 5, Config{Admin: "Tester#1234"},
+		newStub("dashboard", "My Characters", "dash", true), officerStub())
+	for _, path := range []string{"/app/dashboard", "/app/logs"} {
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+		if strings.Contains(strings.ToLower(rec.Body.String()), "admin") {
+			t.Errorf("%s says \"admin\" somewhere; the administrator must look like anyone else", path)
+		}
+	}
 }

@@ -35,10 +35,6 @@ type Item struct {
 // carries a date.
 var Roadmap = []Item{
 	{
-		Title: "Guild calendar",
-		Blurb: "Events and plans in one place, so raid nights stop living in Discord scrollback.",
-	},
-	{
 		Title: "Ask TOMB Bot",
 		AI:    true,
 		Blurb: "Ask about the guild, the schedule, what is running this week, or just for advice.",
@@ -79,6 +75,7 @@ func (a *App) Meta() platform.AppMeta {
 	return platform.AppMeta{
 		Slug:        "coming-soon",
 		NavLabel:    "Coming Soon",
+		NavOrder:    20, // after My Characters; the calendar and logs follow
 		RoutePrefix: "/app/coming-soon",
 		// The whole site is members-only, and a roadmap is guild business.
 		RequiresGuild: true,

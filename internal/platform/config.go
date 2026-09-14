@@ -43,7 +43,29 @@ type Config struct {
 	// and the FR-013 access check is a different path that stays live too.
 	GuildRosterTTL time.Duration
 
+	// GuildOfficerRank is the lowest rank index that still counts as an
+	// officer, from TOMB_GUILD_OFFICER_RANK. 1 by default: the guild master
+	// (0) and the rank below. See GuildConfig.OfficerRank.
+	GuildOfficerRank int
+
+	// Timezone is the zone every time on the site is shown in and every
+	// time typed into a form is read in, from TOMB_TIMEZONE as an IANA name.
+	// America/New_York by default: the guild runs on Eastern time, and a
+	// named zone rather than a fixed offset so it follows daylight saving
+	// -- EDT in summer, EST in winter -- on its own.
+	Timezone *time.Location
+
 	DatabaseURL string
+
+	// Admin identifies the site's administrator, from TOMB_ADMIN: the
+	// Battle.net account that runs the site and may use every service,
+	// whatever the guild roster says about its rank (spec 002, FR-025).
+	//
+	// Either the account's subject claim -- the stable identity key, and the
+	// form to prefer -- or a battletag, which is easier to know but which its
+	// owner can change. Empty means there is no administrator. Nothing in
+	// the interface ever says who this is.
+	Admin string
 
 	// SessionCookieSecure defaults to true. It may only be false for local
 	// plain-HTTP development (research.md D6).
@@ -122,6 +144,30 @@ func LoadConfig() (Config, error) {
 		secure = parsed
 	}
 	c.SessionCookieSecure = secure
+
+	// The zone. Refused rather than defaulted when it is not a zone the
+	// database knows, because every time on the site would silently be wrong.
+	// The binary embeds the zone database (time/tzdata, in main) so this works
+	// on the distroless image, which ships none of its own.
+	zone := envOr("TOMB_TIMEZONE", "America/New_York")
+	loc, err := time.LoadLocation(zone)
+	if err != nil {
+		return Config{}, fmt.Errorf("TOMB_TIMEZONE %q is not a known zone: %w", zone, err)
+	}
+	c.Timezone = loc
+
+	// The officer threshold. Garbage is refused rather than defaulted: a typo
+	// here silently decides who may edit the calendar.
+	c.GuildOfficerRank = 1
+	if raw := strings.TrimSpace(os.Getenv("TOMB_GUILD_OFFICER_RANK")); raw != "" {
+		n, err := strconv.Atoi(raw)
+		if err != nil || n < 0 {
+			return Config{}, fmt.Errorf("TOMB_GUILD_OFFICER_RANK must be a rank index (0 or more), got %q", raw)
+		}
+		c.GuildOfficerRank = n
+	}
+
+	c.Admin = strings.TrimSpace(os.Getenv("TOMB_ADMIN"))
 
 	// A slice, not a map, so the error lists what is missing in the same order
 	// on every start. Alphabetical, because that is the order a person scans a
