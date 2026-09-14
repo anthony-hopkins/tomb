@@ -10,13 +10,75 @@
 
 ---
 
-A guild website for TOMB. Members sign in with their Battle.net account and land
-on a dashboard showing the World of Warcraft character they most recently
-played — so you can see who is playing what without asking in Discord.
+A guild website for TOMB. Members sign in with their Battle.net account — no
+password, no separate registration — and land on their own characters, pulled
+live from Blizzard.
 
-Built as a thin Go core plus independently addable **apps**. The Character
-Dashboard is the first one; see [docs/adding-an-app.md](docs/adding-an-app.md)
-for the second.
+Built as a thin Go core plus independently addable **apps**. Two exist so far:
+the Character Dashboard and Coming Soon. Adding a third is one line in
+`cmd/tomb`; see [docs/adding-an-app.md](docs/adding-an-app.md).
+
+## What it does today
+
+**Sign in with Battle.net.** OAuth2 against Blizzard. The site never sees a
+Blizzard password — there is no password column in the schema at all — and a
+session lasts exactly as long as the Blizzard token behind it.
+
+**Members only.** Access is verified against the guild your characters actually
+belong to, read from Blizzard on every request. Nobody is added by hand, and
+somebody who leaves TOMB loses access on their next page view rather than when
+an admin remembers.
+
+**Your roster, in a side rail.** Every character on the account, most recently
+played first. Hovering one — or tabbing to it — opens its card; clicking the
+name loads it.
+
+**An Armory-style view.** The selected character as Blizzard renders it, in its
+current gear, beside its details and every equipped slot with item level and
+quality colour. It opens on whatever you played last.
+
+That render is Blizzard's own image, fetched from their API. There are no
+extracted game assets here and no 3D viewer: the site ships no JavaScript at
+all, and hosting several gigabytes of somebody else's copyrighted art to rotate
+a model was not a trade worth making. The cost is that it is a still.
+
+**Nothing is cached.** Character data is fetched from Blizzard on every view, so
+what you see is what Blizzard returned for that request — not what it said an
+hour ago.
+
+## Coming to TOMB
+
+None of the following is built. It is what the site is being pointed at, and it
+lives in the app at `/app/coming-soon` so the list stays honest about being a
+list of intentions rather than features.
+
+**Guildmates' characters.** The same Armory view for anyone in the guild — who
+has been raiding on what, who has an alt geared for the slot you are short this
+week, who has not logged in since the patch dropped.
+
+**Guild calendar.** Raid nights, key pushes and transmog runs in one place, with
+sign-ups that survive being scrolled past in Discord.
+
+**Ask TOMB Bot** *(AI)*. An agent that knows *this* guild. Ask what is running
+this week, who normally tanks, what the loot rules are, or for advice on a spec
+you have not touched in a year. It answers from the guild's own data rather than
+from World of Warcraft in general.
+
+**Combat log analysis** *(AI)*. Compare your logs against the top performers of
+your class and spec — not as a number and a ranking, but as a list of the actual
+differences, ordered by what each one costs you, with a suggested fix for each.
+
+**Gear analysis** *(AI)*. Compare your gear to the top performers and get the
+path of least resistance to your next upgrades: which slot is holding you back
+most, where the piece comes from, and how much effort it is. Prioritised, so
+crests, catalyst charges and vault picks go where they matter rather than where
+you happened to look first.
+
+> Three of those five need an agent talking to a model, and two of them want
+> live updates in the page. Both cross lines this project currently holds — no
+> JavaScript, and a Content-Security-Policy of `default-src 'none'`. Neither is
+> a blocker, but each is a deliberate amendment rather than something to
+> discover halfway through building it.
 
 ## Working on this
 
@@ -79,7 +141,7 @@ cmd/tomb/            Composition root: config, database, deps, app list, serve
 internal/platform/   The thin core — routing, sessions, guild gate, layout, health
 internal/auth/       Battle.net OAuth2 and session management
 internal/blizzard/   Blizzard API client (behind one narrow interface)
-internal/apps/       One directory per app; dashboard is the first
+internal/apps/       One directory per app: dashboard, comingsoon
 deploy/              Production Compose project, Caddyfile, VM startup and deploy scripts
 tofu/                OpenTofu: the VM, network, disks and secrets
 docs/                Adding an app, the deployment pipeline, project art
@@ -95,11 +157,18 @@ Three findings shaped the design. All three are written up with sources in
 
 **Character data is fetched live on every dashboard view.** Blizzard exposes
 `last_login_timestamp` only on the per-character profile endpoint, not on the
-account summary or the guild roster, so finding "most recently played" costs
-`1 + N` API calls for `N` characters. There is no cache by design (FR-016), so
-that cost is re-paid per view. The fan-out is bounded at 8 concurrent requests,
-well inside Blizzard's 36,000/hour and 100/second limits, and a single
-character's failure degrades to a partial-data notice rather than an error page.
+account summary or the guild roster, so ranking the roster costs `1 + N` API
+calls for `N` characters. There is no cache by design (FR-016), so that cost is
+re-paid per view. The fan-out is bounded at 8 concurrent requests, well inside
+Blizzard's 36,000/hour and 100/second limits, and a single character's failure
+degrades to a notice rather than an error page.
+
+The Armory panel adds exactly two more — the render and the equipment — and only
+for the one character on display. Fetching either per character would double a
+cost that is already re-paid on every view, which is why selecting a different
+character is a fresh request rather than something the page holds in reserve.
+Both degrade independently: losing the render still leaves the gear, losing the
+gear still leaves the character.
 
 **A session lasts exactly as long as the Blizzard token.** Battle.net issues no
 refresh token and its access tokens last about 24 hours. A longer site session
@@ -133,9 +202,16 @@ The whole stack runs as a Compose project on a single Compute Engine VM: Caddy
 for automatic TLS, the Go app, and self-hosted Postgres on its own persistent
 disk. That is a deliberate choice over managed Cloud Run plus Cloud SQL, which
 cost roughly $55/month for a database holding two small tables; this runs at
-about $17–21. Applying requires a manual workflow run, and every deploy is
-verified against the live site afterwards. Teardown is a separate, guarded,
-dry-run-by-default workflow.
+about $17–21 per environment. Applying to production requires a manual workflow
+run, and every deploy is verified against the live site afterwards — including
+that sign-in still reaches Battle.net, which no amount of "the page returned
+200" would have caught. Teardown is a separate, guarded, dry-run-by-default
+workflow.
+
+There are two environments, from one OpenTofu configuration selected by
+workspace. Develop stops itself overnight and is started by the next deploy, so
+it bills compute only while somebody is using it — roughly $4–8 a month idle
+against $17 running.
 
 See [docs/deployment.md](docs/deployment.md) for setup and
 [tofu/README.md](tofu/README.md) for what gets created and what it costs.
