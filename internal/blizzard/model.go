@@ -106,11 +106,28 @@ type EquippedItem struct {
 }
 
 // Socket is one gem socket, filled or empty.
+//
+// Jewellery is where these matter most -- rings and necks are the reliably
+// socketed slots -- but nothing here is jewellery-specific: a socket is a
+// socket wherever the game puts one.
 type Socket struct {
-	// Display is Blizzard's own line for the socket, which already reads
-	// correctly whether or not there is a gem in it.
+	// Display is Blizzard's own line, which already reads correctly whether or
+	// not there is a gem in it.
 	Display string
-	Empty   bool
+
+	// Type names the socket itself, e.g. "Prismatic Socket". It is what an
+	// empty socket has to be described by, since there is no gem to name.
+	Type string
+
+	// GemName is the gem sitting in the socket, empty when nothing is.
+	GemName string
+
+	// MediaID identifies the gem's icon, and IconURL is it once resolved. A gem
+	// is an item like any other, so it resolves through the same cache.
+	MediaID int
+	IconURL string
+
+	Empty bool
 }
 
 // ItemSet is the tier-set block: which set, how many pieces are worn, and what

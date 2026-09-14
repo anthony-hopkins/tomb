@@ -267,9 +267,15 @@ func (c *HTTPClient) CharacterEquipment(ctx context.Context, token string, ref C
 			Enchantments []displayString `json:"enchantments"`
 			Sockets      []struct {
 				DisplayString string `json:"display_string"`
-				Item          *struct {
+				SocketType    struct {
+					Name string `json:"name"`
+				} `json:"socket_type"`
+				Item *struct {
 					Name string `json:"name"`
 				} `json:"item"`
+				Media struct {
+					ID int `json:"id"`
+				} `json:"media"`
 			} `json:"sockets"`
 			Transmog     displayString `json:"transmog"`
 			Durability   displayString `json:"durability"`
@@ -334,10 +340,25 @@ func (c *HTTPClient) CharacterEquipment(ctx context.Context, token string, ref C
 			}
 		}
 		for _, so := range it.Sockets {
-			item.Sockets = append(item.Sockets, Socket{
+			socket := Socket{
 				Display: so.DisplayString,
+				Type:    so.SocketType.Name,
+				MediaID: so.Media.ID,
 				Empty:   so.Item == nil,
-			})
+			}
+			if so.Item != nil {
+				socket.GemName = so.Item.Name
+			}
+			// An empty socket has no gem to name, and Blizzard's display string
+			// for one is not reliably filled in. Say what the socket is instead
+			// of rendering a blank line.
+			if socket.Empty && socket.Display == "" {
+				socket.Display = socket.Type
+				if socket.Display == "" {
+					socket.Display = "Empty Socket"
+				}
+			}
+			item.Sockets = append(item.Sockets, socket)
 		}
 
 		if it.Set != nil {

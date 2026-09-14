@@ -9,6 +9,7 @@ package dashboard_test
 
 import (
 	"context"
+	"fmt"
 	"html"
 	"io"
 	"log/slog"
@@ -616,6 +617,66 @@ func TestGearSurvivesAMissingIcon(t *testing.T) {
 	}
 	if !strings.Contains(panel, "gear-icon-blank") {
 		t.Error("no placeholder where the icon should be, so the row will not line up")
+	}
+}
+
+// TestSocketsShowTheirGems covers jewellery, which is where sockets are usually
+// the point: a ring with a gem in it should show that gem, and a ring with an
+// open socket should show that the socket is open.
+func TestSocketsShowTheirGems(t *testing.T) {
+	fake := twoChars()
+	fake.gearFor = func(blizzard.CharacterRef) ([]blizzard.EquippedItem, error) {
+		return []blizzard.EquippedItem{
+			{
+				SlotType: "FINGER_1", SlotName: "Ring 1", Name: "Ritual Binder's Ring",
+				Quality: "EPIC", Level: 311, MediaID: 100,
+				Sockets: []blizzard.Socket{
+					{GemName: "Masterful Ysemerald", Type: "Prismatic Socket", MediaID: 900},
+					{Display: "Prismatic Socket", Type: "Prismatic Socket", Empty: true},
+				},
+			},
+			{
+				SlotType: "NECK", SlotName: "Neck", Name: "Pendant of Maleficence",
+				Quality: "EPIC", Level: 311, MediaID: 101,
+				Sockets: []blizzard.Socket{
+					{GemName: "Quick Onyx", Type: "Prismatic Socket", MediaID: 901},
+				},
+			},
+			// No sockets at all: must render without an empty gem column.
+			{SlotType: "HEAD", SlotName: "Head", Name: "Plain Helm", Level: 300, MediaID: 102},
+		}, nil
+	}
+	fake.iconFor = func(id int) (string, error) {
+		return fmt.Sprintf("https://render.worldofwarcraft.com/us/icons/56/i%d.jpg", id), nil
+	}
+
+	raw := armoryPanel(t, get(t, stack(t, fake, true), "/app/dashboard").Body.String())
+	panel := html.UnescapeString(raw)
+
+	// The gems themselves, by name and by icon.
+	for _, want := range []string{"Masterful Ysemerald", "Quick Onyx", "i900.jpg", "i901.jpg"} {
+		if !strings.Contains(panel, want) {
+			t.Errorf("the gem %q is not shown", want)
+		}
+	}
+
+	// An open socket is information, especially on jewellery, so it is drawn
+	// rather than omitted.
+	if !strings.Contains(raw, "gem-empty") {
+		t.Error("an empty socket is not shown; an unsocketed ring looks identical to a socketed one")
+	}
+
+	// Three items and three sockets, one of which is empty: five icons. The
+	// empty socket has no gem and so no media id, and must not be requested --
+	// which is the assertion, not the arithmetic.
+	if n := fake.iconCalls.Load(); n != 5 {
+		t.Errorf("made %d icon calls, want 5 (3 items + 2 gems; the empty socket has no media)", n)
+	}
+
+	// The item with no sockets must not sprout an empty gem container.
+	helm := raw[strings.Index(raw, "Plain Helm"):]
+	if i := strings.Index(helm, "</button>"); i > 0 && strings.Contains(helm[:i], "gear-gems") {
+		t.Error("an item with no sockets rendered a gem container anyway")
 	}
 }
 

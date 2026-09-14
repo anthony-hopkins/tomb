@@ -364,24 +364,43 @@ func (a *App) resolveIcons(r *http.Request, items []blizzard.EquippedItem) {
 		return
 	}
 
+	// Collect what needs an icon first -- the items, and the gems sitting in
+	// their sockets -- so both kinds fan out together under one limit rather
+	// than in two passes. A gem is an item, and resolves through the same cache.
+	type target struct {
+		mediaID int
+		assign  func(string)
+	}
+	var targets []target
+
+	for i := range items {
+		if items[i].MediaID != 0 {
+			targets = append(targets, target{items[i].MediaID, func(u string) { items[i].IconURL = u }})
+		}
+		for j := range items[i].Sockets {
+			if items[i].Sockets[j].MediaID != 0 {
+				targets = append(targets, target{
+					items[i].Sockets[j].MediaID,
+					func(u string) { items[i].Sockets[j].IconURL = u },
+				})
+			}
+		}
+	}
+
 	g, gctx := errgroup.WithContext(r.Context())
 	g.SetLimit(maxConcurrentIconFetches)
 
-	for i := range items {
-		i := i
-		if items[i].MediaID == 0 {
-			continue
-		}
+	for _, t := range targets {
 		g.Go(func() error {
-			icon, err := a.deps.Blizzard.ItemIcon(gctx, session.AccessToken, items[i].MediaID)
+			icon, err := a.deps.Blizzard.ItemIcon(gctx, session.AccessToken, t.mediaID)
 			if err != nil {
-				a.deps.Logger.Warn("item icon unavailable",
-					"media_id", items[i].MediaID,
+				a.deps.Logger.Warn("icon unavailable",
+					"media_id", t.mediaID,
 					"outcome", blizzard.OutcomeOf(err).String(),
 				)
 				return nil
 			}
-			items[i].IconURL = icon
+			t.assign(icon)
 			return nil
 		})
 	}

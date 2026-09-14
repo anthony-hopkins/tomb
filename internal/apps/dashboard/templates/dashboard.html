@@ -107,6 +107,21 @@
               {{end}}
               <span class="gear-slot">{{.Slot}}</span>
               <span class="gear-name {{.QualityClass}}">{{.Name}}</span>
+              {{if .Sockets}}
+              {{/* Sockets beside the name, as the Armory shows them: the gem's
+                   icon when one is set, an empty outline when the socket is
+                   still open. Jewellery is where this is usually the point. */}}
+              <span class="gear-gems">
+                {{range .Sockets}}
+                {{if .IconURL}}
+                <img class="gem" src="{{.IconURL}}" alt="{{.GemName}}" title="{{.GemName}}"
+                     width="16" height="16" loading="lazy">
+                {{else}}
+                <span class="gem gem-empty" title="{{.Display}}" aria-label="{{.Display}}"></span>
+                {{end}}
+                {{end}}
+              </span>
+              {{end}}
               <span class="gear-ilvl">{{if .Level}}{{.Level}}{{end}}</span>
             </button>
 
@@ -124,7 +139,11 @@
               {{range .Stats}}<p class="tt-stat">{{.}}</p>{{end}}
 
               {{range .Sockets}}
-              <p class="tt-socket{{if .Empty}} is-empty{{end}}">{{.Display}}</p>
+              <p class="tt-socket{{if .Empty}} is-empty{{end}}">
+                {{if .IconURL}}<img class="gem" src="{{.IconURL}}" alt="" width="14" height="14">{{end}}
+                {{if .GemName}}{{.GemName}}{{else}}{{.Display}}{{end}}
+                {{if and .Type .GemName}}<span class="tt-socket-type">{{.Type}}</span>{{end}}
+              </p>
               {{end}}
               {{range .Enchantments}}<p class="tt-enchant">{{.}}</p>{{end}}
 
