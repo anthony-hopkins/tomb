@@ -298,6 +298,12 @@ variable "guild_officer_rank" {
   default     = ""
 }
 
+variable "admin" {
+  description = "The site's administrator: a Battle.net account subject claim, or a battletag. Empty means none. Reaches the app as TOMB_ADMIN."
+  type        = string
+  default     = ""
+}
+
 variable "timezone" {
   description = "The IANA zone every time is shown in. Empty is the app's default, America/New_York. Reaches the app as TOMB_TIMEZONE."
   type        = string

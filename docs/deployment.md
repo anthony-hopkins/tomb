@@ -246,6 +246,7 @@ The full set the workflows read:
 | `TOMB_GUILD_RANKS` | rank names, most senior first, comma-separated — e.g. `Guild Master,Officer,Veteran,Member,Trainee`. Optional; see below | all |
 | `TOMB_GUILD_OFFICER_RANK` | the lowest rank index that still counts as an officer — may edit the calendar and read the logs. Optional; unset is `1`, the guild master and the rank below | all |
 | `TOMB_TIMEZONE` | the IANA zone every time on the site is shown and read in, e.g. `America/New_York`. Optional; unset is `America/New_York` | all |
+| `TOMB_ADMIN` | the site's administrator — the Battle.net account that may use every service whatever its guild rank. A battletag (`Name#1234`) to start; better, the account's subject claim, which the `login complete` log line shows as `sub` and which cannot be changed or reassigned. Optional; unset means none. Never shown in the interface | all |
 | `BNET_CLIENT_ID` | Battle.net client id | all |
 | `TOMB_DOMAIN` | your domain, or empty for the `sslip.io` fallback | all |
 | `ACME_EMAIL` | optional Let's Encrypt contact address | all |

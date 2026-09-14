@@ -57,6 +57,16 @@ type Config struct {
 
 	DatabaseURL string
 
+	// Admin identifies the site's administrator, from TOMB_ADMIN: the
+	// Battle.net account that runs the site and may use every service,
+	// whatever the guild roster says about its rank (spec 002, FR-025).
+	//
+	// Either the account's subject claim -- the stable identity key, and the
+	// form to prefer -- or a battletag, which is easier to know but which its
+	// owner can change. Empty means there is no administrator. Nothing in
+	// the interface ever says who this is.
+	Admin string
+
 	// SessionCookieSecure defaults to true. It may only be false for local
 	// plain-HTTP development (research.md D6).
 	SessionCookieSecure bool
@@ -156,6 +166,8 @@ func LoadConfig() (Config, error) {
 		}
 		c.GuildOfficerRank = n
 	}
+
+	c.Admin = strings.TrimSpace(os.Getenv("TOMB_ADMIN"))
 
 	// A slice, not a map, so the error lists what is missing in the same order
 	// on every start. Alphabetical, because that is the order a person scans a

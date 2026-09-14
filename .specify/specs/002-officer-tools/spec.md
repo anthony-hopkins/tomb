@@ -54,6 +54,15 @@ part of it, because the character profile does not carry rank — only the roste
   audit entry describing the change. Deleting hides an event rather than destroying
   the row, so the audit trail always has something to point at.
 
+- **FR-025 (the administrator)**: One Battle.net account MAY be configured as the
+  site's administrator, `TOMB_ADMIN`, by its subject claim (preferred: the stable
+  identity key) or its battletag. On every request the administrator is treated as
+  a member and as an officer, whatever the roster says, so every service is open
+  to them. Nothing else changes: their rank, and everything the interface draws
+  from rank, is what the roster says, and no page, card, entry or log ever says
+  who the administrator is. Administration is a fact about running the site, not
+  a standing in the guild.
+
 ## Registration and gating (constitution, Development Workflow)
 
 Calendar registers as an ordinary guild-gated app (`RequiresGuild`) and decides

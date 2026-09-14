@@ -183,7 +183,10 @@ func (h *Handlers) Callback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.Logger.Info("login complete", "user_id", user.ID)
+	// The subject claim is logged so the site's administrator can be
+	// configured by it (TOMB_ADMIN) rather than by a battletag. It is an
+	// account identifier, not a credential.
+	h.Logger.Info("login complete", "user_id", user.ID, "sub", user.BnetSub)
 	if h.Audit != nil {
 		h.Audit(ctx, "auth.login", user)
 	}

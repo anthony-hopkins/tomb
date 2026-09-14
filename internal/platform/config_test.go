@@ -4,6 +4,8 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	"github.com/anthony-hopkins/tomb/internal/auth"
 )
 
 // setEnv sets the full required environment for a test, clearing it afterwards.
@@ -155,6 +157,42 @@ func TestAPIHostOverride(t *testing.T) {
 	}
 	if cfg.APIHost != "http://127.0.0.1:9" {
 		t.Errorf("APIHost = %q, want the trailing slash trimmed", cfg.APIHost)
+	}
+}
+
+// TestAdminIsMatchedBySubjectOrBattletag: digits are a subject and must match
+// exactly; anything else is a battletag and matches without regard to case.
+func TestAdminIsMatchedBySubjectOrBattletag(t *testing.T) {
+	me := auth.User{BnetSub: "123456789", BattleTag: "Lazzloe#1149"}
+	other := auth.User{BnetSub: "987654321", BattleTag: "Someone#4321"}
+
+	tests := []struct {
+		admin     string
+		me, other bool
+	}{
+		{"", false, false},
+		{"123456789", true, false},
+		{"lazzloe#1149", true, false},
+		{"Lazzloe#1149", true, false},
+		{"Lazzloe#1150", false, false},
+		{"12345678", false, false}, // a different subject, not a prefix match
+	}
+	for _, tc := range tests {
+		c := Config{Admin: tc.admin}
+		if got := c.IsAdmin(me); got != tc.me {
+			t.Errorf("Admin=%q IsAdmin(me) = %v, want %v", tc.admin, got, tc.me)
+		}
+		if got := c.IsAdmin(other); got != tc.other {
+			t.Errorf("Admin=%q IsAdmin(other) = %v, want %v", tc.admin, got, tc.other)
+		}
+	}
+
+	t.Setenv("TOMB_ADMIN", "  Lazzloe#1149  ")
+	setEnv(t, nil)
+	t.Setenv("TOMB_ADMIN", "  Lazzloe#1149  ")
+	cfg, err := LoadConfig()
+	if err != nil || cfg.Admin != "Lazzloe#1149" {
+		t.Errorf("Admin from the environment = %q, %v; want trimmed", cfg.Admin, err)
 	}
 }
 

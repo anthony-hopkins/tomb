@@ -125,6 +125,7 @@ resource "google_compute_instance" "main" {
     tomb-guild-roster-ttl   = var.guild_roster_ttl
     tomb-guild-officer-rank = var.guild_officer_rank
     tomb-timezone           = var.timezone
+    tomb-admin              = var.admin
     tomb-db-secret          = google_secret_manager_secret.db_password.secret_id
     tomb-bnet-secret        = google_secret_manager_secret.bnet_client_secret.secret_id
 
