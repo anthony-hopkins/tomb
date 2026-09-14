@@ -218,9 +218,13 @@ type summaryView struct {
 	CapLevel int
 	CapPct   int
 
-	// Ranks and Classes are bar charts: each row is a label, a count, and the
-	// bar's length as a percentage of the longest bar.
-	Ranks   []barView
+	// Ranks is one entry per rank held, for the count in the stat tile. It is
+	// no longer drawn as a chart -- the rail's headings already say who
+	// outranks whom, and a bar per rank said it again.
+	Ranks []barView
+
+	// Classes is the class chart: each row a label, a count, and the bar's
+	// length as a percentage of the longest bar.
 	Classes []barView
 
 	// Boards are the leaderboards beside the summary, in the order shown.
@@ -638,7 +642,6 @@ func (a *App) summarise(members []blizzard.GuildMember, groups []rankGroup, deta
 		return s.Classes[i].Label < s.Classes[j].Label
 	})
 
-	scaleBars(s.Ranks)
 	scaleBars(s.Classes)
 	if s.Total > 0 {
 		s.CapPct = (s.AtCap*100 + s.Total/2) / s.Total

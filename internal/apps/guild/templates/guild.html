@@ -188,31 +188,15 @@
         </div>
       </div>
 
-      {{if .Ranks}}
-      <h3 class="summary-heading">By rank</h3>
-      {{/* One series, one hue. The label is the identity and the number sits
-           at the tip; the bar is there to be compared against its neighbours,
-           so its length is relative to the longest row, not to the total. */}}
-      <ul class="bars" aria-label="Characters by rank">
-        {{range .Ranks}}
-        <li class="bar-row">
-          <span class="bar-label">{{.Label}}</span>
-          <svg class="bar" height="10" aria-hidden="true">
-            <title>{{.Label}}: {{.Count}}</title>
-            <rect class="bar-fill" width="{{.Pct}}%" height="10" rx="4"/>
-          </svg>
-          <span class="bar-n">{{.Count}}</span>
-        </li>
-        {{end}}
-      </ul>
-      {{end}}
-
       {{if .Classes}}
       <h3 class="summary-heading">By class</h3>
       {{/* Thirteen classes is too many for colour to carry identity alone, so
            this is a labelled table with bars: the name identifies the row, and
            the bar wears the class colour every player already reads -- a
-           reinforcement, never the only channel. */}}
+           reinforcement, never the only channel. The label is the identity and
+           the number sits at the tip; the bar is there to be compared against
+           its neighbours, so its length is relative to the longest row, not
+           to the total. */}}
       <ul class="bars" aria-label="Characters by class">
         {{range .Classes}}
         <li class="bar-row">

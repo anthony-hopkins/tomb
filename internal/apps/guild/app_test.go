@@ -280,7 +280,7 @@ func TestSummaryRenders(t *testing.T) {
 
 	body := html.UnescapeString(render(t, v))
 
-	for _, want := range []string{"guild-summary", "TOMB", "Characters", "At level 90", "By rank", "By class", "Monk"} {
+	for _, want := range []string{"guild-summary", "TOMB", "Characters", "At level 90", "By class", "Monk"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("the summary panel is missing %q", want)
 		}
@@ -909,9 +909,6 @@ func TestBarsScaleToTheLongest(t *testing.T) {
 	}
 	sum := a.summarise(members, a.group(members, nil), nil)
 
-	if sum.Ranks[1].Pct != 100 || sum.Ranks[0].Pct != 25 {
-		t.Errorf("rank bars = %d%% and %d%%, want 25%% and 100%%", sum.Ranks[0].Pct, sum.Ranks[1].Pct)
-	}
 	if sum.Classes[0].Label != "Mage" || sum.Classes[0].Pct != 100 || sum.Classes[0].Class != "mage" {
 		t.Errorf("first class bar = %+v, want Mage at 100%% with slug mage", sum.Classes[0])
 	}
@@ -1028,8 +1025,7 @@ func TestOverviewRendersChartsWithoutInlineStyles(t *testing.T) {
 	for _, want := range []string{
 		`class="stat-value"`,
 		`stroke-dasharray="100 100"`, // both at the cap
-		`<rect class="bar-fill" width="100%"`,
-		`class="bar-fill cls-death-knight"`,
+		`<rect class="bar-fill cls-death-knight" width="100%"`,
 		`class="leaderboards"`,
 		"Top item level", "Top Mythic+ rating",
 		`href="?c=area-52%2fnekromoo"`,
