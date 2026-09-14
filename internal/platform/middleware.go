@@ -3,8 +3,8 @@ package platform
 import (
 	"errors"
 	"net/http"
-	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/anthony-hopkins/tomb/internal/auth"
@@ -48,40 +48,44 @@ func (s *statusRecorder) Write(b []byte) (int, error) {
 	return s.ResponseWriter.Write(b)
 }
 
+// battleNetFormActions lists the origins a sign-in submission may be redirected
+// THROUGH, not merely to.
+//
+// The chain a member actually walks is three hops:
+//
+//	POST /auth/login  ->  oauth.battle.net/authorize
+//	                  ->  us.account.battle.net/login/en/
+//
+// and a browser checks form-action against every hop, not only the first.
+// Naming oauth.battle.net alone let the first redirect through and then dropped
+// the second in silence -- the same dead-button symptom as naming none of them,
+// reached one step further along.
+//
+// A wildcard over battle.net rather than a list of hosts, for two reasons. The
+// account host is region-specific (us./eu./kr./tw., following BNET_REGION), and
+// the hops inside Blizzard's domain are Blizzard's to change; a list would need
+// editing every time they reroute, and each edit would be prompted by sign-in
+// breaking in production again. It remains a real restriction: Blizzard's own
+// domain, over HTTPS, and nowhere else.
+//
+// Note that CSP's *.battle.net matches subdomains only, never battle.net
+// itself, which is why no bare origin appears here -- nothing in the flow uses
+// one. TestCSPFormActionCoversTheWholeSignInChain holds this to the endpoint.
+var battleNetFormActions = []string{"https://*.battle.net"}
+
 // contentSecurityPolicy is assembled once, at package init.
 //
-// form-action has to name Battle.net explicitly, and the reason is not obvious.
-// The sign-in control is a form posting to /auth/login, which answers 302 to the
-// Battle.net authorize URL. Browsers check form-action against the REDIRECT
-// TARGET of a form submission, not only against the initial action, so
-// `form-action 'self'` alone lets the POST through and then silently refuses to
-// follow the redirect.
-//
-// The symptom is the worst kind: clicking "Sign in with Battle.net" does
-// nothing at all. No error page, no failed request -- the network tab shows the
-// POST succeeding with a 302, and the browser simply declines to navigate. The
-// only trace is a console violation. Sign-in is the entire front door of this
-// site (FR-001), and it was shut by a header.
-//
-// The permitted origin is derived from auth.BattleNetEndpoint rather than
-// written out again, so the policy cannot drift from the endpoint it exists to
-// permit.
-var contentSecurityPolicy = buildContentSecurityPolicy(auth.BattleNetEndpoint.AuthURL)
+// Server-rendered HTML with one local stylesheet and no JavaScript, so every
+// other directive can stay as strict as it looks.
+var contentSecurityPolicy = buildContentSecurityPolicy(battleNetFormActions)
 
-// buildContentSecurityPolicy returns the policy, permitting form submissions to
-// resolve at authURL's origin. A malformed authURL contributes no origin rather
-// than a broken directive: failing closed here costs sign-in, which is visible,
-// whereas emitting a malformed policy could silently weaken every other rule.
-func buildContentSecurityPolicy(authURL string) string {
-	formAction := "'self'"
-	if u, err := url.Parse(authURL); err == nil && u.Scheme != "" && u.Host != "" {
-		formAction += " " + u.Scheme + "://" + u.Host
-	}
+func buildContentSecurityPolicy(formActions []string) string {
+	sources := append([]string{"'self'"}, formActions...)
 
 	return "default-src 'none'; " +
 		"style-src 'self'; " +
 		"img-src 'self' https://render.worldofwarcraft.com; " +
-		"form-action " + formAction + "; " +
+		"form-action " + strings.Join(sources, " ") + "; " +
 		"base-uri 'none'; " +
 		"frame-ancestors 'none'"
 }

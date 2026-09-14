@@ -655,17 +655,24 @@ jobs:
         # /healthz, /readyz, the landing page rendering and the anonymous guild
         # gate were all green while clicking "Sign in with Battle.net" did
         # nothing whatsoever: the CSP permitted the POST to /auth/login and then
-        # forbade the 302 to oauth.battle.net, so the browser declined to
-        # navigate and showed no error at all. A plain curl follows that
-        # redirect happily, which is why nothing here noticed.
+        # forbade the redirect, so the browser declined to navigate and showed no
+        # error at all. A plain curl follows redirects happily, which is why
+        # nothing here noticed.
         #
-        # So this does what a browser does, which is the only way to catch it.
-        # form-action is enforced against the document that SUBMITS the form, so
-        # the policy comes from the landing page, and it is checked against the
-        # redirect the POST actually returns.
+        # FOLLOW THE WHOLE CHAIN, NOT THE FIRST HOP.
         #
-        # No credentials needed. Everything up to Blizzard's own login page is
-        # ours, and that is exactly the part that broke.
+        # Signing in is three hops -- /auth/login, then oauth.battle.net, then
+        # Blizzard's region-specific account host -- and a browser enforces
+        # form-action against every one of them. An earlier version of this
+        # check looked only at the first, which is precisely how the second
+        # failure got to production: permitting oauth.battle.net alone moved the
+        # dead button one redirect further along and changed nothing else.
+        #
+        # The policy is read from the DOCUMENT THAT SUBMITS THE FORM, because
+        # that is the one a browser enforces, not the POST response.
+        #
+        # No credentials are involved. Everything up to Blizzard's own login
+        # page is ours, and that is the part that keeps breaking.
         env:
           URL: ${{ needs.apply.outputs.service_url }}
         run: |
@@ -673,6 +680,17 @@ jobs:
 
           curl -sS -D /tmp/landing.h -o /dev/null --max-time 20 "$URL/"
           curl -sS -D /tmp/login.h -o /dev/null --max-time 20 -X POST "$URL/auth/login"
+
+          # Walk the redirect chain one hop at a time, recording each target.
+          # Capped, so a redirect loop at Blizzard cannot hang the deploy.
+          : > /tmp/chain.txt
+          next="$(curl -sS -o /dev/null -w '%{redirect_url}' --max-time 20 -X POST "$URL/auth/login")"
+          hops=0
+          while [ -n "$next" ] && [ "$hops" -lt 6 ]; do
+            echo "$next" >> /tmp/chain.txt
+            next="$(curl -sS -o /dev/null -w '%{redirect_url}' --max-time 20 "$next" || true)"
+            hops=$((hops + 1))
+          done
 
           python3 - <<'PY'
           import os, sys
@@ -692,27 +710,43 @@ jobs:
                           headers.setdefault(key.strip().lower(), value.strip())
               return status, headers
 
+          def permits(source, origin):
+              # The subset of CSP host-source matching this policy uses.
+              # *.battle.net matches subdomains only, never battle.net itself,
+              # and must not match evil-battle.net or battle.net.example.com.
+              if source in ("*", origin):
+                  return True
+              marker = "://*."
+              if marker not in source:
+                  return False
+              scheme, domain = source.split(marker, 1)
+              u = urlparse(origin)
+              return u.scheme == scheme and u.netloc.endswith("." + domain)
+
+          def origin_of(u):
+              p = urlparse(u)
+              return p.scheme + "://" + p.netloc
+
           site = os.environ["URL"].rstrip("/")
           problems = []
-
-          login_status, login_headers = parse("/tmp/login.h")
-          _, landing_headers = parse("/tmp/landing.h")
 
           def die(messages):
               for message in messages:
                   print("::error::" + message)
               sys.exit(1)
 
+          login_status, login_headers = parse("/tmp/login.h")
+          _, landing_headers = parse("/tmp/landing.h")
+
           if login_status != "302":
               die([f"POST /auth/login returned {login_status}, want 302. "
                    "Sign-in is not starting the OAuth flow at all."])
 
-          location = login_headers.get("location", "")
-          parsed = urlparse(location)
-          origin = parsed.scheme + "://" + parsed.netloc
+          first = login_headers.get("location", "")
+          parsed = urlparse(first)
 
           if parsed.netloc != "oauth.battle.net":
-              problems.append(f"sign-in redirects to {origin!r}, want https://oauth.battle.net")
+              problems.append(f"sign-in redirects to {origin_of(first)!r}, want https://oauth.battle.net")
 
           query = parse_qs(parsed.query)
           expected_callback = site + "/auth/callback"
@@ -725,29 +759,39 @@ jobs:
           if not (query.get("client_id") or [""])[0]:
               problems.append("no client_id on the authorize URL; BNET_CLIENT_ID is not reaching the app.")
 
-          # The browser rule. form-action does NOT fall back to default-src, so
-          # an absent directive permits the submission, while a present one must
-          # name the redirect's origin or the navigation is silently refused.
+          # form-action does NOT fall back to default-src, so an absent directive
+          # permits the submission; a present one must permit every hop.
           directives = {}
           for part in landing_headers.get("content-security-policy", "").split(";"):
               fields = part.split()
               if fields:
                   directives[fields[0].lower()] = fields[1:]
-
           form_action = directives.get("form-action")
-          if form_action is not None and origin not in form_action and "*" not in form_action:
-              problems.append(
-                  f"the landing page's CSP has form-action {form_action}, which does not permit "
-                  f"{origin}. A browser checks form-action against the REDIRECT TARGET of a form "
-                  "submission, so clicking sign-in will silently do nothing: no error page, no "
-                  "failed request, just a console violation. curl cannot see this.")
+
+          with open("/tmp/chain.txt", encoding="utf-8") as fh:
+              chain = [line.strip() for line in fh if line.strip()]
+
+          if not chain:
+              problems.append("the sign-in POST returned no redirect to follow.")
+
+          print("sign-in redirect chain:")
+          for index, hop in enumerate(chain, start=1):
+              origin = origin_of(hop)
+              allowed = form_action is None or any(permits(s, origin) for s in form_action)
+              print(f"  {index}. {origin}  {'permitted' if allowed else 'BLOCKED'}")
+              if not allowed:
+                  problems.append(
+                      f"hop {index} of the sign-in chain goes to {origin}, which the landing "
+                      f"page's CSP form-action {form_action} does not permit. A browser checks "
+                      "form-action against EVERY hop of a form submission's redirect chain, so "
+                      "sign-in will silently stop there: no error page, no failed request, just "
+                      "a console violation. curl cannot see this.")
 
           if problems:
               die(problems)
 
-          print("sign-in reaches " + origin)
-          print("  redirect_uri: " + callback)
-          print("  form-action:  " + str(form_action))
+          print("redirect_uri: " + callback)
+          print("form-action:  " + str(form_action))
           PY
 
       # Runs whatever failed above. `if: failure()` rather than `always()`: on a
