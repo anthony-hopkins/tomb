@@ -161,11 +161,16 @@ type memberView struct {
 	MythicPlusRating int
 	Raids            []blizzard.RaidProgress
 
+	// ClassSlug paints the name in the class's colour; see armory.ClassSlug.
+	ClassSlug string
+
 	// Rank is the label of the rank this character holds, repeated onto the
 	// member so the card can name it. The heading above the group says it too,
 	// but a card that opens over other groups should not make you look up to
-	// find out which rank it belongs to.
-	Rank string
+	// find out which rank it belongs to. RankIndex is the number behind it,
+	// for the authority mark: 0 is the guild master, 1 the officers.
+	Rank      string
+	RankIndex int
 
 	// Key identifies this character in a URL, so the name on its card can link
 	// to its own Armory panel -- the same affordance, and the same ?c= shape,
@@ -243,8 +248,13 @@ type boardEntry struct {
 	Rank  int
 	Name  string
 	Key   string // for the link to the member's Armory panel
-	Class string // CSS slug, for the swatch beside the name
+	Class string // CSS slug; the name is written in the class's colour
 	Value string // already formatted: "311", "2431", "3M · 8H"
+
+	// RankIndex is the member's guild rank, for the authority mark beside
+	// the name: a guild master or officer stays recognisable on a board
+	// where the rank headings of the rail are not there to say so.
+	RankIndex int
 }
 
 // boardSize is how many places each leaderboard shows. Ten, because five was
@@ -497,13 +507,14 @@ func (a *App) group(members []blizzard.GuildMember, details map[string]memberDet
 		g := &groups[len(groups)-1]
 
 		mv := memberView{
-			Name:  m.Name,
-			Realm: m.RealmLabel(),
-			Level: m.Level,
-			Class: m.Class,
-			Guild: a.deps.Guild.Name,
-			Rank:  g.Label,
-			Key:   memberKey(m),
+			Name:      m.Name,
+			Realm:     m.RealmLabel(),
+			Level:     m.Level,
+			Class:     m.Class,
+			Guild:     a.deps.Guild.Name,
+			Rank:      g.Label,
+			RankIndex: m.Rank,
+			Key:       memberKey(m),
 		}
 		if d, ok := details[mv.Key]; ok {
 			// The profile carries the realm's display name; the roster only
@@ -523,6 +534,8 @@ func (a *App) group(members []blizzard.GuildMember, details map[string]memberDet
 			mv.MythicPlusRating = d.MythicPlusRating
 			mv.Raids = d.Raids
 		}
+		// After the detail, which may have supplied the class the roster lacked.
+		mv.ClassSlug = armory.ClassSlug(mv.Class)
 		g.Members = append(g.Members, mv)
 	}
 	return groups
@@ -564,7 +577,7 @@ func (a *App) summarise(members []blizzard.GuildMember, groups []rankGroup, deta
 	}
 
 	for name, n := range classes {
-		s.Classes = append(s.Classes, barView{Label: name, Count: n, Class: cssSlug(name)})
+		s.Classes = append(s.Classes, barView{Label: name, Count: n, Class: armory.ClassSlug(name)})
 	}
 	// Commonest first, then alphabetically so equal counts do not shuffle
 	// between page loads -- map iteration order is random, and a list that
@@ -598,12 +611,6 @@ func scaleBars(bars []barView) {
 	for i := range bars {
 		bars[i].Pct = (bars[i].Count*100 + longest/2) / longest
 	}
-}
-
-// cssSlug turns a display name into a class-name fragment: lowercase, spaces
-// to hyphens. "Death Knight" becomes "death-knight".
-func cssSlug(name string) string {
-	return strings.ReplaceAll(strings.ToLower(name), " ", "-")
 }
 
 // contender is one member with what the boards rank them on, pulled together
@@ -673,11 +680,12 @@ func (a *App) boards(members []blizzard.GuildMember, details map[string]memberDe
 		b := boardView{Title: title}
 		for i, c := range pool[:min(boardSize, len(pool))] {
 			b.Entries = append(b.Entries, boardEntry{
-				Rank:  i + 1,
-				Name:  c.member.Name,
-				Key:   memberKey(c.member),
-				Class: cssSlug(c.detail.Class),
-				Value: value(c),
+				Rank:      i + 1,
+				Name:      c.member.Name,
+				Key:       memberKey(c.member),
+				Class:     armory.ClassSlug(c.detail.Class),
+				Value:     value(c),
+				RankIndex: c.member.Rank,
 			})
 		}
 		out = append(out, b)

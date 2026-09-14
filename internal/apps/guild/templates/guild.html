@@ -33,7 +33,7 @@
            tabindex, the same card revealed by the same :hover and
            :focus-within rules, and the same linked name inside it. */}}
       <li class="character-row{{if .Selected}} is-selected{{end}}" tabindex="0"{{if .Selected}} aria-current="true"{{end}}>
-        <span class="row-name">{{.Name}}</span>
+        <span class="row-name class-name cls-{{.ClassSlug}}">{{template "rank-mark" .RankIndex}}{{.Name}}</span>
         <span class="row-meta">
           {{if .Level}}{{.Level}}{{end}}{{if .Class}} {{.Class}}{{end}}
           {{if .Realm}}&middot; {{.Realm}}{{end}}
@@ -46,7 +46,7 @@
              zero. */}}
         <div class="character-card popover" role="group" aria-label="{{.Name}} details">
           {{if .Rank}}<p class="badge">{{.Rank}}</p>{{end}}
-          <h2><a href="?c={{.Key}}">{{.Name}}</a></h2>
+          <h2><a class="class-name cls-{{.ClassSlug}}" href="?c={{.Key}}">{{template "rank-mark" .RankIndex}}{{.Name}}</a></h2>
           <p class="realm">
             {{.Realm}}{{if .Guild}} &middot; &lt;{{.Guild}}&gt;{{end}}
           </p>
@@ -204,8 +204,7 @@
           {{range .Entries}}
           <li>
             <span class="board-rank">{{.Rank}}</span>
-            <span class="swatch cls-{{.Class}}" aria-hidden="true"></span>
-            <a href="?c={{.Key}}">{{.Name}}</a>
+            <a class="class-name cls-{{.Class}}" href="?c={{.Key}}">{{template "rank-mark" .RankIndex}}{{.Name}}</a>
             <span class="board-n">{{.Value}}</span>
           </li>
           {{end}}
@@ -233,4 +232,21 @@
     {{end}}
   </div>
 </div>
+{{end}}
+
+{{/* rank-mark: the authority mark before a name. The dot is the rank index.
+
+     A gold crown for the guild master and a silver shield for the officers
+     -- two different marks that both read as standing, so the two ranks are
+     told apart at a glance without either looking like the other. Everyone
+     else gets nothing: the mark means something only if most names lack it.
+
+     Inline SVG rather than an image: the CSP allows no data: URIs and no
+     third-party hosts, and a twenty-byte path is smaller than a request. */}}
+{{define "rank-mark"}}
+{{- if eq . 0 -}}
+<svg class="rank-mark rank-mark--gm" viewBox="0 0 16 16" role="img" aria-label="Guild Master"><title>Guild Master</title><path d="M1.5 5 4.5 8 8 2.5 11.5 8l3-3-1.2 7.5H2.7z"/><path d="M2.5 13.5h11V15h-11z"/></svg>
+{{- else if eq . 1 -}}
+<svg class="rank-mark rank-mark--officer" viewBox="0 0 16 16" role="img" aria-label="Officer"><title>Officer</title><path d="M8 1.2 13.5 3v4.2c0 3.6-2.3 6.4-5.5 7.6C4.8 13.6 2.5 10.8 2.5 7.2V3z"/></svg>
+{{- end -}}
 {{end}}

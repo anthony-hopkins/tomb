@@ -973,7 +973,14 @@ func TestDashboardCardsShowSeasonStanding(t *testing.T) {
 
 	body := html.UnescapeString(get(t, stack(t, fake, true), "/app/dashboard").Body.String())
 
-	for _, want := range []string{"Mythic+ rating", "2431", "Liberation of Undermine", "3/8 M"} {
+	for _, want := range []string{
+		"Mythic+ rating", "2431", "Liberation of Undermine", "3/8 M",
+		// Names wear their class colour: in the rail, on the card, and on the
+		// Armory panel's heading.
+		`class="row-name class-name cls-warrior"`,
+		`<a class="class-name cls-warrior" href=`,
+		`<h2 class="class-name cls-warrior">Nekromoo</h2>`,
+	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("the dashboard is missing %q", want)
 		}

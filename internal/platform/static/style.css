@@ -250,7 +250,7 @@ main:has(.dashboard) { max-width: none; }
   background: rgba(74, 249, 231, 0.1);
   border-left-color: var(--accent);
 }
-.character-row.is-selected .row-name { color: var(--accent); }
+.character-row.is-selected .row-name { color: var(--cls-text, var(--accent)); }
 
 .character-row:hover,
 .character-row:focus,
@@ -468,7 +468,7 @@ main:has(.dashboard) { max-width: none; }
 .character-card h2 { margin: 0; font-size: 1.25rem; }
 
 .character-card h2 a {
-  color: var(--ink);
+  color: var(--cls-text, var(--ink));
   text-decoration: none;
   border-bottom: 1px solid transparent;
 }
@@ -947,7 +947,7 @@ main:has(.dashboard) { max-width: none; }
 }
 
 .bar-fill {
-  fill: var(--accent);
+  fill: var(--cls, var(--accent));
   transform-origin: 0 50%;
   animation: bar-grow 700ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
 }
@@ -962,22 +962,52 @@ main:has(.dashboard) { max-width: none; }
   color: var(--ink);
 }
 
-/* Class colours, as the game paints them. They sit on the marks only -- a bar
-   fill, a swatch -- never on text, where most of them would fail contrast on
-   this surface. The label beside each mark is what carries identity. */
-.cls-death-knight { fill: #c41e3a; background-color: #c41e3a; }
-.cls-demon-hunter { fill: #a330c9; background-color: #a330c9; }
-.cls-druid        { fill: #ff7c0a; background-color: #ff7c0a; }
-.cls-evoker       { fill: #33937f; background-color: #33937f; }
-.cls-hunter       { fill: #aad372; background-color: #aad372; }
-.cls-mage         { fill: #3fc7eb; background-color: #3fc7eb; }
-.cls-monk         { fill: #00ff98; background-color: #00ff98; }
-.cls-paladin      { fill: #f48cba; background-color: #f48cba; }
-.cls-priest       { fill: #ffffff; background-color: #ffffff; }
-.cls-rogue        { fill: #fff468; background-color: #fff468; }
-.cls-shaman       { fill: #0070dd; background-color: #0070dd; }
-.cls-warlock      { fill: #8788ee; background-color: #8788ee; }
-.cls-warrior      { fill: #c69b3a; background-color: #c69b3a; }
+/* Class colours, as the game paints them, in two roles.
+
+   --cls is the canonical hue, for marks: bar fills and swatches, where
+   contrast against the surface is not at stake.
+
+   --cls-text is what a NAME is written in. Every character name on the site
+   wears its class colour, the way the game does it, so the rail, the cards,
+   the leaderboards and the Armory panel all agree with the class chart. It is
+   the same hue except where the canonical one cannot clear 4.5:1 on the
+   panel -- Death Knight, Demon Hunter and Shaman -- which are lightened just
+   far enough to pass, exactly as the item quality colours were. Every
+   --cls-text is held to that by TestClassTextColoursClearAA; do not add or
+   change one without running it. */
+.cls-death-knight { --cls: #c41e3a; --cls-text: #e14b62; }
+.cls-demon-hunter { --cls: #a330c9; --cls-text: #c06adf; }
+.cls-druid        { --cls: #ff7c0a; --cls-text: #ff7c0a; }
+.cls-evoker       { --cls: #33937f; --cls-text: #33937f; }
+.cls-hunter       { --cls: #aad372; --cls-text: #aad372; }
+.cls-mage         { --cls: #3fc7eb; --cls-text: #3fc7eb; }
+.cls-monk         { --cls: #00ff98; --cls-text: #00ff98; }
+.cls-paladin      { --cls: #f48cba; --cls-text: #f48cba; }
+.cls-priest       { --cls: #ffffff; --cls-text: #ffffff; }
+.cls-rogue        { --cls: #fff468; --cls-text: #fff468; }
+.cls-shaman       { --cls: #0070dd; --cls-text: #2f8cff; }
+.cls-warlock      { --cls: #8788ee; --cls-text: #8788ee; }
+.cls-warrior      { --cls: #c69b3a; --cls-text: #c69b3a; }
+
+/* A name in its class's colour. Falls back to whatever the element would
+   have been, so an unknown class reads as ordinary text rather than vanishing. */
+.class-name { color: var(--cls-text, inherit); }
+
+/* The authority mark before a guild master's or an officer's name: a gold
+   crown, a silver shield. Sized to the text it sits beside, so it scales with
+   a rail row and a card heading alike. Gold and silver are their own tokens,
+   not class colours: the mark says standing, and the name beside it still
+   says class. */
+.rank-mark {
+  width: 0.95em;
+  height: 0.95em;
+  margin-right: 0.3em;
+  vertical-align: -0.1em;
+  flex: none;
+}
+
+.rank-mark--gm      { fill: #f2c14e; }
+.rank-mark--officer { fill: #b8c7d3; }
 
 /* ---- Leaderboards -------------------------------------------------------- */
 
@@ -999,7 +1029,7 @@ main:has(.dashboard) { max-width: none; }
 
 .board-list li {
   display: grid;
-  grid-template-columns: 1.25rem 0.6rem minmax(0, 1fr) auto;
+  grid-template-columns: 1.25rem minmax(0, 1fr) auto;
   gap: 0.55rem;
   align-items: center;
   font-size: 0.9rem;
@@ -1015,16 +1045,8 @@ main:has(.dashboard) { max-width: none; }
 /* The first place gets the accent; the rest read as the list they are. */
 .board-list li:first-child .board-rank { color: var(--accent); font-weight: 600; }
 
-.swatch {
-  display: inline-block;
-  width: 0.6rem;
-  height: 0.6rem;
-  border-radius: 50%;
-  background-color: var(--muted);
-}
-
 .board-list a {
-  color: var(--ink);
+  color: var(--cls-text, var(--ink));
   text-decoration: none;
   overflow: hidden;
   text-overflow: ellipsis;

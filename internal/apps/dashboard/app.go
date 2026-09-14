@@ -98,6 +98,9 @@ type characterView struct {
 	LastLogin        string
 	Guild            string
 
+	// ClassSlug paints the name in the class's colour; see armory.ClassSlug.
+	ClassSlug string
+
 	// MythicPlusRating and Raids are this season's standing. Zero and empty
 	// when the character has none; the card leaves those rows out.
 	MythicPlusRating int
@@ -197,6 +200,7 @@ func newCharacterView(c blizzard.Character) characterView {
 		Name:             c.Name,
 		RealmName:        c.RealmLabel(),
 		Class:            c.Class,
+		ClassSlug:        armory.ClassSlug(c.Class),
 		ActiveSpec:       c.ActiveSpec,
 		Level:            c.Level,
 		AverageItemLevel: c.AverageItemLevel,
