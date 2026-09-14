@@ -2,6 +2,7 @@ package platform
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/anthony-hopkins/tomb/internal/blizzard"
 )
@@ -16,6 +17,39 @@ type GuildConfig struct {
 	// Ranks names the guild's ranks by index, most senior first. Empty is fine;
 	// see RankLabel.
 	Ranks []string
+
+	// OfficerRank is the lowest rank index that still counts as an officer:
+	// a member at this rank or above (a smaller index) may edit the calendar
+	// and read the logs (FR-020). 1 by default -- the guild master and the
+	// rank below, which is what "officer" means in most guilds.
+	OfficerRank int
+}
+
+// IsOfficer reports whether a rank index is an officer's. A negative rank is
+// "unknown" and is never an officer: the door fails closed.
+func (g GuildConfig) IsOfficer(rank int) bool {
+	return rank >= 0 && rank <= g.OfficerRank
+}
+
+// RankOf reports the best rank -- the lowest index -- any of the characters
+// holds on the roster, or -1 when none of them is on it.
+//
+// Best rather than first: somebody whose main is an officer and whose alt is a
+// trainee is an officer. Matched on name and realm, both case-insensitively,
+// because a name is only unique within a realm.
+func (g GuildConfig) RankOf(roster []blizzard.GuildMember, characters []blizzard.Character) int {
+	best := -1
+	for _, c := range characters {
+		for _, m := range roster {
+			if !strings.EqualFold(m.Name, c.Name) || !strings.EqualFold(m.RealmSlug, c.RealmSlug) {
+				continue
+			}
+			if best < 0 || m.Rank < best {
+				best = m.Rank
+			}
+		}
+	}
+	return best
 }
 
 // RankLabel names a rank index.
@@ -48,6 +82,13 @@ type GuildMembership struct {
 	// MatchedCharacter is the character that established membership, for
 	// diagnostics. Nil when IsMember is false.
 	MatchedCharacter *blizzard.Character
+
+	// Rank is the member's best guild rank index, 0 being the guild master,
+	// or -1 when it could not be resolved -- no roster, or none of their
+	// characters on it. IsOfficer is Rank against the configured threshold,
+	// and is false whenever Rank is unknown (FR-020).
+	Rank      int
+	IsOfficer bool
 }
 
 // Derive reports whether any of the supplied characters belongs to the
@@ -61,8 +102,8 @@ type GuildMembership struct {
 func (g GuildConfig) Derive(characters []blizzard.Character) GuildMembership {
 	for i := range characters {
 		if characters[i].InGuild(g.Name, g.RealmSlug) {
-			return GuildMembership{IsMember: true, MatchedCharacter: &characters[i]}
+			return GuildMembership{IsMember: true, MatchedCharacter: &characters[i], Rank: -1}
 		}
 	}
-	return GuildMembership{}
+	return GuildMembership{Rank: -1}
 }

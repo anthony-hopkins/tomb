@@ -41,6 +41,10 @@ type ProfileFetcher struct {
 	Client blizzard.Client
 	Guild  GuildConfig
 	Logger *slog.Logger
+
+	// Roster resolves a member's rank (FR-020). Nil leaves every member at an
+	// unknown rank, which is to say nobody is an officer.
+	Roster *RosterCache
 }
 
 // Fetch retrieves every character for the account and derives membership.
@@ -128,7 +132,31 @@ func (f *ProfileFetcher) Fetch(ctx context.Context, accessToken string) (Profile
 
 	p.Membership = f.Guild.Derive(p.Characters)
 	f.logDenial(refs, p)
+	f.resolveRank(ctx, accessToken, &p)
 	return p, nil
+}
+
+// resolveRank fills in a member's rank from the held roster.
+//
+// A member only; a non-member has no rank to resolve. The roster is what the
+// cache holds, so this costs no call on the request. Should the roster be
+// unavailable the rank stays unknown and the member is not an officer: the
+// failure closes the door, because the alternative is an outage at Blizzard
+// quietly promoting everyone.
+func (f *ProfileFetcher) resolveRank(ctx context.Context, accessToken string, p *Profile) {
+	if !p.Membership.IsMember || f.Roster == nil {
+		return
+	}
+	roster, err := f.Roster.Members(ctx, accessToken)
+	if err != nil {
+		if f.Logger != nil {
+			f.Logger.Warn("rank unresolved: roster unavailable",
+				"outcome", blizzard.OutcomeOf(err).String())
+		}
+		return
+	}
+	p.Membership.Rank = f.Guild.RankOf(roster, p.Characters)
+	p.Membership.IsOfficer = f.Guild.IsOfficer(p.Membership.Rank)
 }
 
 // logDenial records why a member was turned away.

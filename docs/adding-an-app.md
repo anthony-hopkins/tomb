@@ -93,9 +93,17 @@ mistake here should never reach a request.
   a.deps.RenderInLayout(w, r, http.StatusOK, "Roster", template.HTML(body.String()))
   ```
 
-- **Navigation.** Built from your `Meta()`, sorted by label. Nothing to
-  register. An empty `NavLabel` leaves the app out of the navigation without
-  making it unreachable.
+- **Navigation.** Built from your `Meta()`, in `NavOrder` (lowest first; ties
+  by label). Nothing to register. An empty `NavLabel` leaves the app out of the
+  navigation without making it unreachable. My Characters is 10 and Coming
+  Soon 20; pick a number that puts yours where it belongs.
+- **Officers.** For a page only the guild master and officers should see, set
+  `OfficerOnly: true` alongside `RequiresGuild: true`. The core hides it from
+  everyone else's navigation and answers their requests with the officers-only
+  page. For a page everyone sees but only officers may change, read
+  `platform.ProfileFrom(r.Context()).Membership.IsOfficer` in your handler.
+  The threshold is `TOMB_GUILD_OFFICER_RANK` (default 1: the guild master and
+  the rank below).
 - **Home.** One app may set `Home: true`; that is where `/` sends a signed-in
   viewer, where sign-in lands, and where the brand link goes. Give that app an
   empty `NavLabel`, or it is listed beside a link that already goes there.
