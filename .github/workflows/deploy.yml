@@ -54,10 +54,17 @@ on:
   workflow_dispatch:
     inputs:
       environment:
-        description: "Which environment to act on"
+        # `auto` means "whatever this branch deploys to": main -> production,
+        # develop -> develop. It is the default because the alternative made the
+        # obvious action wrong -- dispatching Deploy from main and pressing run
+        # targeted develop, which the branch guard then correctly refused with
+        # "develop may only be deployed from the develop branch, not main".
+        # A guard firing on the intended action is a broken default, not a
+        # working guard. Choosing an environment explicitly still enforces it.
+        description: "Which environment to act on (auto = whatever this branch deploys to)"
         type: choice
-        options: [develop, production]
-        default: develop
+        options: [auto, develop, production]
+        default: auto
       skip_build:
         description: "Reuse the image already deployed (infrastructure-only change)"
         type: boolean
@@ -113,9 +120,20 @@ jobs:
         run: |
           set -euo pipefail
 
+          # What a branch deploys to, in one place, so `auto` and the push
+          # paths below cannot drift apart.
+          branch_environment() {
+            if [ "$BRANCH" = "develop" ]; then echo develop; else echo production; fi
+          }
+
           if [ "$EVENT" = "workflow_dispatch" ]; then
             environment="$INPUT_ENVIRONMENT"
             apply="$INPUT_APPLY"
+
+            if [ "$environment" = "auto" ] || [ -z "$environment" ]; then
+              environment="$(branch_environment)"
+              echo "::notice::environment=auto resolved to $environment from branch $BRANCH"
+            fi
           elif [ "$BRANCH" = "develop" ]; then
             # Develop applies itself. That is what a lower environment is for.
             environment="develop"
