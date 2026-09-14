@@ -2,25 +2,33 @@
 {{if .Partial}}
 <p class="notice" role="status">
   Some of your characters could not be loaded from Blizzard just now, so this
-  may not be your very latest character.
+  roster may be incomplete.
 </p>
 {{end}}
 
-{{with .Character}}
-<section class="character-card">
-  <h1>{{.Name}}</h1>
-  <p class="realm">{{.RealmName}}</p>
-  <dl>
-    <dt>Class</dt>
-    <dd>{{.Class}}{{if .ActiveSpec}} <span class="spec">({{.ActiveSpec}})</span>{{end}}</dd>
-    <dt>Level</dt>
-    <dd>{{.Level}}</dd>
-    <dt>Average item level</dt>
-    <dd>{{.AverageItemLevel}}</dd>
-    <dt>Last played</dt>
-    <dd>{{.LastLogin}}</dd>
-  </dl>
-</section>
+{{if .Characters}}
+<h1 class="roster-heading">My Characters</h1>
+<ul class="roster">
+  {{range .Characters}}
+  <li class="character-card{{if .Current}} is-current{{end}}">
+    {{if .Current}}<p class="badge">Most recently played</p>{{end}}
+    <h2>{{.Name}}</h2>
+    <p class="realm">
+      {{.RealmName}}{{if .Guild}} &middot; &lt;{{.Guild}}&gt;{{end}}
+    </p>
+    <dl>
+      <dt>Class</dt>
+      <dd>{{.Class}}{{if .ActiveSpec}} <span class="spec">({{.ActiveSpec}})</span>{{end}}</dd>
+      <dt>Level</dt>
+      <dd>{{.Level}}</dd>
+      <dt>Average item level</dt>
+      <dd>{{.AverageItemLevel}}</dd>
+      <dt>Last played</dt>
+      <dd>{{.LastLogin}}</dd>
+    </dl>
+  </li>
+  {{end}}
+</ul>
 {{else}}
 <section class="panel">
   <h1>No characters found</h1>

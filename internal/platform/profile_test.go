@@ -163,11 +163,46 @@ func TestFetchPartialFailure(t *testing.T) {
 	if len(got.Characters) != 2 {
 		t.Errorf("got %d characters, want the 2 that succeeded", len(got.Characters))
 	}
-	if !got.Partial {
-		t.Error("Partial = false, want true so the page can say data is incomplete")
+	// A 404 means the character is gone, not that the fetch went wrong. It is
+	// dropped, but it does not make the roster "incomplete" -- see
+	// TestFetchUnavailableIsPartial for the case that does.
+	if got.Partial {
+		t.Error("Partial = true for a character Blizzard reports as gone; that is a stale " +
+			"account-summary entry, not a failure worth warning the member about")
 	}
 	if !got.Membership.IsMember {
 		t.Error("IsMember = false; membership should still derive from the successes")
+	}
+}
+
+// TestFetchUnavailableIsPartial keeps the distinction honest: a character
+// Blizzard could not serve right now probably will next time, so the member is
+// told the roster is incomplete. Only a 404 -- the character no longer exists
+// -- passes silently.
+func TestFetchUnavailableIsPartial(t *testing.T) {
+	fake := &fakeClient{
+		refs: refsFor("Good", "Flaky"),
+		profileFor: func(ref blizzard.CharacterRef) (blizzard.Character, error) {
+			if ref.Name == "Flaky" {
+				return blizzard.Character{}, &blizzard.APIError{
+					Endpoint:   "character-profile-summary",
+					StatusCode: http.StatusInternalServerError,
+					Outcome:    blizzard.OutcomeUnavailable,
+				}
+			}
+			return memberOf(ref.Name, "TOMB"), nil
+		},
+	}
+
+	got, err := newFetcher(fake).Fetch(context.Background(), "token")
+	if err != nil {
+		t.Fatalf("Fetch() error = %v, want the surviving character instead", err)
+	}
+	if len(got.Characters) != 1 {
+		t.Errorf("got %d characters, want the 1 that succeeded", len(got.Characters))
+	}
+	if !got.Partial {
+		t.Error("Partial = false for a transient Blizzard failure; the member should be told")
 	}
 }
 

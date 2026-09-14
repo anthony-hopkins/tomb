@@ -150,12 +150,33 @@ func TestShowsMostRecentCharacter(t *testing.T) {
 	}
 
 	body := rec.Body.String()
-	if !strings.Contains(body, "Newest") {
-		t.Error("dashboard does not show the most recently played character (FR-006)")
+
+	// The roster shows every character now, so presence is no longer the
+	// question -- ORDER and the current marking are.
+	if !strings.Contains(body, "Newest") || !strings.Contains(body, "Older") {
+		t.Error("the roster should list every character on the account")
 	}
-	if strings.Contains(body, ">Older<") {
-		t.Error("dashboard shows a stale character as the current one")
+	if strings.Index(body, "Newest") > strings.Index(body, "Older") {
+		t.Error("the most recently played character should lead the roster (FR-006)")
 	}
+
+	// The first card must be the current one, and must say so. Splitting on the
+	// card class is what lets this assert about a specific card rather than the
+	// page as a whole, where both names appear either way.
+	cards := strings.Split(body, `class="character-card`)
+	if len(cards) < 3 {
+		t.Fatalf("expected two character cards, found %d", len(cards)-1)
+	}
+	if !strings.Contains(cards[1], "Newest") {
+		t.Error("the first card is not the most recently played character")
+	}
+	if !strings.Contains(cards[1], "is-current") {
+		t.Error("the most recently played card is not marked as current")
+	}
+	if strings.Contains(cards[2], "is-current") {
+		t.Error("a stale character is marked as the current one")
+	}
+
 	for _, want := range []string{"Area 52", "Warrior", "62", "410"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("dashboard is missing required field value %q (FR-007)", want)
@@ -215,7 +236,9 @@ func TestAnonymousRedirected(t *testing.T) {
 	}
 }
 
-// TestPartialDataNotice is research.md D9's user-visible half.
+// TestPartialDataNotice is research.md D9's user-visible half: a character that
+// Blizzard could not serve right now is worth telling the member about, because
+// it will probably be there next time.
 func TestPartialDataNotice(t *testing.T) {
 	fake := &fakeBlizzard{
 		refs: refs("Good", "Broken"),
@@ -223,8 +246,8 @@ func TestPartialDataNotice(t *testing.T) {
 			if ref.Name == "Broken" {
 				return blizzard.Character{}, &blizzard.APIError{
 					Endpoint:   "character-profile-summary",
-					StatusCode: http.StatusNotFound,
-					Outcome:    blizzard.OutcomeNotFound,
+					StatusCode: http.StatusInternalServerError,
+					Outcome:    blizzard.OutcomeUnavailable,
 				}
 			}
 			return character(ref.Name, time.Now(), 80, 600, "TOMB"), nil
@@ -242,6 +265,46 @@ func TestPartialDataNotice(t *testing.T) {
 	}
 	if !strings.Contains(body, "could not be loaded") {
 		t.Error("the page does not tell the member the data is incomplete")
+	}
+}
+
+// TestGoneCharactersAreIgnoredSilently is the other half of that judgement.
+//
+// Blizzard's account summary keeps listing characters that have been deleted,
+// renamed or transferred off the account, and their profiles answer 404 forever
+// after. Three of them turn up on a real account here. Treating that as
+// "incomplete data" puts a warning on the page on every single visit, for
+// characters that are never coming back -- which is how a notice becomes
+// wallpaper and stops being read when it matters.
+func TestGoneCharactersAreIgnoredSilently(t *testing.T) {
+	fake := &fakeBlizzard{
+		refs: refs("Live", "Deleted"),
+		profileFor: func(ref blizzard.CharacterRef) (blizzard.Character, error) {
+			if ref.Name == "Deleted" {
+				return blizzard.Character{}, &blizzard.APIError{
+					Endpoint:   "character-profile-summary",
+					StatusCode: http.StatusNotFound,
+					Outcome:    blizzard.OutcomeNotFound,
+				}
+			}
+			return character(ref.Name, time.Now(), 80, 600, "TOMB"), nil
+		},
+	}
+
+	rec := get(t, stack(t, fake, true), "/app/dashboard")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app/dashboard = %d, want 200", rec.Code)
+	}
+
+	body := rec.Body.String()
+	if !strings.Contains(body, "Live") {
+		t.Error("the character that does exist is not shown")
+	}
+	if strings.Contains(body, "Deleted") {
+		t.Error("a character Blizzard reports as gone was rendered anyway")
+	}
+	if strings.Contains(body, "could not be loaded") {
+		t.Error("a character that no longer exists produced an incomplete-data notice")
 	}
 }
 

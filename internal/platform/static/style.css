@@ -101,14 +101,44 @@ button:hover { border-color: var(--accent); }
 .fineprint { color: var(--muted); font-size: 0.85rem; }
 .fineprint a { color: var(--accent); }
 
-.character-card .realm { color: var(--muted); margin-top: -0.5rem; }
+/* Roster: every character on the account, most recently played first. */
+.roster-heading { margin-bottom: 1rem; }
+
+.roster {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  /* auto-fill, not auto-fit: a single character keeps a card's width instead
+     of stretching to the full page, which looked like a layout bug. */
+  grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
+  gap: 1rem;
+}
+
+/* The card already carries the panel treatment; inside the grid it only needs
+   to stop collapsing to its content. */
+.roster .character-card { margin: 0; height: 100%; }
+
+.character-card.is-current { border-color: var(--accent); }
+
+.character-card .badge {
+  margin: 0 0 0.5rem;
+  color: var(--accent);
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.character-card h2 { margin: 0; font-size: 1.25rem; }
+
+.character-card .realm { color: var(--muted); margin-top: 0.25rem; }
 .character-card .spec { color: var(--muted); }
 
 .character-card dl {
   display: grid;
   grid-template-columns: max-content 1fr;
   gap: 0.4rem 1.5rem;
-  margin: 1.25rem 0 0;
+  margin: 1rem 0 0;
 }
 
 .character-card dt { color: var(--muted); }
