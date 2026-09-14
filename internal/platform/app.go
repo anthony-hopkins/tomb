@@ -87,6 +87,11 @@ type Deps struct {
 	// the rail. One copy, one refresh, however many readers.
 	Roster *RosterCache
 
+	// Audit is the trail (FR-022). An app that changes anything records what
+	// it changed here; the Logs app reads it. Append-only by interface and
+	// by database rule alike.
+	Audit AuditStore
+
 	// RenderInLayout draws an app's rendered body inside the shared page
 	// shell, so apps own their own content without owning the site chrome,
 	// navigation, or the signed-in header. The core populates this.

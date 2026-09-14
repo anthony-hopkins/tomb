@@ -18,6 +18,7 @@ import (
 	"github.com/anthony-hopkins/tomb/internal/apps/comingsoon"
 	"github.com/anthony-hopkins/tomb/internal/apps/dashboard"
 	"github.com/anthony-hopkins/tomb/internal/apps/guild"
+	"github.com/anthony-hopkins/tomb/internal/apps/logs"
 	"github.com/anthony-hopkins/tomb/internal/auth"
 	"github.com/anthony-hopkins/tomb/internal/blizzard"
 	"github.com/anthony-hopkins/tomb/internal/platform"
@@ -76,6 +77,7 @@ func run() error {
 	bnet.RosterTTL = cfg.GuildRosterTTL
 
 	store := &auth.Store{DB: db}
+	audit := &platform.AuditLog{DB: db}
 	sessions := &auth.SessionManager{Store: store, CookieSecure: cfg.SessionCookieSecure}
 	csrf := &platform.CSRF{Secure: cfg.SessionCookieSecure}
 
@@ -105,6 +107,7 @@ func run() error {
 			Config:   cfg,
 			Guild:    guildCfg,
 			Roster:   roster,
+			Audit:    audit,
 		},
 		Sessions: sessions,
 		Profiles: &platform.ProfileFetcher{
@@ -128,6 +131,17 @@ func run() error {
 		Gate:     core,
 		Renderer: core,
 		CSRF:     csrf,
+		// Sign-ins and sign-outs go on the trail (FR-022). A failure to record
+		// one is logged, never surfaced: nobody is refused entry because the
+		// note-taking failed.
+		Audit: func(ctx context.Context, action string, u auth.User) {
+			err := audit.Record(ctx, platform.AuditEntry{
+				UserID: u.ID, BattleTag: u.BattleTag, Action: action, Subject: u.BattleTag,
+			})
+			if err != nil {
+				logger.Error("record audit entry", "action", action, "error", err)
+			}
+		},
 	}
 
 	characterDashboard, err := dashboard.New(core.Deps)
@@ -145,6 +159,11 @@ func run() error {
 		return fmt.Errorf("build coming soon app: %w", err)
 	}
 
+	auditLogs, err := logs.New(core.Deps)
+	if err != nil {
+		return fmt.Errorf("build logs app: %w", err)
+	}
+
 	// The single registration point. Adding an app means adding one line here
 	// and nothing else (Principle II, contracts/app-registration.md).
 	//
@@ -156,6 +175,7 @@ func run() error {
 		guildOverview,
 		characterDashboard,
 		comingSoon,
+		auditLogs,
 	}
 
 	handler, err := platform.Mount(core, authHandlers, apps)

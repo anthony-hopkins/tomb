@@ -1186,3 +1186,66 @@ main:has(.dashboard) { max-width: none; }
   .bar-fill,
   .ring-fill { animation: none; }
 }
+
+/* ---------------------------------------------------------------------------
+   The Logs page: the audit trail as a table, for officers.
+   ------------------------------------------------------------------------ */
+
+.log-kinds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 1rem 0;
+}
+
+.log-kind {
+  font-size: 0.85rem;
+  padding: 0.3rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+a.log-kind:hover,
+a.log-kind:focus { border-color: var(--accent); }
+
+.log-kind.is-selected {
+  background: var(--accent);
+  border-color: transparent;
+  color: #002b26;
+  font-weight: 600;
+}
+
+/* Tables may be wider than the page; the wrapper scrolls, the page does not. */
+.log-scroll { overflow-x: auto; }
+
+.log-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+}
+
+.log-table th,
+.log-table td {
+  text-align: left;
+  vertical-align: top;
+  padding: 0.45rem 0.6rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.log-table th {
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.log-when   { white-space: nowrap; color: var(--muted); font-variant-numeric: tabular-nums; }
+.log-who    { white-space: nowrap; }
+.log-action code { color: var(--accent-2); font-size: 0.85em; }
+.log-detail { color: var(--muted); }
+
+.log-older { margin: 1rem 0 0; }
+.log-older a { color: var(--accent); }
