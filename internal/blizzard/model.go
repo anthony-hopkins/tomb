@@ -2,6 +2,8 @@ package blizzard
 
 import (
 	"context"
+	"net/url"
+	"sort"
 	"strings"
 	"time"
 )
@@ -18,6 +20,185 @@ type Client interface {
 
 	// CharacterProfile fetches one character's full summary.
 	CharacterProfile(ctx context.Context, token string, ref CharacterRef) (Character, error)
+
+	// CharacterMedia fetches the images Blizzard renders for a character.
+	//
+	// Separate from the profile because it is a separate endpoint and a
+	// separate cost: fetched for the one character being looked at, never for
+	// the whole roster, which would double the per-view fan-out (FR-016).
+	CharacterMedia(ctx context.Context, token string, ref CharacterRef) (Media, error)
+
+	// CharacterEquipment fetches what a character is currently wearing. Same
+	// cost argument as CharacterMedia: one character, never the roster.
+	CharacterEquipment(ctx context.Context, token string, ref CharacterRef) ([]EquippedItem, error)
+
+	// ItemIcon resolves an item's media id to an icon URL.
+	//
+	// One call per item, which is the expensive one -- a full set of gear is
+	// sixteen. Implementations are expected to cache: an item's icon never
+	// changes, so this is static game data rather than character data and
+	// FR-016's ban on caching does not reach it.
+	ItemIcon(ctx context.Context, token string, mediaID int) (string, error)
+}
+
+// IconHosts are the origins item icons may be served from.
+//
+// Checked rather than trusted, because an icon on an origin the page's
+// Content-Security-Policy does not allow fails the way CSP failures always do:
+// silently, with a blank space and a console line nobody is reading. Dropping
+// the URL here gives the same blank space but with the reason recorded.
+var IconHosts = []string{"render.worldofwarcraft.com"}
+
+// AllowedIconURL reports whether an icon URL is one the page can actually load.
+func AllowedIconURL(raw string) bool {
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme != "https" {
+		return false
+	}
+	for _, h := range IconHosts {
+		if u.Host == h || strings.HasSuffix(u.Host, "."+h) {
+			return true
+		}
+	}
+	return false
+}
+
+// EquippedItem is one filled gear slot.
+type EquippedItem struct {
+	// SlotType is Blizzard's key, e.g. "HEAD" or "FINGER_1". Kept because the
+	// display name is localised and the key is what ordering keys off.
+	SlotType string
+	SlotName string
+
+	Name string
+
+	// Quality is Blizzard's key, e.g. "EPIC". The colours players read gear by
+	// are a presentation concern, so only the key travels this far.
+	Quality string
+
+	// Level is the item level of this piece, which is the number people
+	// actually compare.
+	Level int
+
+	// Everything below is the tooltip. Blizzard returns most of it already
+	// formatted and localised as display strings -- "+152 Strength",
+	// "Item Level 311", "Binds when picked up" -- so these are carried through
+	// verbatim rather than reassembled from parts. Reformatting them here would
+	// mean reimplementing Blizzard's own number formatting and localisation,
+	// badly, in order to arrive back where we started.
+	Subclass     string   // "Plate", "Sword"
+	Binding      string   // "Binds when picked up"
+	Armor        string   // "1,234 Armor"
+	Stats        []string // "+152 Strength", "+3,002 Stamina"
+	Enchantments []string // "Enchanted: Council's Intellect"
+	Sockets      []Socket
+	Transmog     string // "Transmogrified to: Shadowghast Helm"
+	Durability   string // "Durability 100 / 100"
+	Requirement  string // "Requires Level 90"
+	Set          *ItemSet
+
+	// MediaID identifies the item's icon. Resolving it to a URL is a separate
+	// call per item, so it is fetched lazily and cached -- an item's icon never
+	// changes, which is why caching it does not run into FR-016's ban on
+	// caching character data. This is item data, not character data.
+	MediaID int
+	IconURL string
+}
+
+// Socket is one gem socket, filled or empty.
+//
+// Jewellery is where these matter most -- rings and necks are the reliably
+// socketed slots -- but nothing here is jewellery-specific: a socket is a
+// socket wherever the game puts one.
+type Socket struct {
+	// Display is Blizzard's own line, which already reads correctly whether or
+	// not there is a gem in it.
+	Display string
+
+	// Type names the socket itself, e.g. "Prismatic Socket". It is what an
+	// empty socket has to be described by, since there is no gem to name.
+	Type string
+
+	// GemName is the gem sitting in the socket, empty when nothing is.
+	GemName string
+
+	// MediaID identifies the gem's icon, and IconURL is it once resolved. A gem
+	// is an item like any other, so it resolves through the same cache.
+	MediaID int
+	IconURL string
+
+	Empty bool
+}
+
+// ItemSet is the tier-set block: which set, how many pieces are worn, and what
+// the bonuses do.
+type ItemSet struct {
+	// Display is "Baleful Grave-Knight's Crucible (3/5)".
+	Display string
+	Pieces  []SetPiece
+	Effects []string
+}
+
+// SetPiece is one item in a set, and whether this character is wearing it.
+// Blizzard tells us which are equipped, which is what lets the tooltip grey out
+// the ones that are not -- the same way the game does.
+type SetPiece struct {
+	Name     string
+	Equipped bool
+}
+
+// slotOrder is the order the game lays gear out in, which is the order players
+// expect to read it in. Anything Blizzard returns that is not listed here sorts
+// to the end rather than vanishing, so a new slot in a future patch shows up
+// unordered instead of not at all.
+var slotOrder = map[string]int{
+	"HEAD": 0, "NECK": 1, "SHOULDER": 2, "BACK": 3, "CHEST": 4,
+	"SHIRT": 5, "TABARD": 6, "WRIST": 7,
+	"HANDS": 8, "WAIST": 9, "LEGS": 10, "FEET": 11,
+	"FINGER_1": 12, "FINGER_2": 13, "TRINKET_1": 14, "TRINKET_2": 15,
+	"MAIN_HAND": 16, "OFF_HAND": 17, "RANGED": 18,
+}
+
+// SortEquipment puts gear into the game's own slot order, in place.
+func SortEquipment(items []EquippedItem) {
+	sort.SliceStable(items, func(i, j int) bool {
+		return slotRank(items[i].SlotType) < slotRank(items[j].SlotType)
+	})
+}
+
+func slotRank(slot string) int {
+	if rank, ok := slotOrder[slot]; ok {
+		return rank
+	}
+	return len(slotOrder)
+}
+
+// Media is the set of images Blizzard renders for a character, in its current
+// gear, on its own servers.
+//
+// This is how the site shows a character without shipping a 3D viewer: no
+// extracted game assets, no WebGL, no JavaScript, and nothing to re-extract
+// every patch. The trade is that these are stills -- there is no rotating it.
+type Media struct {
+	// Avatar is a square bust. Inset is waist-up on a scene background.
+	Avatar string
+	Inset  string
+
+	// Main is full-body on a background; MainRaw is the same cut out, with
+	// transparency, which is the one that suits a dark page.
+	Main    string
+	MainRaw string
+}
+
+// Hero is the largest usable image, preferring the cut-out so the character
+// sits on the page's own background rather than in a grey box.
+func (m Media) Hero() string {
+	for _, candidate := range []string{m.MainRaw, m.Main, m.Inset, m.Avatar} {
+		if candidate != "" {
+			return candidate
+		}
+	}
+	return ""
 }
 
 // Identity is the subset of /userinfo this platform uses.

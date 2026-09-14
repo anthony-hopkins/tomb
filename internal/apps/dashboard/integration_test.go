@@ -9,11 +9,13 @@ package dashboard_test
 
 import (
 	"context"
+	"fmt"
 	"html"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -27,6 +29,13 @@ import (
 
 // fakeBlizzard implements the narrow client interface with no network access.
 type fakeBlizzard struct {
+	mediaFor   func(ref blizzard.CharacterRef) (blizzard.Media, error)
+	mediaCalls atomic.Int32
+	gearFor    func(ref blizzard.CharacterRef) ([]blizzard.EquippedItem, error)
+	gearCalls  atomic.Int32
+	iconFor    func(mediaID int) (string, error)
+	iconCalls  atomic.Int32
+
 	refs       []blizzard.CharacterRef
 	profileFor func(ref blizzard.CharacterRef) (blizzard.Character, error)
 	calls      atomic.Int32
@@ -43,6 +52,36 @@ func (f *fakeBlizzard) AccountCharacters(context.Context, string) ([]blizzard.Ch
 func (f *fakeBlizzard) CharacterProfile(_ context.Context, _ string, ref blizzard.CharacterRef) (blizzard.Character, error) {
 	f.calls.Add(1)
 	return f.profileFor(ref)
+}
+
+// mediaFor lets a test drive the render lookup; nil means "no images", which
+// is the path a character Blizzard has never rendered takes.
+func (f *fakeBlizzard) CharacterMedia(_ context.Context, _ string, ref blizzard.CharacterRef) (blizzard.Media, error) {
+	f.mediaCalls.Add(1)
+	if f.mediaFor == nil {
+		return blizzard.Media{}, nil
+	}
+	return f.mediaFor(ref)
+}
+
+// gearFor lets a test drive the equipment lookup; nil means "no gear", which
+// is what a character Blizzard cannot serve equipment for returns.
+func (f *fakeBlizzard) CharacterEquipment(_ context.Context, _ string, ref blizzard.CharacterRef) ([]blizzard.EquippedItem, error) {
+	f.gearCalls.Add(1)
+	if f.gearFor == nil {
+		return nil, nil
+	}
+	return f.gearFor(ref)
+}
+
+// iconFor drives icon resolution; iconCalls counts them, which is how the
+// caching claim gets tested rather than asserted.
+func (f *fakeBlizzard) ItemIcon(_ context.Context, _ string, mediaID int) (string, error) {
+	f.iconCalls.Add(1)
+	if f.iconFor == nil {
+		return "", nil
+	}
+	return f.iconFor(mediaID)
 }
 
 var _ blizzard.Client = (*fakeBlizzard)(nil)
@@ -258,45 +297,386 @@ func TestCharacterListIsANavigationPane(t *testing.T) {
 	}
 }
 
-// TestRoadmapIsListed covers the placeholder section at the foot of the
-// dashboard. It is copy rather than behaviour, but it is copy that makes
-// promises, so a silently empty list is worth catching.
-func TestRoadmapIsListed(t *testing.T) {
-	fake := &fakeBlizzard{
-		refs: refs("Main"),
-		profileFor: func(ref blizzard.CharacterRef) (blizzard.Character, error) {
-			return character(ref.Name, time.Now(), 80, 600, "TOMB"), nil
+// twoChars is a fake with a clear most-recent winner and a clear runner-up.
+func twoChars() *fakeBlizzard {
+	now := time.Now()
+	set := map[string]blizzard.Character{
+		"Newest": character("Newest", now.Add(-1*time.Hour), 90, 700, "TOMB"),
+		"Older":  character("Older", now.Add(-72*time.Hour), 80, 600, "TOMB"),
+	}
+	return &fakeBlizzard{
+		refs: refs("Newest", "Older"),
+		profileFor: func(r blizzard.CharacterRef) (blizzard.Character, error) {
+			return set[r.Name], nil
+		},
+		mediaFor: func(r blizzard.CharacterRef) (blizzard.Media, error) {
+			return blizzard.Media{
+				MainRaw: "https://render.worldofwarcraft.com/" + r.Name + "-main-raw.png",
+			}, nil
 		},
 	}
+}
 
-	raw := get(t, stack(t, fake, true), "/app/dashboard").Body.String()
+// armoryPanel returns just the Armory section, so assertions are about the
+// panel rather than the page -- every name appears in the rail regardless.
+func armoryPanel(t *testing.T, body string) string {
+	t.Helper()
 
-	// Unescaped, so this asserts what a member reads rather than how
-	// html/template chose to encode it -- the apostrophe in "Guildmates'"
-	// arrives as &#39;, which is correct and not what the test is about.
-	body := html.UnescapeString(raw)
+	i := strings.Index(body, `<section class="armory"`)
+	if i < 0 {
+		t.Fatal("no Armory panel was rendered")
+	}
+	j := strings.Index(body[i:], "</section>")
+	return body[i : i+j]
+}
 
-	for _, want := range []string{
-		"Guildmates' characters",
-		"Guild calendar",
-		"Ask TOMB Bot",
-		"Combat log analysis",
-		"Gear analysis",
-	} {
-		if !strings.Contains(body, want) {
-			t.Errorf("the roadmap is missing %q", want)
+// TestArmoryDefaultsToTheMostRecent is the landing state: no URL parameter, so
+// the panel shows the character FR-006 ranks first.
+func TestArmoryDefaultsToTheMostRecent(t *testing.T) {
+	fake := twoChars()
+	body := get(t, stack(t, fake, true), "/app/dashboard").Body.String()
+
+	panel := armoryPanel(t, body)
+	if !strings.Contains(panel, "Newest") {
+		t.Error("the Armory panel does not show the most recently played character")
+	}
+	if strings.Contains(panel, "Older") {
+		t.Error("the Armory panel shows a character that was not selected")
+	}
+	if !strings.Contains(panel, "Newest-main-raw.png") {
+		t.Error("the panel is missing Blizzard's render of the character")
+	}
+
+	// Exactly one media call: for the character on display, never the roster.
+	// Fetching renders for every character would double the per-view fan-out
+	// that FR-016 already re-pays on every single view.
+	if n := fake.mediaCalls.Load(); n != 1 {
+		t.Errorf("made %d character-media calls, want exactly 1", n)
+	}
+}
+
+// TestArmorySwitchesByLink is the interaction: clicking a name in a card loads
+// that character. It is a plain GET, so it is bookmarkable and needs no script.
+func TestArmorySwitchesByLink(t *testing.T) {
+	fake := twoChars()
+	handler := stack(t, fake, true)
+
+	// Find the link the card actually renders and follow it, rather than
+	// asserting a URL this test made up. html/template percent-encodes the
+	// slash in the key, so the href is not the string you would write by hand
+	// -- and following it is what proves the encoding round-trips.
+	body := get(t, handler, "/app/dashboard").Body.String()
+
+	var href string
+	for _, m := range regexp.MustCompile(`href="(\?c=[^"]+)"`).FindAllStringSubmatch(body, -1) {
+		candidate := html.UnescapeString(m[1])
+		if strings.Contains(strings.ToLower(candidate), "older") {
+			href = candidate
+		}
+	}
+	if href == "" {
+		t.Fatal("no switch link for Older; the character names in the card must be links")
+	}
+
+	panel := armoryPanel(t, get(t, handler, "/app/dashboard"+href).Body.String())
+	if !strings.Contains(panel, "Older") {
+		t.Error("following the link did not switch the Armory panel")
+	}
+	if strings.Contains(panel, "Newest") {
+		t.Error("the panel still shows the default character after switching")
+	}
+	if !strings.Contains(panel, "Older-main-raw.png") {
+		t.Error("the render did not follow the selection")
+	}
+}
+
+// TestArmoryFallsBackForAnUnknownCharacter covers the stale bookmark: a
+// character that has since been deleted, renamed or transferred away.
+//
+// It shows the member their main rather than a 404, because an error page is a
+// worse answer to "this character is gone" than simply showing the one they
+// actually play.
+func TestArmoryFallsBackForAnUnknownCharacter(t *testing.T) {
+	fake := twoChars()
+
+	rec := get(t, stack(t, fake, true), "/app/dashboard?c=area-52/ghost")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET with an unknown character = %d, want 200", rec.Code)
+	}
+	if !strings.Contains(armoryPanel(t, rec.Body.String()), "Newest") {
+		t.Error("an unknown character did not fall back to the most recently played")
+	}
+}
+
+// TestArmorySurvivesAMissingRender: the page is about the character's data,
+// which is already in hand. Losing the picture must not lose the page.
+func TestArmorySurvivesAMissingRender(t *testing.T) {
+	fake := twoChars()
+	fake.mediaFor = func(blizzard.CharacterRef) (blizzard.Media, error) {
+		return blizzard.Media{}, &blizzard.APIError{
+			Endpoint: "character-media",
+			Outcome:  blizzard.OutcomeUnavailable,
 		}
 	}
 
-	// The AI entries are tagged; the other two are not. Getting this backwards
-	// would advertise a calendar as AI-driven, which is a claim rather than a
-	// styling detail.
-	if n := strings.Count(raw, `class="tag-ai"`); n != 3 {
-		t.Errorf("found %d AI tags, want 3 (Ask TOMB Bot, combat log, gear)", n)
+	rec := get(t, stack(t, fake, true), "/app/dashboard")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET with no render available = %d, want 200", rec.Code)
 	}
 
-	if !strings.Contains(body, "None of this is built yet") {
-		t.Error("the roadmap does not say it is unbuilt; that is the one thing it must say")
+	panel := armoryPanel(t, rec.Body.String())
+	if !strings.Contains(panel, "Newest") {
+		t.Error("the character's data vanished along with its image")
+	}
+	if !strings.Contains(panel, "no render for this character") {
+		t.Error("the panel does not say why the image is absent")
+	}
+}
+
+// TestArmoryShowsEquippedGear covers the gear list: present, in the game's slot
+// order, coloured by quality.
+func TestArmoryShowsEquippedGear(t *testing.T) {
+	fake := twoChars()
+	// Deliberately out of order, to prove the view sorts rather than trusting
+	// whatever order Blizzard happened to return.
+	fake.gearFor = func(blizzard.CharacterRef) ([]blizzard.EquippedItem, error) {
+		items := []blizzard.EquippedItem{
+			{SlotType: "MAIN_HAND", SlotName: "Main Hand", Name: "Big Axe", Quality: "LEGENDARY", Level: 720},
+			{SlotType: "HEAD", SlotName: "Head", Name: "Sturdy Helm", Quality: "EPIC", Level: 710},
+			{SlotType: "CHEST", SlotName: "Chest", Name: "Plate Chest", Quality: "RARE", Level: 700},
+		}
+		blizzard.SortEquipment(items)
+		return items, nil
+	}
+
+	panel := armoryPanel(t, get(t, stack(t, fake, true), "/app/dashboard").Body.String())
+
+	for _, want := range []string{"Sturdy Helm", "Plate Chest", "Big Axe", "720", "710", "700"} {
+		if !strings.Contains(panel, want) {
+			t.Errorf("the gear list is missing %q", want)
+		}
+	}
+
+	// Head before Chest before Main Hand: the order the game lays gear out in.
+	head, chest, hand := strings.Index(panel, "Sturdy Helm"),
+		strings.Index(panel, "Plate Chest"), strings.Index(panel, "Big Axe")
+	if !(head < chest && chest < hand) {
+		t.Error("gear is not in the game's slot order")
+	}
+
+	for _, class := range []string{"q-epic", "q-rare", "q-legendary"} {
+		if !strings.Contains(panel, class) {
+			t.Errorf("no %s colour class; gear is read by quality colour", class)
+		}
+	}
+
+	// One equipment call, for the character on display, never the roster.
+	if n := fake.gearCalls.Load(); n != 1 {
+		t.Errorf("made %d equipment calls, want exactly 1", n)
+	}
+}
+
+// TestUnknownQualityIsNotTurnedIntoAClass: the quality string comes from
+// Blizzard and ends up on the page, so it is mapped through a known set rather
+// than interpolated. An unrecognised value renders uncoloured instead of
+// inventing a class name out of remote input.
+func TestUnknownQualityIsNotTurnedIntoAClass(t *testing.T) {
+	fake := twoChars()
+	fake.gearFor = func(blizzard.CharacterRef) ([]blizzard.EquippedItem, error) {
+		return []blizzard.EquippedItem{
+			{SlotType: "HEAD", SlotName: "Head", Name: "Odd Hat", Quality: "MYTHIC_PLUS_SOMETHING", Level: 1},
+		}, nil
+	}
+
+	panel := armoryPanel(t, get(t, stack(t, fake, true), "/app/dashboard").Body.String())
+
+	if !strings.Contains(panel, "Odd Hat") {
+		t.Error("an item with an unknown quality was dropped instead of shown plain")
+	}
+	if strings.Contains(panel, "MYTHIC_PLUS_SOMETHING") {
+		t.Error("the raw quality string reached the page")
+	}
+}
+
+// TestArmorySurvivesMissingGear: the same rule as a missing render. Everything
+// above the gear list is already in hand, so losing the list must not lose it.
+func TestArmorySurvivesMissingGear(t *testing.T) {
+	fake := twoChars()
+	fake.gearFor = func(blizzard.CharacterRef) ([]blizzard.EquippedItem, error) {
+		return nil, &blizzard.APIError{Endpoint: "character-equipment", Outcome: blizzard.OutcomeUnavailable}
+	}
+
+	rec := get(t, stack(t, fake, true), "/app/dashboard")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET with no equipment available = %d, want 200", rec.Code)
+	}
+	if !strings.Contains(armoryPanel(t, rec.Body.String()), "Newest") {
+		t.Error("the character's details vanished along with its gear")
+	}
+}
+
+// TestItemTooltipCarriesTheDetail covers the tooltip contents: the display
+// strings Blizzard already returns, rendered rather than discarded.
+func TestItemTooltipCarriesTheDetail(t *testing.T) {
+	fake := twoChars()
+	fake.gearFor = func(blizzard.CharacterRef) ([]blizzard.EquippedItem, error) {
+		return []blizzard.EquippedItem{{
+			SlotType: "HEAD", SlotName: "Head", Name: "Baleful Casque",
+			Quality: "EPIC", Level: 311, Subclass: "Plate", MediaID: 42,
+			Binding:     "Binds when picked up",
+			Stats:       []string{"+152 Strength", "+3,002 Stamina"},
+			Sockets:     []blizzard.Socket{{Display: "Sockets: Ruby", Empty: false}},
+			Transmog:    "Transmogrified to: Shadowghast Helm",
+			Durability:  "Durability 100 / 100",
+			Requirement: "Requires Level 90",
+			Set: &blizzard.ItemSet{
+				Display: "Grave-Knight's Crucible (3/5)",
+				Pieces: []blizzard.SetPiece{
+					{Name: "Baleful Casque", Equipped: true},
+					{Name: "Baleful Gibbets", Equipped: false},
+				},
+				Effects: []string{"(4) Set: something considerable happens"},
+			},
+		}}, nil
+	}
+	fake.iconFor = func(int) (string, error) {
+		return "https://render.worldofwarcraft.com/us/icons/56/inv_helm.jpg", nil
+	}
+
+	raw := armoryPanel(t, get(t, stack(t, fake, true), "/app/dashboard").Body.String())
+
+	// Unescaped, so these assert what a member reads. html/template encodes
+	// "+" as &#43; and "'" as &#39;, both correctly, and neither is what this
+	// test is about.
+	panel := html.UnescapeString(raw)
+
+	for _, want := range []string{
+		"+152 Strength", "+3,002 Stamina",
+		"Transmogrified to: Shadowghast Helm",
+		"Binds when picked up", "Sockets: Ruby",
+		"Grave-Knight's Crucible (3/5)",
+		"(4) Set: something considerable happens",
+		"Durability 100 / 100", "Requires Level 90",
+		"inv_helm.jpg",
+	} {
+		if !strings.Contains(panel, want) {
+			t.Errorf("the tooltip is missing %q", want)
+		}
+	}
+
+	// A set piece the character is NOT wearing is shown greyed, not hidden --
+	// the game shows the whole set so you can see what is left to collect.
+	if !strings.Contains(raw, "is-missing") {
+		t.Error("an unequipped set piece is not marked as missing")
+	}
+}
+
+// TestIconsAreFetchedOncePerItem is the claim that makes icons affordable: an
+// item's icon never changes, so it is cached and the per-view cost disappears
+// after the first look.
+func TestIconsAreFetchedOncePerItem(t *testing.T) {
+	fake := twoChars()
+	fake.gearFor = func(blizzard.CharacterRef) ([]blizzard.EquippedItem, error) {
+		return []blizzard.EquippedItem{
+			{SlotType: "HEAD", SlotName: "Head", Name: "Helm", MediaID: 1},
+			{SlotType: "CHEST", SlotName: "Chest", Name: "Chest", MediaID: 2},
+			{SlotType: "HANDS", SlotName: "Hands", Name: "Gloves", MediaID: 0},
+		}, nil
+	}
+	fake.iconFor = func(id int) (string, error) {
+		return "https://render.worldofwarcraft.com/us/icons/56/i.jpg", nil
+	}
+
+	get(t, stack(t, fake, true), "/app/dashboard")
+
+	// Two items carry a media id; the third does not and must not be asked for.
+	if n := fake.iconCalls.Load(); n != 2 {
+		t.Errorf("made %d icon calls, want 2 (the item without a media id is skipped)", n)
+	}
+}
+
+// TestGearSurvivesAMissingIcon: an item without a picture is still an item.
+func TestGearSurvivesAMissingIcon(t *testing.T) {
+	fake := twoChars()
+	fake.gearFor = func(blizzard.CharacterRef) ([]blizzard.EquippedItem, error) {
+		return []blizzard.EquippedItem{
+			{SlotType: "HEAD", SlotName: "Head", Name: "Unpictured Helm", MediaID: 7, Level: 300},
+		}, nil
+	}
+	fake.iconFor = func(int) (string, error) {
+		return "", &blizzard.APIError{Endpoint: "item-media", Outcome: blizzard.OutcomeUnavailable}
+	}
+
+	rec := get(t, stack(t, fake, true), "/app/dashboard")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET with no icon available = %d, want 200", rec.Code)
+	}
+	panel := armoryPanel(t, rec.Body.String())
+	if !strings.Contains(panel, "Unpictured Helm") {
+		t.Error("the item vanished along with its icon")
+	}
+	if !strings.Contains(panel, "gear-icon-blank") {
+		t.Error("no placeholder where the icon should be, so the row will not line up")
+	}
+}
+
+// TestSocketsShowTheirGems covers jewellery, which is where sockets are usually
+// the point: a ring with a gem in it should show that gem, and a ring with an
+// open socket should show that the socket is open.
+func TestSocketsShowTheirGems(t *testing.T) {
+	fake := twoChars()
+	fake.gearFor = func(blizzard.CharacterRef) ([]blizzard.EquippedItem, error) {
+		return []blizzard.EquippedItem{
+			{
+				SlotType: "FINGER_1", SlotName: "Ring 1", Name: "Ritual Binder's Ring",
+				Quality: "EPIC", Level: 311, MediaID: 100,
+				Sockets: []blizzard.Socket{
+					{GemName: "Masterful Ysemerald", Type: "Prismatic Socket", MediaID: 900},
+					{Display: "Prismatic Socket", Type: "Prismatic Socket", Empty: true},
+				},
+			},
+			{
+				SlotType: "NECK", SlotName: "Neck", Name: "Pendant of Maleficence",
+				Quality: "EPIC", Level: 311, MediaID: 101,
+				Sockets: []blizzard.Socket{
+					{GemName: "Quick Onyx", Type: "Prismatic Socket", MediaID: 901},
+				},
+			},
+			// No sockets at all: must render without an empty gem column.
+			{SlotType: "HEAD", SlotName: "Head", Name: "Plain Helm", Level: 300, MediaID: 102},
+		}, nil
+	}
+	fake.iconFor = func(id int) (string, error) {
+		return fmt.Sprintf("https://render.worldofwarcraft.com/us/icons/56/i%d.jpg", id), nil
+	}
+
+	raw := armoryPanel(t, get(t, stack(t, fake, true), "/app/dashboard").Body.String())
+	panel := html.UnescapeString(raw)
+
+	// The gems themselves, by name and by icon.
+	for _, want := range []string{"Masterful Ysemerald", "Quick Onyx", "i900.jpg", "i901.jpg"} {
+		if !strings.Contains(panel, want) {
+			t.Errorf("the gem %q is not shown", want)
+		}
+	}
+
+	// An open socket is information, especially on jewellery, so it is drawn
+	// rather than omitted.
+	if !strings.Contains(raw, "gem-empty") {
+		t.Error("an empty socket is not shown; an unsocketed ring looks identical to a socketed one")
+	}
+
+	// Three items and three sockets, one of which is empty: five icons. The
+	// empty socket has no gem and so no media id, and must not be requested --
+	// which is the assertion, not the arithmetic.
+	if n := fake.iconCalls.Load(); n != 5 {
+		t.Errorf("made %d icon calls, want 5 (3 items + 2 gems; the empty socket has no media)", n)
+	}
+
+	// The item with no sockets must not sprout an empty gem container.
+	helm := raw[strings.Index(raw, "Plain Helm"):]
+	if i := strings.Index(helm, "</button>"); i > 0 && strings.Contains(helm[:i], "gear-gems") {
+		t.Error("an item with no sockets rendered a gem container anyway")
 	}
 }
 

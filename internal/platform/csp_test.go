@@ -175,10 +175,32 @@ func TestCSPStaysStrictElsewhere(t *testing.T) {
 		}
 	}
 
-	// script-src is deliberately absent: default-src 'none' already denies it,
-	// and the site ships no JavaScript at all.
-	if _, ok := got["script-src"]; ok {
-		t.Error("script-src appeared; default-src 'none' covers it and no JavaScript is served")
+}
+
+// TestCSPScriptSrcIsSelfOnly guards the one directive that was widened to allow
+// any JavaScript at all.
+//
+// The site served none until the item tooltips needed placing in the viewport.
+// 'self' is the whole allowance: one file from this origin. The failure this
+// prevents is the easy next step -- 'unsafe-inline' to get one handler working,
+// or a CDN to pull in a library -- each of which trades away most of what a
+// Content-Security-Policy is for, quietly, in a commit about something else.
+func TestCSPScriptSrcIsSelfOnly(t *testing.T) {
+	sources := directives(t, policyFromResponse(t))["script-src"]
+	if len(sources) == 0 {
+		t.Fatal("script-src is absent, so /static/tooltip.js will not load")
+	}
+
+	if len(sources) != 1 || sources[0] != "'self'" {
+		t.Errorf("script-src = %v, want exactly ['self']", sources)
+	}
+
+	for _, forbidden := range []string{"'unsafe-inline'", "'unsafe-eval'", "data:", "*"} {
+		for _, s := range sources {
+			if s == forbidden {
+				t.Errorf("script-src contains %s, which gives away most of the policy", forbidden)
+			}
+		}
 	}
 }
 

@@ -59,6 +59,20 @@ func (f *fakeClient) CharacterProfile(ctx context.Context, _ string, ref blizzar
 	return f.profileFor(ref)
 }
 
+// The platform never fetches media -- that is an app's call to make, for the
+// one character it is showing -- so this exists only to satisfy the interface.
+func (f *fakeClient) CharacterMedia(context.Context, string, blizzard.CharacterRef) (blizzard.Media, error) {
+	return blizzard.Media{}, nil
+}
+
+func (f *fakeClient) CharacterEquipment(context.Context, string, blizzard.CharacterRef) ([]blizzard.EquippedItem, error) {
+	return nil, nil
+}
+
+func (f *fakeClient) ItemIcon(context.Context, string, int) (string, error) {
+	return "", nil
+}
+
 var _ blizzard.Client = (*fakeClient)(nil)
 
 func refsFor(names ...string) []blizzard.CharacterRef {
