@@ -493,6 +493,28 @@ main:has(.dashboard) { max-width: none; }
 .character-card dd,
 .armory-detail dd { margin: 0; font-variant-numeric: tabular-nums; }
 
+/* The way back out of a member's Armory panel on the guild page.
+
+   Only the guild roster renders this: on My Characters every row is already a
+   way back, because the rail is the same list you came from. On the guild page
+   the panel has replaced the guild summary, so without this there is no link
+   that returns to it. */
+.armory-back {
+  margin: 0 0 1rem;
+  font-size: 0.9rem;
+}
+
+.armory-back a {
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.armory-back a:hover,
+.armory-back a:focus {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
 /* The Armory panel: one character, shown the way the Armory shows one.
    
    The image is Blizzard's own render of that character in its current gear,

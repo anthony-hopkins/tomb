@@ -35,10 +35,6 @@ type Item struct {
 // carries a date.
 var Roadmap = []Item{
 	{
-		Title: "Guildmates' characters",
-		Blurb: "See what the rest of TOMB is playing, not just your own roster.",
-	},
-	{
 		Title: "Guild calendar",
 		Blurb: "Events and plans in one place, so raid nights stop living in Discord scrollback.",
 	},

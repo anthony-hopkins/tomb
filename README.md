@@ -5,7 +5,7 @@
 <h1 align="center">TOMB Guild Platform</h1>
 
 <p align="center">
-  <em>Sign in with Battle.net. See who you are playing right now.</em>
+  <em>Sign in with Battle.net. See the guild, and everyone in it.</em>
 </p>
 
 ---
@@ -32,6 +32,38 @@ If you ever want to cut it off, revoke it in your Battle.net account settings
 and it loses access immediately.
 
 You stay signed in for about a day, then sign in again the same way.
+
+## The guild
+
+Signing in lands you here: the whole TOMB roster down the left, guild master at
+the top and trainees at the bottom, alphabetical within each rank. It is the
+page the **TOMB** link in the corner always goes back to.
+
+The rows work exactly like the ones on My Characters:
+
+- **Hover a name** — or tab to it — and that member's card opens.
+- **Click the name** in the card and the main panel becomes their Armory view:
+  Blizzard's render of them in their current gear, their spec, level and item
+  level, and every equipped slot with its tooltip, gems and set pieces.
+
+It is the same panel your own characters get, because it is literally the same
+page component — so anything that improves one improves the other.
+
+Until you click someone, the panel shows the guild at a glance: how many
+characters are on the roster, how many are at max level, and the breakdown by
+rank and by class. Those numbers are counted from the roster itself, so the
+landing page costs one request no matter how large the guild gets.
+
+A few things worth knowing:
+
+- **Only guild members can be opened.** The roster is the list of who this page
+  will look up; a link to anyone else is refused rather than fetched.
+- **Ranks show as numbers until they are named.** Guild ranks have no names in
+  Blizzard's data, only positions, so the site has to be told them. Until it is,
+  the headings read "Rank 1", "Rank 2" and the page says why.
+- **It is live, like everything else.** The roster is fetched from Blizzard each
+  time the page is opened. If Blizzard cannot be reached, the last roster that
+  did arrive is shown rather than an empty guild.
 
 ## My Characters
 
@@ -62,10 +94,6 @@ A few things worth knowing:
 
 None of this is built yet — it is what the site is being pointed at. There is a
 **Coming Soon** page in the top navigation with the same list.
-
-**Guildmates' characters.** The same view for anyone in the guild: who has been
-raiding on what, who has an alt geared for the slot you are short this week, who
-has not logged in since the patch dropped.
 
 **Guild calendar.** Raid nights, key pushes and transmog runs in one place, with
 sign-ups that survive being scrolled past in Discord.

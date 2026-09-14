@@ -68,7 +68,9 @@ func run() error {
 	}
 
 	bnet := blizzard.NewHTTPClient(cfg.APIHost, cfg.Namespace(), cfg.BnetRegion)
-	// Zero leaves the client on its own default; see DefaultRosterTTL.
+	// Zero -- the default, with TOMB_GUILD_ROSTER_TTL unset -- means the roster
+	// is fetched live on every view. A previously fetched roster is still kept,
+	// but only as a fallback for when Blizzard cannot be reached.
 	bnet.RosterTTL = cfg.GuildRosterTTL
 
 	store := &auth.Store{DB: db}
