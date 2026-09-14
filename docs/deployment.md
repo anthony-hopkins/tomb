@@ -74,13 +74,26 @@ until the infrastructure is applied, the first deploy is two passes:
 **1. Create the infrastructure.** Push to `develop`, or run **Deploy** with
 environment `develop`. OpenTofu creates the VM, disks, network and reserved
 address. The run then *fails* at the TLS check — expected, because DNS does not
-point anywhere yet. The step summary prints the reserved address before that
-happens, which is the thing you need:
+point anywhere yet — and stops immediately rather than retrying, printing the
+address you need both in the log and in the run summary:
 
 ```
-### develop address
-Reserved public IP: 34.x.x.x
+### DNS is the missing piece
+dev.tombguild.com.  A  35.253.225.22
 ```
+
+> **Do not re-run the deploy until the name resolves.** Let's Encrypt allows
+> five *failed validations* per hostname per hour, and every attempt against a
+> name that does not resolve spends one. develop's own first deploy burned
+> fourteen in a single run, because the workflow retried the whole deploy ten
+> times and each retry recreated Caddy into another doomed ACME order — which
+> rate-limited the hostname, so the certificate could not be issued even after
+> DNS was fixed.
+>
+> `deploy.sh` now resolves the hostname before waiting on TLS and exits 3 if it
+> is absent, and the workflow retries only genuine SSH failures (exit 255,
+> meaning the VM is still installing Docker). A deploy script that actually ran
+> and failed is never retried: it would give the same answer, more slowly.
 
 **2. Point DNS at it, then deploy again.** Add an `A` record for
 `dev.tombguild.com` to that address — it is reserved, so it survives VM
