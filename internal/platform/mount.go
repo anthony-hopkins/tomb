@@ -251,6 +251,7 @@ func (c *Core) Admit(w http.ResponseWriter, r *http.Request, sess auth.Session) 
 		c.handleBlizzardFailure(w, r, err)
 		return false
 	}
+	c.grantAdmin(sess.User, &profile)
 	if !profile.Membership.IsMember {
 		c.RenderNonMember(w, r, http.StatusOK)
 		return false

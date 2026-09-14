@@ -183,6 +183,7 @@ func (c *Core) requireGuild(meta AppMeta, next http.Handler) http.Handler {
 			c.handleBlizzardFailure(w, r, err)
 			return
 		}
+		c.grantAdmin(sess.User, &profile)
 
 		if !profile.Membership.IsMember {
 			// Re-derived every request, so a departed member loses access on

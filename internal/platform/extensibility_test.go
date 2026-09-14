@@ -25,6 +25,12 @@ import (
 // signed-in guild member, so gated app routes can be exercised.
 func sessionedCore(t *testing.T, member bool, apps ...App) (*Core, http.Handler) {
 	t.Helper()
+	return sessionedCoreWith(t, member, Config{}, apps...)
+}
+
+// sessionedCoreWith is sessionedCore with a Config on the core's Deps.
+func sessionedCoreWith(t *testing.T, member bool, cfg Config, apps ...App) (*Core, http.Handler) {
+	t.Helper()
 
 	templates, err := LoadTemplates()
 	if err != nil {
@@ -44,7 +50,7 @@ func sessionedCore(t *testing.T, member bool, apps ...App) (*Core, http.Handler)
 	}
 
 	core := &Core{
-		Deps:      Deps{Logger: discardLogger(), Blizzard: fake},
+		Deps:      Deps{Logger: discardLogger(), Blizzard: fake, Config: cfg},
 		Sessions:  &auth.SessionManager{Store: &auth.Store{}},
 		Profiles:  newFetcher(fake),
 		CSRF:      &CSRF{},
@@ -264,6 +270,12 @@ func (c *rankedClient) GuildRoster(context.Context, string, string, string) ([]b
 // at the given rank.
 func officerCore(t *testing.T, rank int, apps ...App) http.Handler {
 	t.Helper()
+	return officerCoreWith(t, rank, Config{}, apps...)
+}
+
+// officerCoreWith is officerCore with a Config on the core's Deps.
+func officerCoreWith(t *testing.T, rank int, cfg Config, apps ...App) http.Handler {
+	t.Helper()
 
 	templates, err := LoadTemplates()
 	if err != nil {
@@ -287,7 +299,7 @@ func officerCore(t *testing.T, rank int, apps ...App) http.Handler {
 	fetcher := &ProfileFetcher{Client: fake, Guild: guild, Logger: discardLogger(), Roster: roster}
 
 	core := &Core{
-		Deps:      Deps{Logger: discardLogger(), Blizzard: fake, Roster: roster},
+		Deps:      Deps{Logger: discardLogger(), Blizzard: fake, Roster: roster, Config: cfg},
 		Sessions:  &auth.SessionManager{Store: &auth.Store{}},
 		Profiles:  fetcher,
 		CSRF:      &CSRF{},
@@ -405,5 +417,62 @@ func TestMountRefusesOfficerOnlyWithoutGuild(t *testing.T) {
 	bad := &stubApp{meta: AppMeta{Slug: "x", NavLabel: "X", RoutePrefix: "/app/x", OfficerOnly: true}}
 	if _, err := Mount(testCore(t), emptyAuthHandlers(), []App{bad}); err == nil {
 		t.Error("Mount accepted an officer-only app that is not guild-gated")
+	}
+}
+
+// --- The administrator (FR-025) ---------------------------------------------
+
+// TestAdministratorPassesEveryGateWhateverTheRank: a rank-5 member configured
+// as the administrator sees and reaches the officer-only app; the same member
+// unconfigured does not.
+func TestAdministratorPassesEveryGateWhateverTheRank(t *testing.T) {
+	handler := officerCoreWith(t, 5, Config{Admin: "Tester#1234"},
+		newStub("dashboard", "My Characters", "dash", true), officerStub())
+
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app/dashboard", nil))
+	if !strings.Contains(rec.Body.String(), `href="/app/logs"`) {
+		t.Error("the administrator does not see the Logs entry")
+	}
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app/logs", nil))
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "the logs") {
+		t.Errorf("the administrator got %d from the officer-only app", rec.Code)
+	}
+
+	// Somebody else configured: nothing changes for this rank-5 member.
+	handler = officerCoreWith(t, 5, Config{Admin: "Somebody#0001"},
+		newStub("dashboard", "My Characters", "dash", true), officerStub())
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app/logs", nil))
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("a non-administrator at rank 5 got %d, want 403", rec.Code)
+	}
+}
+
+// TestAdministratorOutsideTheGuildStillGetsIn: the administrator runs the
+// site whether or not a character of theirs is in the guild.
+func TestAdministratorOutsideTheGuildStillGetsIn(t *testing.T) {
+	_, handler := sessionedCoreWith(t, false, Config{Admin: "Tester#1234"},
+		newStub("dashboard", "My Characters", "dash", true))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app/dashboard", nil))
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "dash") {
+		t.Errorf("the administrator, not in the guild, got %d", rec.Code)
+	}
+}
+
+// TestNothingSaysAdministrator: the pages an administrator sees never say so.
+// Administration is a fact about running the site, not a standing in the guild,
+// and the interface must not conflate the two.
+func TestNothingSaysAdministrator(t *testing.T) {
+	handler := officerCoreWith(t, 5, Config{Admin: "Tester#1234"},
+		newStub("dashboard", "My Characters", "dash", true), officerStub())
+	for _, path := range []string{"/app/dashboard", "/app/logs"} {
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+		if strings.Contains(strings.ToLower(rec.Body.String()), "admin") {
+			t.Errorf("%s says \"admin\" somewhere; the administrator must look like anyone else", path)
+		}
 	}
 }

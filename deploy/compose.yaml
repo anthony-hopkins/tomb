@@ -40,6 +40,7 @@ services:
       TOMB_GUILD_ROSTER_TTL: ${TOMB_GUILD_ROSTER_TTL:-}
       TOMB_GUILD_OFFICER_RANK: ${TOMB_GUILD_OFFICER_RANK:-}
       TOMB_TIMEZONE: ${TOMB_TIMEZONE:-}
+      TOMB_ADMIN: ${TOMB_ADMIN:-}
       DATABASE_URL: postgres://tomb:${DB_PASSWORD:?}@db:5432/tomb?sslmode=disable
       # Caddy terminates TLS, so the browser is always on HTTPS even though
       # this hop is plaintext inside the host.
