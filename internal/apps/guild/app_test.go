@@ -138,6 +138,43 @@ func TestRosterRowsBehaveLikeCharacterRows(t *testing.T) {
 	}
 }
 
+// TestRosterIsOnePanel pins the rail's shape against the character rail it is
+// meant to match.
+//
+// Every rank group used to be its own bordered list, which rendered as five
+// stacked boxes rather than one roster. The chrome belongs to the wrapper now
+// and the rank headings divide it from the inside.
+func TestRosterIsOnePanel(t *testing.T) {
+	a := appWith([]string{"Guild Master", "Officer", "Member"})
+	v := view{
+		Groups: a.group([]blizzard.GuildMember{
+			{Name: "Cwds", Rank: 0, Level: 90},
+			{Name: "Arcanost", Rank: 1, Level: 90},
+			{Name: "Azelora", Rank: 1, Level: 90},
+			{Name: "Someone", Rank: 2, Level: 71},
+		}),
+		Total: 4,
+	}
+
+	body := render(t, v)
+
+	if n := strings.Count(body, `class="roster-groups"`); n != 1 {
+		t.Errorf("found %d roster panels, want exactly 1 wrapping every rank", n)
+	}
+
+	// Three ranks are held, so three headings and three lists -- inside the one
+	// panel, which is what stops them reading as three separate boxes.
+	if n := strings.Count(body, `class="rank-heading"`); n != 3 {
+		t.Errorf("found %d rank headings, want 3", n)
+	}
+
+	panel := body[strings.Index(body, `class="roster-groups"`):]
+	panel = panel[:strings.Index(panel, `class="dashboard-main"`)]
+	if n := strings.Count(panel, `class="character-list"`); n != 3 {
+		t.Errorf("found %d lists inside the panel, want 3 -- one per held rank", n)
+	}
+}
+
 // TestSummaryCountsTheRoster covers the panel beside the rail.
 //
 // Every number is counted from the roster already fetched, which is what makes

@@ -242,6 +242,7 @@ The full set the workflows read:
 | `GCP_STATE_BUCKET` | bootstrap output | all |
 | `GCP_REGION` | `us-central1` (optional) | deploy |
 | `TOMB_GUILD_REALM` | the slug of the realm the guild was **founded** on, e.g. `elune` — see the note below | all |
+| `TOMB_GUILD_ROSTER_TTL` | how long a fetched guild roster may be reused, as a Go duration (`30m`, `3h`). Optional; **unset means fetch live every time**, which is the default | all |
 | `TOMB_GUILD_RANKS` | rank names, most senior first, comma-separated — e.g. `Guild Master,Officer,Veteran,Member,Trainee`. Optional; see below | all |
 | `BNET_CLIENT_ID` | Battle.net client id | all |
 | `TOMB_DOMAIN` | your domain, or empty for the `sslip.io` fallback | all |

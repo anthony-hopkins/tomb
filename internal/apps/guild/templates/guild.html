@@ -15,9 +15,14 @@
     </p>
     {{end}}
 
+    {{/* One panel around every group, rather than a panel per group. The
+         rank headings divide the list from the inside, the way a console
+         side-nav has sections -- which is what makes this read as one roster
+         instead of five stacked boxes. */}}
+    <div class="roster-groups">
     {{range .Groups}}
-    <p class="rank-heading">{{.Label}}</p>
-    <ul class="character-list">
+      <p class="rank-heading">{{.Label}}</p>
+      <ul class="character-list">
       {{range .Members}}
       {{/* Identical to a row in My Characters: the same classes, the same
            tabindex, and a card revealed by the same :hover and :focus-within
@@ -47,8 +52,9 @@
         </div>
       </li>
       {{end}}
-    </ul>
+      </ul>
     {{end}}
+    </div>
 
     <p class="roster-total">
       {{.Total}} character{{if ne .Total 1}}s{{end}} on the roster

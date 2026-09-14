@@ -6,6 +6,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Config is the complete runtime configuration, sourced only from environment
@@ -30,6 +31,15 @@ type Config struct {
 	// name shows as "Rank N", which is honest rather than wrong.
 	GuildRanks []string
 
+	// GuildRosterTTL is how long a fetched guild roster may be reused before it
+	// is fetched again, from TOMB_GUILD_ROSTER_TTL as a Go duration ("30m",
+	// "3h"). Zero -- the default -- fetches live every time.
+	//
+	// Separate from FR-016's ban on caching character data: this is the guild's
+	// membership list, which changes in days, and the FR-013 access check is a
+	// different path that stays live regardless.
+	GuildRosterTTL time.Duration
+
 	DatabaseURL string
 
 	// SessionCookieSecure defaults to true. It may only be false for local
@@ -41,6 +51,23 @@ type Config struct {
 	APIHost string
 
 	Addr string
+}
+
+// parseDuration reads an optional Go duration, falling back to zero -- which
+// every caller reads as "use the default" -- rather than failing to start.
+//
+// A mistyped cache lifetime is not worth refusing to boot over: the cost of
+// ignoring it is one extra API call an hour.
+func parseDuration(raw string) time.Duration {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return 0
+	}
+	d, err := time.ParseDuration(raw)
+	if err != nil || d < 0 {
+		return 0
+	}
+	return d
 }
 
 // splitRanks parses the comma-separated rank list.
@@ -75,6 +102,7 @@ func LoadConfig() (Config, error) {
 		GuildName:        strings.TrimSpace(os.Getenv("TOMB_GUILD_NAME")),
 		GuildRealm:       strings.ToLower(strings.TrimSpace(os.Getenv("TOMB_GUILD_REALM"))),
 		GuildRanks:       splitRanks(os.Getenv("TOMB_GUILD_RANKS")),
+		GuildRosterTTL:   parseDuration(os.Getenv("TOMB_GUILD_ROSTER_TTL")),
 		DatabaseURL:      os.Getenv("DATABASE_URL"),
 		APIHost:          strings.TrimRight(os.Getenv("BNET_API_HOST"), "/"),
 		Addr:             envOr("ADDR", ":8080"),
