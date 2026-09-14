@@ -543,7 +543,20 @@ jobs:
               break
             fi
 
-            echo "attempt $attempt could not reach the VM over SSH (exit 255); it may still be bootstrapping"
+            # 255 is SSH itself failing, which has two causes here and one of
+            # them needs action rather than patience. The VM may still be
+            # installing Docker on a first boot -- wait. Or the nightly
+            # auto-stop schedule may have switched it off underneath this
+            # deploy: it is a Compute Engine resource policy and knows nothing
+            # about workflow runs, so a deploy that starts near the schedule can
+            # lose its VM half way through. Waiting will not fix that one.
+            status="$(gcloud compute instances describe "$INSTANCE" --zone "$ZONE" --format='value(status)' 2>/dev/null || echo UNKNOWN)"
+            if [ "$status" = "TERMINATED" ]; then
+              echo "::warning::$INSTANCE is TERMINATED mid-deploy; the auto-stop schedule fired. Restarting it."
+              gcloud compute instances start "$INSTANCE" --zone "$ZONE" --quiet || true
+            else
+              echo "attempt $attempt could not reach the VM over SSH (exit 255, status $status); it may still be bootstrapping"
+            fi
             sleep 30
           done
 

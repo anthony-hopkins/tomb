@@ -137,6 +137,15 @@ environment that switches itself on every morning whether or not anyone is
 working defeats the point. Adjust with `auto_stop_schedule` and
 `auto_stop_timezone`; it defaults to 02:00 UTC daily.
 
+Two races come with a VM that switches itself off, both handled rather than
+hoped about. A deploy now starts the VM and SSHes in straight away, so
+`startup.sh` (which runs on every boot) and `deploy.sh` can rewrite
+`/opt/tomb` at the same time; both take an exclusive `flock` on
+`/var/lock/tomb-stack.lock`, so whichever arrives second waits. And the schedule
+is a Compute Engine resource policy that knows nothing about workflow runs, so a
+deploy starting near 02:00 UTC can lose its VM part-way through; the roll step
+detects a `TERMINATED` instance on an SSH failure and starts it again.
+
 Starting is on demand, either way round:
 
 ```sh
