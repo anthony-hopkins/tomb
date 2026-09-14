@@ -406,6 +406,70 @@ main:has(.dashboard) { max-width: none; }
   font-size: 0.8rem;
   color: var(--muted);
 }
+
+/* The roster search: an input and a small go button, above the list. */
+.roster-search {
+  display: flex;
+  gap: 0.4rem;
+  margin: 0 0 0.75rem;
+}
+
+.roster-search input {
+  flex: 1 1 auto;
+  min-width: 0;
+  font: inherit;
+  font-size: 0.9rem;
+  color: var(--ink);
+  background: rgba(16, 48, 72, 0.35);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0.45rem 0.65rem;
+}
+
+.roster-search input::placeholder { color: var(--muted); }
+
+.roster-search input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(74, 249, 231, 0.2);
+}
+
+.roster-search button {
+  flex: none;
+  padding: 0.45rem 0.7rem;
+  font-size: 0.9rem;
+}
+
+/* Off-screen, not display:none, so a screen reader still gets the label. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Several members matched a search: a short list to pick from. */
+.search-matches h2 { margin: 0; font-size: 1.25rem; }
+.search-matches .fineprint { margin: 0.25rem 0 0; }
+.search-matches code { color: var(--accent-2); }
+
+.match-list {
+  list-style: none;
+  margin: 1rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.match-list li { display: flex; flex-direction: column; }
+.match-list a { font-weight: 600; text-decoration: none; }
+.match-list a:hover,
+.match-list a:focus { text-decoration: underline; }
 .roster-note code {
   color: var(--accent-2);
   font-size: 0.95em;

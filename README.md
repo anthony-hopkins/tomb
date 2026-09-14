@@ -39,6 +39,11 @@ Signing in lands you here: the whole TOMB roster down the left, guild master at
 the top and trainees at the bottom, alphabetical within each rank. It is the
 page the **TOMB** link in the corner always goes back to.
 
+There is a search box above the list. Start typing a name and the browser
+completes it from the roster; press enter and you are on that character's
+Armory view. Two characters with the same name on different realms? Add the
+realm — `Cwds elune` — or pick from the short list the page offers.
+
 The rows work exactly like the ones on My Characters:
 
 - **Hover a name** — or tab to it — and that member's card opens.

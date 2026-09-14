@@ -15,6 +15,7 @@ import (
 	"embed"
 	"html/template"
 	"net/http"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -302,6 +303,13 @@ type view struct {
 
 	// Home is this app's own path, for the link back out of a member's panel.
 	Home string
+
+	// Query is what was typed into the roster search, echoed back into the
+	// box. Matches are the members it could mean when it could mean more than
+	// one, offered as a list to pick from; a query that means exactly one is
+	// never rendered, because it redirects to that member instead.
+	Query   string
+	Matches []memberView
 }
 
 func (a *App) show(w http.ResponseWriter, r *http.Request) {
@@ -317,6 +325,24 @@ func (a *App) show(w http.ResponseWriter, r *http.Request) {
 		members := snap.members
 		v.Groups = a.group(members, snap.details)
 		v.Total = len(members)
+
+		// The search box. A query that names exactly one member becomes a
+		// redirect to that member's own URL -- the same ?c= a click produces,
+		// so the address bar, the back button and a bookmark all behave as if
+		// the name had been clicked. Only an ambiguous or empty result renders.
+		if q := strings.TrimSpace(r.URL.Query().Get("q")); q != "" && r.URL.Query().Get("c") == "" {
+			matches := findMembers(members, q)
+			if len(matches) == 1 {
+				http.Redirect(w, r, routePrefix+"?c="+url.QueryEscape(memberKey(matches[0])), http.StatusFound)
+				return
+			}
+			v.Query = q
+			if len(matches) == 0 {
+				v.NotFound = q
+			} else {
+				v.Matches = a.views(v.Groups, matches)
+			}
+		}
 
 		if key := r.URL.Query().Get("c"); key != "" {
 			a.selectMember(r, &v, members, key)
@@ -730,6 +756,73 @@ func bossesLabel(c contender) string {
 		}
 	}
 	return strings.Join(parts, " · ")
+}
+
+// findMembers resolves what was typed into the search box to roster members.
+//
+// Exact name first, then names that begin with what was typed, both without
+// regard to case: "laz" finds Lazzlowe if nobody is called Laz, and finds
+// every Laz-something if several are. A realm can follow the name to tell
+// namesakes apart -- "Cwds elune", "Cwds (Elune)", "cwds/elune" all work --
+// because a character name is only unique within a realm and a guild this
+// size has namesakes.
+//
+// Nothing fuzzier than a prefix, on purpose. The datalist behind the box
+// already completes any name on the roster as it is typed, so the server's
+// job is to accept what the box produced and forgive a partial, not to guess.
+func findMembers(members []blizzard.GuildMember, query string) []blizzard.GuildMember {
+	name, realm := splitQuery(query)
+
+	var exact, prefix []blizzard.GuildMember
+	for _, m := range members {
+		if realm != "" && !strings.EqualFold(m.RealmSlug, realm) && !strings.EqualFold(m.RealmLabel(), realm) {
+			continue
+		}
+		switch {
+		case strings.EqualFold(m.Name, name):
+			exact = append(exact, m)
+		case strings.HasPrefix(strings.ToLower(m.Name), strings.ToLower(name)):
+			prefix = append(prefix, m)
+		}
+	}
+	if len(exact) > 0 {
+		return exact
+	}
+	return prefix
+}
+
+// splitQuery separates an optional realm from the name: "Cwds elune",
+// "Cwds (Elune)", "cwds/elune" and "Cwds" alone.
+func splitQuery(q string) (name, realm string) {
+	q = strings.NewReplacer("(", " ", ")", " ", "/", " ", ",", " ").Replace(q)
+	fields := strings.Fields(q)
+	switch len(fields) {
+	case 0:
+		return "", ""
+	case 1:
+		return fields[0], ""
+	default:
+		return fields[0], strings.Join(fields[1:], " ")
+	}
+}
+
+// views picks the rows already built for the rail that correspond to the
+// given members, so a list of matches is drawn exactly as the rail draws them
+// -- class colour, authority mark, and all.
+func (a *App) views(groups []rankGroup, members []blizzard.GuildMember) []memberView {
+	want := make(map[string]bool, len(members))
+	for _, m := range members {
+		want[memberKey(m)] = true
+	}
+	var out []memberView
+	for _, g := range groups {
+		for _, mv := range g.Members {
+			if want[mv.Key] {
+				out = append(out, mv)
+			}
+		}
+	}
+	return out
 }
 
 // memberKey identifies a roster member in a URL. Realm first, because a

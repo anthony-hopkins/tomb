@@ -20,6 +20,22 @@
     </p>
     {{end}}
 
+    {{/* Find a member by name. A plain GET form and a datalist: the browser
+         completes any name on the roster as it is typed, no script involved,
+         and the server turns what was submitted into a redirect to that
+         member's own ?c= URL. It lives above the list, in the part of the
+         rail that stays put while the list scrolls. */}}
+    <form class="roster-search" method="get" action="{{$.Home}}" role="search">
+      <label class="visually-hidden" for="roster-q">Find a character</label>
+      <input id="roster-q" name="q" list="roster-names" value="{{$.Query}}"
+             placeholder="Find a character…" autocomplete="off" spellcheck="false">
+      <datalist id="roster-names">
+        {{range .Groups}}{{range .Members}}<option value="{{.Name}}">{{.Level}} {{.Class}} &middot; {{.Realm}}</option>
+        {{end}}{{end}}
+      </datalist>
+      <button type="submit" aria-label="Go">&rarr;</button>
+    </form>
+
     {{/* One panel around every group, rather than a panel per group. The
          rank headings divide the list from the inside, the way a console
          side-nav has sections -- which is what makes this read as one roster
@@ -102,6 +118,23 @@
       No character called <strong>{{.}}</strong> is on the roster. They may have
       left the guild, transferred, or been renamed.
     </p>
+    {{end}}
+
+    {{if .Matches}}
+    {{/* A search that could mean several members. Drawn as the rail draws
+         them, and each a link to the one it names. */}}
+    <section class="panel search-matches" aria-label="Matching characters">
+      <h2>Several characters match &ldquo;{{.Query}}&rdquo;</h2>
+      <p class="fineprint">Add the realm to be exact: <code>{{.Query}} elune</code>.</p>
+      <ul class="match-list">
+        {{range .Matches}}
+        <li>
+          <a class="class-name cls-{{.ClassSlug}}" href="?c={{.Key}}">{{template "rank-mark" .RankIndex}}{{.Name}}</a>
+          <span class="row-meta">{{.Level}} {{.Class}} &middot; {{.Realm}}</span>
+        </li>
+        {{end}}
+      </ul>
+    </section>
     {{end}}
 
     {{with .Unreachable}}
