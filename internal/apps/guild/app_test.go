@@ -201,7 +201,7 @@ func TestSummaryCountsTheRoster(t *testing.T) {
 		{Name: "Boodytv", Rank: 1, Level: 64, Class: "Hunter"},
 	}
 	groups := a.group(members, nil)
-	sum := a.summarise(members, groups)
+	sum := a.summarise(members, groups, nil)
 
 	if sum == nil {
 		t.Fatal("no summary for a roster with members in it")
@@ -244,7 +244,7 @@ func TestClassOrderIsStable(t *testing.T) {
 
 	var first []string
 	for i := 0; i < 20; i++ {
-		sum := a.summarise(members, a.group(members, nil))
+		sum := a.summarise(members, a.group(members, nil), nil)
 		var order []string
 		for _, c := range sum.Classes {
 			order = append(order, c.Label)
@@ -272,7 +272,7 @@ func TestSummaryRenders(t *testing.T) {
 	v := view{
 		Groups:  a.group(members, nil),
 		Total:   1,
-		Summary: a.summarise(members, a.group(members, nil)),
+		Summary: a.summarise(members, a.group(members, nil), nil),
 	}
 
 	body := html.UnescapeString(render(t, v))
@@ -288,7 +288,7 @@ func TestSummaryRenders(t *testing.T) {
 // full of zeroes, which would read as a guild with nobody in it.
 func TestNoSummaryWithoutARoster(t *testing.T) {
 	a := appWith(nil)
-	if sum := a.summarise(nil, nil); sum != nil {
+	if sum := a.summarise(nil, nil, nil); sum != nil {
 		t.Errorf("summarised an empty roster into %v", sum)
 	}
 
@@ -885,5 +885,155 @@ func TestSnapshotCarriesSeasonStanding(t *testing.T) {
 	}
 	if got := snap.details["elune/lazzlowe"].MythicPlusRating; got != 0 {
 		t.Errorf("Lazzlowe's rating = %d, want 0 (unrated)", got)
+	}
+}
+
+// --- Charts and leaderboards ------------------------------------------------
+
+// TestBarsScaleToTheLongest: a bar chart of counts compares rows to each other,
+// so the biggest row fills the track and the rest are read against it.
+func TestBarsScaleToTheLongest(t *testing.T) {
+	a := appWith([]string{"Guild Master", "Officer"})
+	members := []blizzard.GuildMember{
+		{Name: "A", Rank: 0, Level: 90, Class: "Mage"},
+		{Name: "B", Rank: 1, Level: 90, Class: "Mage"},
+		{Name: "C", Rank: 1, Level: 90, Class: "Death Knight"},
+		{Name: "D", Rank: 1, Level: 64, Class: "Death Knight"},
+		{Name: "E", Rank: 1, Level: 90, Class: "Mage"},
+	}
+	sum := a.summarise(members, a.group(members, nil), nil)
+
+	if sum.Ranks[1].Pct != 100 || sum.Ranks[0].Pct != 25 {
+		t.Errorf("rank bars = %d%% and %d%%, want 25%% and 100%%", sum.Ranks[0].Pct, sum.Ranks[1].Pct)
+	}
+	if sum.Classes[0].Label != "Mage" || sum.Classes[0].Pct != 100 || sum.Classes[0].Class != "mage" {
+		t.Errorf("first class bar = %+v, want Mage at 100%% with slug mage", sum.Classes[0])
+	}
+	if sum.Classes[1].Class != "death-knight" {
+		t.Errorf("class slug = %q, want death-knight", sum.Classes[1].Class)
+	}
+	// 4 of 5 at the cap: 80%.
+	if sum.CapPct != 80 {
+		t.Errorf("CapPct = %d, want 80", sum.CapPct)
+	}
+}
+
+// TestBoardsRankAndCut covers each board's order, its cut at five, and that a
+// member with nothing to rank on is absent rather than placed last.
+func TestBoardsRankAndCut(t *testing.T) {
+	a := snapshotApp(&fakeClient{}, time.Hour)
+
+	var members []blizzard.GuildMember
+	details := map[string]memberDetail{}
+	add := func(name string, ilvl, rating, m, h, n int) {
+		mem := blizzard.GuildMember{Name: name, RealmSlug: "elune", Rank: 1, Level: 90, Class: "Rogue"}
+		members = append(members, mem)
+		d := memberDetail{Character: blizzard.Character{Name: name, RealmSlug: "elune", Class: "Rogue", AverageItemLevel: ilvl}}
+		d.MythicPlusRating = rating
+		if m+h+n > 0 {
+			d.Raids = []blizzard.RaidProgress{{Name: "Raid", Modes: []blizzard.RaidMode{
+				{Difficulty: "NORMAL", Completed: n, Total: 8},
+				{Difficulty: "HEROIC", Completed: h, Total: 8},
+				{Difficulty: "MYTHIC", Completed: m, Total: 8},
+			}}}
+		}
+		details[memberKey(mem)] = d
+	}
+	add("Alpha", 300, 2000, 0, 8, 8)   // most heroic
+	add("Bravo", 320, 0, 2, 8, 8)      // two mythic kills beat eight heroic
+	add("Charlie", 310, 2500, 0, 0, 8) // normal only
+	add("Delta", 305, 2400, 1, 3, 8)
+	add("Echo", 290, 2100, 0, 0, 0) // never raided
+	add("Foxtrot", 315, 0, 0, 0, 0)
+	add("Golf", 0, 0, 0, 0, 0)                                                                  // nothing fetched worth ranking
+	members = append(members, blizzard.GuildMember{Name: "Hotel", RealmSlug: "elune", Rank: 1}) // no detail at all
+
+	sum := a.summarise(members, a.group(members, details), details)
+	if len(sum.Boards) != 3 {
+		t.Fatalf("got %d boards, want 3: %+v", len(sum.Boards), sum.Boards)
+	}
+
+	names := func(b boardView) []string {
+		var out []string
+		for _, e := range b.Entries {
+			out = append(out, e.Name)
+		}
+		return out
+	}
+
+	ilvl := sum.Boards[0]
+	if ilvl.Title != "Top item level" || strings.Join(names(ilvl), ",") != "Bravo,Foxtrot,Charlie,Delta,Alpha" {
+		t.Errorf("item level board = %v", names(ilvl))
+	}
+	if ilvl.Entries[0].Value != "320" || ilvl.Entries[0].Rank != 1 || ilvl.Entries[0].Class != "rogue" {
+		t.Errorf("first entry = %+v", ilvl.Entries[0])
+	}
+
+	rating := sum.Boards[1]
+	if strings.Join(names(rating), ",") != "Charlie,Delta,Echo,Alpha" {
+		t.Errorf("rating board = %v; the unrated must be absent, not last", names(rating))
+	}
+
+	bosses := sum.Boards[2]
+	if strings.Join(names(bosses), ",") != "Bravo,Delta,Alpha,Charlie" {
+		t.Errorf("bosses board = %v; mythic outranks heroic outranks normal", names(bosses))
+	}
+	if bosses.Entries[0].Value != "2M · 8H" || bosses.Entries[3].Value != "8N" {
+		t.Errorf("boss labels = %q and %q, want 2M · 8H and 8N", bosses.Entries[0].Value, bosses.Entries[3].Value)
+	}
+}
+
+// TestNoDetailNoBoards: a snapshot with no member detail yet gives no boards,
+// and the page shows the summary without an empty leaderboard column.
+func TestNoDetailNoBoards(t *testing.T) {
+	a := appWith([]string{"Guild Master"})
+	members := []blizzard.GuildMember{{Name: "A", Rank: 0, Level: 90, Class: "Mage"}}
+	sum := a.summarise(members, a.group(members, nil), nil)
+	if len(sum.Boards) != 0 {
+		t.Errorf("boards = %+v, want none", sum.Boards)
+	}
+	body := render(t, view{Groups: a.group(members, nil), Summary: sum, Total: 1, Home: routePrefix})
+	if strings.Contains(body, "leaderboards") {
+		t.Error("an empty leaderboard column was rendered")
+	}
+}
+
+// TestOverviewRendersChartsWithoutInlineStyles: the CSP allows no style
+// attributes, so every chart must be attributes and classes. This holds the
+// rendered markup to that, and checks the pieces are there at all.
+func TestOverviewRendersChartsWithoutInlineStyles(t *testing.T) {
+	f := &fakeClient{}
+	a := snapshotApp(f, time.Hour)
+	details := byKey(profiled)
+	nek := details["area-52/nekromoo"]
+	nek.MythicPlusRating = 2431
+	details["area-52/nekromoo"] = nek
+
+	groups := a.group(twoMembers, details)
+	sum := a.summarise(twoMembers, groups, details)
+	// Unescaped: html/template writes "+" as &#43; in text, and the check is
+	// on what a member reads, not on the encoding.
+	body := html.UnescapeString(render(t, view{Groups: groups, Summary: sum, Total: 2, Home: routePrefix}))
+
+	if strings.Contains(body, "style=") {
+		t.Error("the overview uses an inline style attribute, which the CSP blocks")
+	}
+	for _, want := range []string{
+		`class="stat-value"`,
+		`stroke-dasharray="100 100"`, // both at the cap
+		`<rect class="bar-fill" width="100%"`,
+		`class="bar-fill cls-death-knight"`,
+		`class="leaderboards"`,
+		"Top item level", "Top Mythic+ rating",
+		`href="?c=area-52%2fnekromoo"`,
+		`class="dashboard-main dashboard-main--wide"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the overview is missing %s", want)
+		}
+	}
+	// Nobody raided: that board is absent rather than empty.
+	if strings.Contains(body, "Most raid bosses down") {
+		t.Error("an empty bosses board was rendered")
 	}
 }

@@ -16,6 +16,7 @@ import (
 	"html/template"
 	"net/http"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -188,9 +189,9 @@ type rankGroup struct {
 
 // summaryView is the panel beside the rail: what the roster adds up to.
 //
-// Every number here is counted from the roster already in hand. It is the whole
-// reason this panel is cheap -- a guild summary that needed its own fetches
-// would be a second cost on the page every member lands on.
+// Every number here is counted from the snapshot already in hand. It is the
+// whole reason this panel is cheap -- a guild summary that needed its own
+// fetches would be a second cost on the page every member lands on.
 type summaryView struct {
 	Name  string
 	Realm string
@@ -199,19 +200,57 @@ type summaryView struct {
 	// AtCap is how many characters sit at the highest level anyone in the guild
 	// has reached, and CapLevel is that level. Derived rather than hardcoded:
 	// the cap moves every expansion, and a hardcoded 80 would have quietly
-	// started counting nothing.
+	// started counting nothing. CapPct is AtCap as a whole percentage of Total,
+	// for the ring meter.
 	AtCap    int
 	CapLevel int
+	CapPct   int
 
-	Ranks   []countView
-	Classes []countView
+	// Ranks and Classes are bar charts: each row is a label, a count, and the
+	// bar's length as a percentage of the longest bar.
+	Ranks   []barView
+	Classes []barView
+
+	// Boards are the leaderboards beside the summary, in the order shown.
+	// Absent entirely until the snapshot carries member detail.
+	Boards []boardView
 }
 
-// countView is one label and how many characters carry it.
-type countView struct {
+// barView is one row of a horizontal bar chart.
+//
+// Pct is relative to the LARGEST row, not to the total, so the longest bar
+// always fills the track and the rest read against it. That is what a bar
+// chart of counts is for: comparison between rows, not share of the whole.
+type barView struct {
 	Label string
 	Count int
+	Pct   int
+
+	// Class is a CSS slug for the row's colour, set only on the class chart:
+	// "death-knight", "mage". The label beside the bar is what identifies the
+	// row; the colour reinforces it with the hue every player already knows.
+	Class string
 }
+
+// boardView is one leaderboard: a title and its top entries, best first.
+type boardView struct {
+	Title   string
+	Entries []boardEntry
+}
+
+// boardEntry is one placing on a leaderboard.
+type boardEntry struct {
+	Rank  int
+	Name  string
+	Key   string // for the link to the member's Armory panel
+	Class string // CSS slug, for the swatch beside the name
+	Value string // already formatted: "311", "2431", "3M · 8H"
+}
+
+// boardSize is how many places each leaderboard shows. Five keeps three boards
+// inside one screen beside the summary, which is the point of having them
+// there rather than on a page of their own.
+const boardSize = 5
 
 type view struct {
 	Groups []rankGroup
@@ -275,7 +314,7 @@ func (a *App) show(w http.ResponseWriter, r *http.Request) {
 		// is on display the page is about them, and showing both would be two
 		// things competing for the same column.
 		if v.Selected == nil {
-			v.Summary = a.summarise(members, v.Groups)
+			v.Summary = a.summarise(members, v.Groups, snap.details)
 		}
 	}
 
@@ -493,7 +532,7 @@ func (a *App) group(members []blizzard.GuildMember, details map[string]memberDet
 // Rank counts come from the groups rather than being recounted: they are the
 // same numbers, and counting them twice is how the rail and the panel end up
 // disagreeing with each other.
-func (a *App) summarise(members []blizzard.GuildMember, groups []rankGroup) *summaryView {
+func (a *App) summarise(members []blizzard.GuildMember, groups []rankGroup, details map[string]memberDetail) *summaryView {
 	if len(members) == 0 {
 		return nil
 	}
@@ -505,7 +544,7 @@ func (a *App) summarise(members []blizzard.GuildMember, groups []rankGroup) *sum
 	}
 
 	for _, g := range groups {
-		s.Ranks = append(s.Ranks, countView{Label: g.Label, Count: len(g.Members)})
+		s.Ranks = append(s.Ranks, barView{Label: g.Label, Count: len(g.Members)})
 	}
 
 	classes := map[string]int{}
@@ -524,7 +563,7 @@ func (a *App) summarise(members []blizzard.GuildMember, groups []rankGroup) *sum
 	}
 
 	for name, n := range classes {
-		s.Classes = append(s.Classes, countView{Label: name, Count: n})
+		s.Classes = append(s.Classes, barView{Label: name, Count: n, Class: cssSlug(name)})
 	}
 	// Commonest first, then alphabetically so equal counts do not shuffle
 	// between page loads -- map iteration order is random, and a list that
@@ -536,7 +575,152 @@ func (a *App) summarise(members []blizzard.GuildMember, groups []rankGroup) *sum
 		return s.Classes[i].Label < s.Classes[j].Label
 	})
 
+	scaleBars(s.Ranks)
+	scaleBars(s.Classes)
+	if s.Total > 0 {
+		s.CapPct = (s.AtCap*100 + s.Total/2) / s.Total
+	}
+	s.Boards = a.boards(members, details)
+
 	return s
+}
+
+// scaleBars sets each bar's length as a percentage of the longest.
+func scaleBars(bars []barView) {
+	longest := 0
+	for _, b := range bars {
+		longest = max(longest, b.Count)
+	}
+	if longest == 0 {
+		return
+	}
+	for i := range bars {
+		bars[i].Pct = (bars[i].Count*100 + longest/2) / longest
+	}
+}
+
+// cssSlug turns a display name into a class-name fragment: lowercase, spaces
+// to hyphens. "Death Knight" becomes "death-knight".
+func cssSlug(name string) string {
+	return strings.ReplaceAll(strings.ToLower(name), " ", "-")
+}
+
+// contender is one member with what the boards rank them on, pulled together
+// once so each board is a sort and a slice rather than a fresh walk.
+type contender struct {
+	member blizzard.GuildMember
+	detail memberDetail
+
+	// Bosses down at each difficulty, summed across the current raids. The
+	// boards prize mythic over heroic over normal, so these are compared in
+	// that order rather than added together: three mythic kills outrank eight
+	// heroic ones, which is how players themselves would rank them.
+	mythic, heroic, normal int
+}
+
+// boards builds the leaderboards from the snapshot's member detail.
+//
+// A member with nothing to rank on -- no item level fetched, no rating, no
+// kills -- is simply absent from that board rather than placed last with a
+// zero. A board nobody qualifies for is left out altogether, which is what
+// happens on a fresh snapshot before any detail has arrived.
+func (a *App) boards(members []blizzard.GuildMember, details map[string]memberDetail) []boardView {
+	var cs []contender
+	for _, m := range members {
+		d, ok := details[memberKey(m)]
+		if !ok {
+			continue
+		}
+		c := contender{member: m, detail: d}
+		for _, r := range d.Raids {
+			for _, mode := range r.Modes {
+				switch mode.Difficulty {
+				case "MYTHIC":
+					c.mythic += mode.Completed
+				case "HEROIC":
+					c.heroic += mode.Completed
+				case "NORMAL":
+					c.normal += mode.Completed
+				}
+			}
+		}
+		cs = append(cs, c)
+	}
+
+	var out []boardView
+	add := func(title string, keep func(contender) bool, less func(x, y contender) bool, value func(contender) string) {
+		var pool []contender
+		for _, c := range cs {
+			if keep(c) {
+				pool = append(pool, c)
+			}
+		}
+		if len(pool) == 0 {
+			return
+		}
+		// Best first; ties break on name so the board is stable between
+		// refreshes rather than shuffling two equal characters.
+		sort.SliceStable(pool, func(i, j int) bool {
+			if less(pool[j], pool[i]) {
+				return true
+			}
+			if less(pool[i], pool[j]) {
+				return false
+			}
+			return strings.ToLower(pool[i].member.Name) < strings.ToLower(pool[j].member.Name)
+		})
+		b := boardView{Title: title}
+		for i, c := range pool[:min(boardSize, len(pool))] {
+			b.Entries = append(b.Entries, boardEntry{
+				Rank:  i + 1,
+				Name:  c.member.Name,
+				Key:   memberKey(c.member),
+				Class: cssSlug(c.detail.Class),
+				Value: value(c),
+			})
+		}
+		out = append(out, b)
+	}
+
+	add("Top item level",
+		func(c contender) bool { return c.detail.AverageItemLevel > 0 },
+		func(x, y contender) bool { return x.detail.AverageItemLevel < y.detail.AverageItemLevel },
+		func(c contender) string { return strconv.Itoa(c.detail.AverageItemLevel) },
+	)
+	add("Top Mythic+ rating",
+		func(c contender) bool { return c.detail.MythicPlusRating > 0 },
+		func(x, y contender) bool { return x.detail.MythicPlusRating < y.detail.MythicPlusRating },
+		func(c contender) string { return strconv.Itoa(c.detail.MythicPlusRating) },
+	)
+	add("Most raid bosses down",
+		func(c contender) bool { return c.mythic+c.heroic+c.normal > 0 },
+		func(x, y contender) bool {
+			if x.mythic != y.mythic {
+				return x.mythic < y.mythic
+			}
+			if x.heroic != y.heroic {
+				return x.heroic < y.heroic
+			}
+			return x.normal < y.normal
+		},
+		func(c contender) string { return bossesLabel(c) },
+	)
+	return out
+}
+
+// bossesLabel is the compact form a leaderboard row has room for: the two
+// hardest difficulties with any kills, hardest first -- "3M · 8H".
+func bossesLabel(c contender) string {
+	var parts []string
+	for _, t := range []struct {
+		n     int
+		short string
+	}{{c.mythic, "M"}, {c.heroic, "H"}, {c.normal, "N"}} {
+		if t.n > 0 && len(parts) < 2 {
+			parts = append(parts, strconv.Itoa(t.n)+t.short)
+		}
+	}
+	return strings.Join(parts, " · ")
 }
 
 // memberKey identifies a roster member in a URL. Realm first, because a
