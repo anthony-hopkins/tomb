@@ -2,11 +2,17 @@ package guild
 
 import (
 	"bytes"
+	"context"
+	"errors"
 	"html"
-	"html/template"
+	"io"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"github.com/anthony-hopkins/tomb/internal/auth"
 	"github.com/anthony-hopkins/tomb/internal/blizzard"
 	"github.com/anthony-hopkins/tomb/internal/platform"
 )
@@ -14,7 +20,10 @@ import (
 func render(t *testing.T, v view) string {
 	t.Helper()
 
-	tmpl, err := template.ParseFS(templateFS, "templates/guild.html")
+	// The app's own constructor, not a hand-rolled parse: the page references a
+	// partial that lives in another package, and a test that parsed only
+	// guild.html would be testing a template that does not exist in production.
+	tmpl, err := parseTemplates()
 	if err != nil {
 		t.Fatalf("parsing the template: %v", err)
 	}
@@ -340,5 +349,208 @@ func TestMetaIsTheHome(t *testing.T) {
 	}
 	if meta.NavLabel != "" {
 		t.Errorf("NavLabel = %q, want empty: the brand link already goes here", meta.NavLabel)
+	}
+}
+
+// --- Clicking a name ---------------------------------------------------------
+
+// fakeClient is a blizzard.Client that records which characters were asked for.
+//
+// The recording is the point: the interesting property of ?c= is not only what
+// it renders but what it REFUSES to fetch, and that is invisible from the HTML.
+type fakeClient struct {
+	blizzard.Client // embedded: the methods these tests never call stay nil
+
+	profiled []blizzard.CharacterRef
+	profile  blizzard.Character
+	profErr  error
+}
+
+func (f *fakeClient) CharacterProfile(_ context.Context, _ string, ref blizzard.CharacterRef) (blizzard.Character, error) {
+	f.profiled = append(f.profiled, ref)
+	if f.profErr != nil {
+		return blizzard.Character{}, f.profErr
+	}
+	return f.profile, nil
+}
+
+func (f *fakeClient) CharacterMedia(context.Context, string, blizzard.CharacterRef) (blizzard.Media, error) {
+	return blizzard.Media{}, errors.New("no media in this test")
+}
+
+func (f *fakeClient) CharacterEquipment(context.Context, string, blizzard.CharacterRef) ([]blizzard.EquippedItem, error) {
+	return nil, errors.New("no equipment in this test")
+}
+
+// selecting drives the real handler path: ?c=<key> against a known roster.
+func selecting(t *testing.T, f *fakeClient, ranks []string, key string, members []blizzard.GuildMember) view {
+	t.Helper()
+
+	a := &App{deps: platform.Deps{
+		Guild:    platform.GuildConfig{Name: "TOMB", RealmSlug: "elune", Ranks: ranks},
+		Blizzard: f,
+		Logger:   slog.New(slog.NewTextHandler(io.Discard, nil)),
+	}}
+
+	r := httptest.NewRequest(http.MethodGet, "/app/guild?c="+key, nil)
+	r = r.WithContext(platform.ContextWithSession(r.Context(), auth.Session{AccessToken: "t"}))
+
+	v := view{Groups: a.group(members), Total: len(members)}
+	a.selectMember(r, &v, members, key)
+	return v
+}
+
+var twoMembers = []blizzard.GuildMember{
+	{Name: "Nekromoo", Rank: 0, Level: 90, Class: "Death Knight", RealmSlug: "area-52"},
+	{Name: "Lazzlowe", Rank: 1, Level: 90, Class: "Paladin", RealmSlug: "elune"},
+}
+
+// TestNamesLinkToTheirArmory is the thing the roster was missing: the name on a
+// guild card is a link, exactly as it is on My Characters.
+func TestNamesLinkToTheirArmory(t *testing.T) {
+	a := appWith([]string{"Guild Master", "Officer"})
+	body := render(t, view{Groups: a.group(twoMembers), Total: 2, Home: routePrefix})
+
+	// %2f, not "/": html/template escapes the separator inside a URL query,
+	// and r.URL.Query().Get decodes it again on the way back in. Asserting the
+	// unescaped form would fail against markup that is entirely correct.
+	for _, want := range []string{
+		"href=\"?c=area-52%2fnekromoo\"",
+		"href=\"?c=elune%2flazzlowe\"",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the roster is missing %s; the name is not clickable", want)
+		}
+	}
+
+	// Realm-qualified, because a character name is only unique within a realm.
+	// A key of just the name would collide the moment two realms are on one
+	// roster -- which, on this roster, they already are.
+	if strings.Contains(body, "href=\"?c=nekromoo\"") {
+		t.Error("the key is not realm-qualified, so cross-realm names will collide")
+	}
+}
+
+// TestSelectingAMemberRendersTheArmoryPanel proves the guild page renders the
+// SAME panel as My Characters, not a guild-flavoured imitation of it.
+func TestSelectingAMemberRendersTheArmoryPanel(t *testing.T) {
+	f := &fakeClient{profile: blizzard.Character{
+		Name: "Nekromoo", RealmSlug: "area-52", RealmName: "Area 52",
+		Class: "Death Knight", ActiveSpec: "Frost", Level: 90, AverageItemLevel: 606,
+	}}
+
+	v := selecting(t, f, []string{"Guild Master", "Officer"}, "area-52/nekromoo", twoMembers)
+	if v.Selected == nil {
+		t.Fatal("no panel was built for a member who is on the roster")
+	}
+
+	// The rank becomes the badge, which is the one line that differs between
+	// this page's panel and the dashboard's.
+	if v.Selected.Badge != "Guild Master" {
+		t.Errorf("badge = %q, want the member's rank", v.Selected.Badge)
+	}
+
+	// The summary steps aside: two panels competing for one column is not what
+	// clicking a name asked for.
+	if v.Summary != nil {
+		t.Error("the guild summary is still set alongside a selected member")
+	}
+
+	body := render(t, v)
+	for _, want := range []string{"class=\"armory\"", "Frost", "606", "Area 52", "Guild overview"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the rendered panel is missing %q", want)
+		}
+	}
+}
+
+// TestSelectedRowIsMarked: the rail has to show which member the panel belongs
+// to, or the page looks unrelated to the click that produced it.
+func TestSelectedRowIsMarked(t *testing.T) {
+	f := &fakeClient{profile: blizzard.Character{Name: "Lazzlowe", RealmSlug: "elune"}}
+	v := selecting(t, f, []string{"Guild Master", "Officer"}, "elune/lazzlowe", twoMembers)
+
+	var marked []string
+	for _, g := range v.Groups {
+		for _, m := range g.Members {
+			if m.Selected {
+				marked = append(marked, m.Name)
+			}
+		}
+	}
+	if len(marked) != 1 || marked[0] != "Lazzlowe" {
+		t.Fatalf("marked rows = %v, want exactly [Lazzlowe]", marked)
+	}
+	if !strings.Contains(render(t, v), "is-selected") {
+		t.Error("the selected row carries no is-selected class")
+	}
+}
+
+// TestOffRosterCharacterIsNeverFetched is the security-shaped one.
+//
+// Blizzard will return a profile for ANY character in the region. If ?c= were
+// passed through, this page would be an open proxy for the character API --
+// anyone could walk arbitrary names through it on our rate limit, from a URL
+// that looks like part of the guild site. The roster is the allow-list, and
+// this asserts that no call leaves the process for a name that is not on it.
+func TestOffRosterCharacterIsNeverFetched(t *testing.T) {
+	f := &fakeClient{profile: blizzard.Character{Name: "Someone"}}
+	v := selecting(t, f, []string{"Guild Master"}, "silvermoon/stranger", twoMembers)
+
+	if len(f.profiled) != 0 {
+		t.Errorf("fetched %v for a character who is not on the roster", f.profiled)
+	}
+	if v.Selected != nil {
+		t.Error("an off-roster character produced a panel")
+	}
+	if v.NotFound == "" {
+		t.Error("an off-roster character said nothing; the link would look ignored")
+	}
+}
+
+// TestUnreachableProfileIsNotMistakenForAbsence keeps the two failures apart.
+//
+// "Not on the roster" and "Blizzard is having a bad minute" have different
+// causes and different advice, and collapsing them tells a member their
+// guildmate left the guild because an API call timed out.
+func TestUnreachableProfileIsNotMistakenForAbsence(t *testing.T) {
+	f := &fakeClient{profErr: errors.New("blizzard is down")}
+	v := selecting(t, f, []string{"Guild Master"}, "area-52/nekromoo", twoMembers)
+
+	if v.Selected != nil {
+		t.Error("a failed profile fetch still produced a panel")
+	}
+	if v.NotFound != "" {
+		t.Errorf("NotFound = %q; a fetch failure is not an absent member", v.NotFound)
+	}
+	if v.Unreachable != "Nekromoo" {
+		t.Errorf("Unreachable = %q, want Nekromoo", v.Unreachable)
+	}
+}
+
+// TestKeyLookupIsCaseInsensitive: the key is lowercased into the href, but a
+// bookmark or a hand-typed URL may not be.
+func TestKeyLookupIsCaseInsensitive(t *testing.T) {
+	f := &fakeClient{profile: blizzard.Character{Name: "Nekromoo", RealmSlug: "area-52"}}
+	v := selecting(t, f, []string{"Guild Master"}, "Area-52/Nekromoo", twoMembers)
+
+	if v.Selected == nil {
+		t.Fatal("a differently-cased key found nobody")
+	}
+	if len(f.profiled) != 1 || f.profiled[0].Name != "Nekromoo" {
+		t.Errorf("fetched %v, want the roster's own spelling of the name", f.profiled)
+	}
+}
+
+// TestBackLinkIsAbsolute: from /app/guild?c=x a relative href resolves against
+// /app/, not back to the roster. This is the kind of thing that looks right in
+// the markup and lands on a 404 in a browser.
+func TestBackLinkIsAbsolute(t *testing.T) {
+	f := &fakeClient{profile: blizzard.Character{Name: "Nekromoo", RealmSlug: "area-52"}}
+	v := selecting(t, f, []string{"Guild Master"}, "area-52/nekromoo", twoMembers)
+	v.Home = routePrefix
+
+	if got := render(t, v); !strings.Contains(got, "href=\"/app/guild\"") {
+		t.Error("the way back out of a member's panel is not an absolute path")
 	}
 }

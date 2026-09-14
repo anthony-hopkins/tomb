@@ -2,11 +2,15 @@ package auth
 
 import (
 	"context"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -291,5 +295,51 @@ func TestBattleNetEndpointMatchesDiscovery(t *testing.T) {
 	}
 	if !strings.HasPrefix(BattleNetEndpoint.AuthURL, "https://") {
 		t.Error("the authorization endpoint must be HTTPS")
+	}
+}
+
+// TestSignInNamesNoApp guards the rule that made signing in land on the wrong
+// page for as long as the guild overview has been the front page.
+//
+// Where a signed-in viewer goes is a property of the app registry -- whichever
+// app declares AppMeta.Home -- and "/" is the one route that knows how to ask.
+// The callback used to redirect straight to /app/dashboard, so moving the front
+// page moved everything except the thing every member does first.
+//
+// This reads string literals from the AST rather than grepping the source,
+// because the comment explaining the rule necessarily contains the very path
+// the rule forbids, and a grep would trip over the explanation.
+func TestSignInNamesNoApp(t *testing.T) {
+	fset := token.NewFileSet()
+	pkg, err := parser.ParseDir(fset, ".", nil, 0)
+	if err != nil {
+		t.Fatalf("parsing the auth package: %v", err)
+	}
+
+	for name, p := range pkg {
+		if strings.HasSuffix(name, "_test") {
+			continue
+		}
+		for path, file := range p.Files {
+			if strings.HasSuffix(path, "_test.go") {
+				continue
+			}
+			ast.Inspect(file, func(n ast.Node) bool {
+				lit, ok := n.(*ast.BasicLit)
+				if !ok || lit.Kind != token.STRING {
+					return true
+				}
+				v, err := strconv.Unquote(lit.Value)
+				if err != nil {
+					return true
+				}
+				if strings.HasPrefix(v, "/app/") {
+					t.Errorf("%s: auth names the app route %q. Where home is belongs to "+
+						"the app registry; redirect to \"/\" and let it decide.",
+						fset.Position(lit.Pos()), v)
+				}
+				return true
+			})
+		}
 	}
 }
