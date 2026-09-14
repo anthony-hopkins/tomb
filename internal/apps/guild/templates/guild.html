@@ -186,6 +186,29 @@
           <span class="stat-label">Ranks</span>
           <span class="stat-value">{{len .Ranks}}</span>
         </div>
+
+        {{if .RoleShare}}
+        {{/* The guild as tanks, healers and DPS: one stacked bar, three
+             slices, each labelled with its share. Rects at percentage
+             offsets, with a hairline of surface between them; the rounded
+             ends are the svg's own border radius. Colours follow the game's
+             role convention on the marks only; the labels are ink. */}}
+        <div class="stat stat-roles">
+          <span class="stat-label">Roles <small>of {{.RoleTotal}} with a known spec</small></span>
+          <svg class="role-bar" height="12" aria-label="Guild roles">
+            <title>{{range $i, $r := .RoleShare}}{{if $i}} · {{end}}{{$r.Role}} {{$r.Pct}}%{{end}}</title>
+            {{range $i, $r := .RoleShare}}
+            <rect class="role-slice role-{{$r.Class}}" x="{{$r.Offset}}%" width="{{$r.Pct}}%" height="12"/>
+            {{if $i}}<rect class="role-gap" x="{{$r.Offset}}%" width="2" height="12"/>{{end}}
+            {{end}}
+          </svg>
+          <ul class="role-legend">
+            {{range .RoleShare}}
+            <li><span class="role-swatch role-{{.Class}}" aria-hidden="true"></span>{{.Role}} <b>{{.Pct}}%</b> <small>{{.Count}}</small></li>
+            {{end}}
+          </ul>
+        </div>
+        {{end}}
       </div>
 
       {{if .Classes}}

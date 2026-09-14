@@ -1305,3 +1305,70 @@ func TestClassBarsCarryRoles(t *testing.T) {
 		}
 	}
 }
+
+// TestRoleShareSumsToExactly100: three shares of seven cannot each round to a
+// whole percent and still add up; largest remainder makes them.
+func TestRoleShareSumsToExactly100(t *testing.T) {
+	shares, total := shareOf(map[blizzard.Role]int{blizzard.RoleTank: 1, blizzard.RoleHealer: 2, blizzard.RoleDPS: 4})
+	if total != 7 || len(shares) != 3 {
+		t.Fatalf("total %d, %d shares", total, len(shares))
+	}
+	sum := 0
+	for _, sh := range shares {
+		sum += sh.Pct
+	}
+	if sum != 100 {
+		t.Errorf("shares sum to %d, want exactly 100: %+v", sum, shares)
+	}
+	// 1/7 = 14.28, 2/7 = 28.57, 4/7 = 57.14: floors 14+28+57 = 99, and the
+	// leftover point goes to the healer, who lost the most.
+	if shares[0].Pct != 14 || shares[1].Pct != 29 || shares[2].Pct != 57 {
+		t.Errorf("shares = %d/%d/%d, want 14/29/57", shares[0].Pct, shares[1].Pct, shares[2].Pct)
+	}
+	if shares[0].Offset != 0 || shares[1].Offset != 14 || shares[2].Offset != 43 {
+		t.Errorf("offsets = %d/%d/%d, want 0/14/43", shares[0].Offset, shares[1].Offset, shares[2].Offset)
+	}
+	if shares[0].Class != "tank" || shares[2].Class != "dps" {
+		t.Errorf("classes = %q, %q", shares[0].Class, shares[2].Class)
+	}
+
+	// Nobody with a spec: no bar, rather than a bar of nothing.
+	if sh, n := shareOf(nil); sh != nil || n != 0 {
+		t.Errorf("empty totals gave %+v, %d", sh, n)
+	}
+}
+
+// TestRoleBarRenders: the stacked bar's slices sit at their offsets with a
+// gap between them, and the legend reads the same numbers.
+func TestRoleBarRenders(t *testing.T) {
+	a := snapshotApp(&fakeClient{}, time.Hour)
+	members := []blizzard.GuildMember{
+		{Name: "T", Rank: 1, Level: 90, Class: "Paladin", RealmSlug: "elune"},
+		{Name: "H", Rank: 1, Level: 90, Class: "Priest", RealmSlug: "elune"},
+		{Name: "D1", Rank: 1, Level: 90, Class: "Mage", RealmSlug: "elune"},
+		{Name: "D2", Rank: 1, Level: 90, Class: "Mage", RealmSlug: "elune"},
+	}
+	details := map[string]memberDetail{}
+	for _, m := range members {
+		spec := map[string]string{"T": "Protection", "H": "Holy", "D1": "Frost", "D2": "Fire"}[m.Name]
+		details[memberKey(m)] = memberDetail{Character: blizzard.Character{Name: m.Name, RealmSlug: m.RealmSlug, Class: m.Class, ActiveSpec: spec}}
+	}
+	sum := a.summarise(members, a.group(members, details), details)
+	body := html.UnescapeString(render(t, view{Groups: a.group(members, details), Summary: sum, Total: 4, Home: routePrefix}))
+
+	for _, want := range []string{
+		`<rect class="role-slice role-tank" x="0%" width="25%" height="12"/>`,
+		`<rect class="role-slice role-healer" x="25%" width="25%" height="12"/>`,
+		`<rect class="role-gap" x="25%" width="2" height="12"/>`,
+		`<rect class="role-slice role-dps" x="50%" width="50%" height="12"/>`,
+		"Tank <b>25%</b>", "Healer <b>25%</b>", "DPS <b>50%</b>",
+		"of 4 with a known spec",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the role bar is missing %s", want)
+		}
+	}
+	if strings.Contains(body, "style=") {
+		t.Error("the role bar uses an inline style, which the CSP blocks")
+	}
+}
