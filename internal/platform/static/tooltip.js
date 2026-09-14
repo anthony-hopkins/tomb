@@ -11,7 +11,7 @@
 // JavaScript only where a specific interaction genuinely requires it, and "put
 // this box where it fits" is the interaction that qualifies.
 //
-// It does three things:
+// It does four things:
 //
 //   1. Places an open tooltip or card so it stays inside the viewport. CSS can
 //      put it beside its row, but it cannot know that the row is near the
@@ -29,6 +29,12 @@
 //      outside the rail. So the rail scrolls only once this script is placing
 //      the cards in viewport coordinates, where the rail cannot clip them.
 //      The class it adds is what the stylesheet keys the scrolling on.
+//
+//   4. Submits the roster search the moment a name is PICKED from the
+//      browser's suggestions. The suggestions are a native datalist, which
+//      only ever fills the box; without this, picking a name still leaves
+//      the viewer to press enter. Typing is left alone -- only a pick, or
+//      a paste, of a name that is actually on the roster submits.
 //
 // No framework, no build step, no dependencies. It is served from the same
 // origin under a script-src of 'self'.
@@ -143,6 +149,33 @@
 
     // Now that cards are placed where the rail cannot clip them, the rail may
     // scroll on its own. The stylesheet does the rest off this class.
+    // The roster search: a pick from the suggestions goes straight there.
+    //
+    // A keystroke reports itself as insertText or a delete*; a pick from the
+    // datalist reports insertReplacementText (Chromium, Safari) or no
+    // inputType at all (Firefox). So anything that is not typing, whose
+    // result is exactly one of the suggestions, is treated as a choice made.
+    // The exact-match check is what stops a typed prefix that happens to be
+    // somebody's whole name from firing mid-word.
+    var search = document.querySelector(".roster-search");
+    var box = search && search.querySelector("input[list]");
+    var list = box && document.getElementById(box.getAttribute("list"));
+    if (search && box && list) {
+      box.addEventListener("input", function (e) {
+        var how = e.inputType || "";
+        if (how === "insertText" || how.indexOf("delete") === 0) {
+          return;
+        }
+        var opts = list.options;
+        for (var i = 0; i < opts.length; i++) {
+          if (opts[i].value === box.value) {
+            search.submit();
+            return;
+          }
+        }
+      });
+    }
+
     var nav = document.querySelector(".character-nav");
     if (nav) {
       nav.classList.add("is-scrollable");

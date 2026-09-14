@@ -40,9 +40,10 @@ the top and trainees at the bottom, alphabetical within each rank. It is the
 page the **TOMB** link in the corner always goes back to.
 
 There is a search box above the list. Start typing a name and the browser
-completes it from the roster; press enter and you are on that character's
-Armory view. Two characters with the same name on different realms? Add the
-realm — `Cwds elune` — or pick from the short list the page offers.
+suggests matches from the roster; pick one and you are on that character's
+Armory view. Typing a whole name and pressing enter does the same. Two
+characters with the same name on different realms show as `Cwds (Elune)` and
+`Cwds (Illidan)`, so the pick is never in doubt.
 
 The rows work exactly like the ones on My Characters:
 
