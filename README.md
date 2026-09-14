@@ -58,10 +58,10 @@ and whether the database disk is snapshotted, and nothing else. See
 [tofu/environments.tf](tofu/environments.tf) and
 [docs/deployment.md](docs/deployment.md).
 
-> **The develop environment is configured but not yet applied.** Its first deploy
-> takes two passes — infrastructure, then DNS, then deploy again — because Caddy
-> cannot get a certificate for a name that does not resolve yet. The procedure is
-> in [docs/deployment.md](docs/deployment.md#standing-up-the-develop-environment).
+Both environments are live. Sign-in on develop additionally needs its own
+Battle.net client secret in Secret Manager and its callback registered at
+develop.battle.net — see
+[docs/deployment.md](docs/deployment.md#standing-up-the-develop-environment).
 
 ## This machine has a split toolchain
 

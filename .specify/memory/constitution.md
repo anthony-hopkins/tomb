@@ -8,20 +8,19 @@ Sync Impact Report
   in place of the "if the constitution is amended to say so" placeholder it carried.
 - Modified sections: Technology Constraints (datastore, containerization, cloud); Development Workflow
   (adds the develop → main branch promotion model and an environment-parity requirement)
-- Added sections: Development Workflow → Transitional exception, recording that the develop environment
-  does not exist yet and production is currently the only deployed environment
-- Removed sections: none
+- Added sections: none
+- Removed sections: Development Workflow → Transitional exception. It was added by this amendment to
+  record that develop did not exist yet, and deleted once it did; it never outlived its condition.
 - Resolved TODOs: TODO(DB_ENGINE) — PostgreSQL 18, self-hosted on the VM (f8b374d), now stated outright in
   Technology Constraints. TODO(GUILD_VERIFICATION) — settled by the shipped implementation: membership is
   read from the `guild` object already present on the character profile response, re-derived per request
   and never cached.
 - Repository changes this amendment requires: DELETE root `compose.yaml` and `.env.example`; remove the
   `run` target from `Makefile`; update `README.md` and `docs/deployment.md`.
-- Follow-up TODOs: TODO(DEVELOP_ENV) — the configuration for the develop environment now exists
-  (`tofu/environments.tf` selects it by OpenTofu workspace; `deploy.yml` applies it on a push to
-  `develop`), but it has not been APPLIED yet, so the Transitional exception below still stands.
-  Delete that exception once develop's first deploy has completed and DNS for its hostname resolves.
-  Procedure: docs/deployment.md, "Standing up the develop environment".
+- Follow-up TODOs: none. TODO(DEVELOP_ENV) is closed — the develop environment was applied on
+  2026-09-14 and serves at https://dev.tombguild.com with a Let's Encrypt certificate, so the
+  Transitional exception that allowed testing in production has been removed from Development
+  Workflow. Both environments now come from this one configuration, selected by workspace.
 -->
 
 # TOMB Guild Platform Constitution
@@ -170,14 +169,6 @@ guild need, not a hypothetical future one.
   plan` output) in the pull request for review before `tofu apply` runs.
 - New apps (Principle II) MUST include a short note in their spec on how they register
   with the core and what, if any, guild-membership gating they require.
-
-**Transitional exception (from 2026-09-13, until the develop environment exists).** The
-develop environment has not been built yet, so today `main` is the only deployed
-environment and changes are exercised in production. This is a knowingly accepted risk of a
-greenfield project with no users, not a standing permission: it expires the moment the
-develop environment is stood up, and until then production deploys carry the full weight of
-Principle V's human approval. The branch promotion rule above is in force regardless —
-`develop` → `main` is how code moves, whether or not develop has an environment attached.
 
 ## Governance
 
