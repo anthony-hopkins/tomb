@@ -383,6 +383,56 @@ func (c *HTTPClient) CharacterEquipment(ctx context.Context, token string, ref C
 	return items, nil
 }
 
+func (c *HTTPClient) GuildRoster(ctx context.Context, token, realmSlug, guildName string) ([]GuildMember, error) {
+	const endpoint = "guild-roster"
+
+	var payload struct {
+		Members []struct {
+			Character struct {
+				Name  string `json:"name"`
+				Level int    `json:"level"`
+				Realm struct {
+					Slug string `json:"slug"`
+					Name string `json:"name"`
+				} `json:"realm"`
+				PlayableClass struct {
+					ID int `json:"id"`
+				} `json:"playable_class"`
+			} `json:"character"`
+			Rank int `json:"rank"`
+		} `json:"members"`
+	}
+
+	path := fmt.Sprintf("/data/wow/guild/%s/%s/roster",
+		url.PathEscape(strings.ToLower(realmSlug)),
+		url.PathEscape(GuildNameSlug(guildName)),
+	)
+	q := url.Values{
+		"namespace": {c.Namespace},
+		"locale":    {c.Locale},
+	}
+	if err := c.get(ctx, endpoint, c.APIHost+path, q, token, &payload); err != nil {
+		return nil, err
+	}
+
+	members := make([]GuildMember, 0, len(payload.Members))
+	for _, m := range payload.Members {
+		if m.Character.Name == "" {
+			continue
+		}
+		members = append(members, GuildMember{
+			Name:      m.Character.Name,
+			RealmSlug: m.Character.Realm.Slug,
+			RealmName: m.Character.Realm.Name,
+			Level:     m.Character.Level,
+			Rank:      m.Rank,
+			Class:     classNames[m.Character.PlayableClass.ID],
+		})
+	}
+	SortRoster(members)
+	return members, nil
+}
+
 // ItemIcon resolves an item's media id to its icon URL, caching the result for
 // the life of the process.
 //

@@ -61,6 +61,10 @@ func (fakeBlizzard) ItemIcon(context.Context, string, int) (string, error) {
 	return "", nil
 }
 
+func (fakeBlizzard) GuildRoster(context.Context, string, string, string) ([]blizzard.GuildMember, error) {
+	return nil, nil
+}
+
 func testHandlers(r Renderer) *Handlers {
 	return &Handlers{
 		OAuth:    NewOAuthConfig("client-id", "client-secret", "http://localhost:8080/auth/callback"),

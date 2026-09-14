@@ -322,6 +322,38 @@ main:has(.dashboard) { max-width: none; }
 
 .roster-hint { color: var(--muted); font-size: 0.9rem; margin: 0.25rem 0 0; }
 
+/* Guild roster: the same rail, grouped by rank.
+   
+   The heading is what makes the order legible -- a roster sorted by rank with
+   no headings reads as an arbitrary order to anyone who does not already know
+   the ranks. */
+.rank-heading {
+  margin: 1.1rem 0 0.4rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.rank-heading:first-of-type { margin-top: 0; }
+
+.character-nav .character-list + .rank-heading { margin-top: 1.25rem; }
+
+.roster-note {
+  margin: 0 0 0.75rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+.roster-note code {
+  color: var(--accent-2);
+  font-size: 0.95em;
+}
+
+.roster-total {
+  margin: 0.9rem 0 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
 /* Narrow screens have no room beside the list, and no hover either. The card
    drops inline beneath its row and opens on tap, which focus-within gives us
    for free. display, not opacity, so a closed card takes up no space. */

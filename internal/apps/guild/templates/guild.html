@@ -1,0 +1,56 @@
+{{define "guild.html"}}
+{{/* The same two-column shape as My Characters -- roster rail on the left,
+     panel on the right -- so the two pages read as one site. The panel is
+     deliberately empty for now. */}}
+<div class="dashboard{{if not .Groups}} is-empty{{end}}">
+
+  {{if .Groups}}
+  <aside class="character-nav" aria-label="Guild roster">
+    <h1 class="roster-heading">Guild</h1>
+
+    {{if .RanksUnnamed}}
+    <p class="roster-note">
+      Rank names are not configured, so ranks below the guild master show as
+      numbers. Set <code>TOMB_GUILD_RANKS</code> to name them.
+    </p>
+    {{end}}
+
+    {{range .Groups}}
+    <p class="rank-heading">{{.Label}}</p>
+    <ul class="character-list">
+      {{range .Members}}
+      <li class="character-row">
+        <span class="row-name">{{.Name}}</span>
+        <span class="row-meta">
+          {{if .Level}}{{.Level}}{{end}}{{if .Class}} {{.Class}}{{end}}
+          {{if .Realm}}&middot; {{.Realm}}{{end}}
+        </span>
+      </li>
+      {{end}}
+    </ul>
+    {{end}}
+
+    <p class="roster-total">
+      {{.Total}} character{{if ne .Total 1}}s{{end}} on the roster
+    </p>
+  </aside>
+  {{end}}
+
+  <div class="dashboard-main">
+    {{if .Unavailable}}
+    <section class="panel">
+      <h1>The roster is unavailable</h1>
+      <p>
+        Blizzard could not be reached for the guild roster just now. Everything
+        else on the site still works; try again shortly.
+      </p>
+    </section>
+    {{else if not .Groups}}
+    <section class="panel">
+      <h1>No roster</h1>
+      <p>Blizzard returned no characters for this guild.</p>
+    </section>
+    {{end}}
+  </div>
+</div>
+{{end}}

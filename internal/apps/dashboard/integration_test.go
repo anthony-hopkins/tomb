@@ -84,6 +84,10 @@ func (f *fakeBlizzard) ItemIcon(_ context.Context, _ string, mediaID int) (strin
 	return f.iconFor(mediaID)
 }
 
+func (f *fakeBlizzard) GuildRoster(context.Context, string, string, string) ([]blizzard.GuildMember, error) {
+	return nil, nil
+}
+
 var _ blizzard.Client = (*fakeBlizzard)(nil)
 
 func refs(names ...string) []blizzard.CharacterRef {

@@ -20,6 +20,16 @@ type Config struct {
 	GuildName  string
 	GuildRealm string
 
+	// GuildRanks names the guild's ranks, most senior first, because Blizzard
+	// does not. The roster API returns a rank INDEX and nothing else: ranks are
+	// named in-game and appear nowhere in any endpoint, so the only way to show
+	// "Officer" rather than "Rank 2" is to be told.
+	//
+	// Comma-separated in TOMB_GUILD_RANKS, position matching the rank index --
+	// the first entry is rank 0, the guild master. Optional: an index with no
+	// name shows as "Rank N", which is honest rather than wrong.
+	GuildRanks []string
+
 	DatabaseURL string
 
 	// SessionCookieSecure defaults to true. It may only be false for local
@@ -31,6 +41,24 @@ type Config struct {
 	APIHost string
 
 	Addr string
+}
+
+// splitRanks parses the comma-separated rank list.
+//
+// Not required, and deliberately forgiving: blank entries are kept as blanks so
+// a guild with an unnamed rank in the middle does not have every rank below it
+// shift up by one. Position is meaning here.
+func splitRanks(raw string) []string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+	parts := strings.Split(raw, ",")
+	ranks := make([]string, 0, len(parts))
+	for _, p := range parts {
+		ranks = append(ranks, strings.TrimSpace(p))
+	}
+	return ranks
 }
 
 // ErrMissingConfig reports one or more required variables being absent.
@@ -46,6 +74,7 @@ func LoadConfig() (Config, error) {
 		BnetRegion:       strings.ToLower(strings.TrimSpace(os.Getenv("BNET_REGION"))),
 		GuildName:        strings.TrimSpace(os.Getenv("TOMB_GUILD_NAME")),
 		GuildRealm:       strings.ToLower(strings.TrimSpace(os.Getenv("TOMB_GUILD_REALM"))),
+		GuildRanks:       splitRanks(os.Getenv("TOMB_GUILD_RANKS")),
 		DatabaseURL:      os.Getenv("DATABASE_URL"),
 		APIHost:          strings.TrimRight(os.Getenv("BNET_API_HOST"), "/"),
 		Addr:             envOr("ADDR", ":8080"),

@@ -54,6 +54,12 @@ type Deps struct {
 	Logger   *slog.Logger
 	Config   Config
 
+	// Guild is the configured guild identity and its rank names. Lent to apps
+	// because a guild platform's apps are mostly about the guild: the core
+	// already holds it for the FR-013 membership check, and rebuilding it from
+	// Config in every app would be three fields copied in three places.
+	Guild GuildConfig
+
 	// RenderInLayout draws an app's rendered body inside the shared page
 	// shell, so apps own their own content without owning the site chrome,
 	// navigation, or the signed-in header. The core populates this.

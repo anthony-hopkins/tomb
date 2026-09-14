@@ -17,6 +17,7 @@ import (
 
 	"github.com/anthony-hopkins/tomb/internal/apps/comingsoon"
 	"github.com/anthony-hopkins/tomb/internal/apps/dashboard"
+	"github.com/anthony-hopkins/tomb/internal/apps/guild"
 	"github.com/anthony-hopkins/tomb/internal/auth"
 	"github.com/anthony-hopkins/tomb/internal/blizzard"
 	"github.com/anthony-hopkins/tomb/internal/platform"
@@ -72,17 +73,26 @@ func run() error {
 	sessions := &auth.SessionManager{Store: store, CookieSecure: cfg.SessionCookieSecure}
 	csrf := &platform.CSRF{Secure: cfg.SessionCookieSecure}
 
+	// One guild identity, built once and shared: the membership check uses it
+	// and so does every app that is about the guild.
+	guildCfg := platform.GuildConfig{
+		Name:      cfg.GuildName,
+		RealmSlug: cfg.GuildRealm,
+		Ranks:     cfg.GuildRanks,
+	}
+
 	core := &platform.Core{
 		Deps: platform.Deps{
 			DB:       db,
 			Blizzard: bnet,
 			Logger:   logger,
 			Config:   cfg,
+			Guild:    guildCfg,
 		},
 		Sessions: sessions,
 		Profiles: &platform.ProfileFetcher{
 			Client: bnet,
-			Guild:  platform.GuildConfig{Name: cfg.GuildName, RealmSlug: cfg.GuildRealm},
+			Guild:  guildCfg,
 			Logger: logger,
 		},
 		CSRF:      csrf,
@@ -107,6 +117,11 @@ func run() error {
 		return fmt.Errorf("build dashboard app: %w", err)
 	}
 
+	guildOverview, err := guild.New(core.Deps)
+	if err != nil {
+		return fmt.Errorf("build guild app: %w", err)
+	}
+
 	comingSoon, err := comingsoon.New(core.Deps)
 	if err != nil {
 		return fmt.Errorf("build coming soon app: %w", err)
@@ -115,8 +130,10 @@ func run() error {
 	// The single registration point. Adding an app means adding one line here
 	// and nothing else (Principle II, contracts/app-registration.md).
 	//
-	// Order is nav order: My Characters first, Coming Soon to its right.
+	// Order is nav order, and the first app is also where a signed-in member
+	// lands: Guild, then My Characters, then Coming Soon.
 	apps := []platform.App{
+		guildOverview,
 		characterDashboard,
 		comingSoon,
 	}

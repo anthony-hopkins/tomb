@@ -137,10 +137,15 @@ func (c *Core) mountCoreRoutes(a *auth.Handlers) {
 }
 
 // landing serves the public landing page, or sends a signed-in viewer to their
-// dashboard (contracts/http-routes.md GET /).
+// home (contracts/http-routes.md GET /).
+//
+// Home is the FIRST registered app, not a named one. The core has no business
+// knowing which app happens to be the front page: moving it is then a matter of
+// reordering the list in cmd/tomb, which is where app composition already
+// lives, rather than editing the core (Principle II).
 func (c *Core) landing(w http.ResponseWriter, r *http.Request) {
 	if _, ok := SessionFrom(r.Context()); ok {
-		http.Redirect(w, r, "/app/dashboard", http.StatusFound)
+		http.Redirect(w, r, c.homePath(), http.StatusFound)
 		return
 	}
 
@@ -152,6 +157,17 @@ func (c *Core) landing(w http.ResponseWriter, r *http.Request) {
 		data.Message = "You have been signed out. Sign in again to see your current character."
 	}
 	c.renderPage(w, r, http.StatusOK, "landing.html", data)
+}
+
+// homePath is where a signed-in viewer is sent from "/".
+//
+// The first registered app, falling back to the landing page itself if there
+// are somehow none -- a redirect loop would be a worse failure than a bare page.
+func (c *Core) homePath() string {
+	if len(c.registry) > 0 {
+		return c.registry[0].RoutePrefix
+	}
+	return "/"
 }
 
 // navFor builds navigation from AppMeta alone, listing only apps the current
