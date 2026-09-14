@@ -99,7 +99,15 @@ func (f *ProfileFetcher) Fetch(ctx context.Context, accessToken string) (Profile
 			p.Characters = append(p.Characters, *fetched[i])
 			continue
 		}
-		p.Partial = true
+		// A 404 means the character is gone -- deleted, renamed, or transferred
+		// off the account -- and Blizzard's account summary keeps listing it
+		// regardless. That is not a partial failure, it is a stale entry, and
+		// telling a member their roster "may be incomplete" every single visit
+		// because of characters they deleted years ago is a notice that trains
+		// people to ignore notices. Genuine failures still set it.
+		if blizzard.OutcomeOf(failures[i]) != blizzard.OutcomeNotFound {
+			p.Partial = true
+		}
 		if f.Logger != nil && failures[i] != nil {
 			// Endpoint and outcome only — never the response body, which
 			// carries account data (contracts/blizzard-api.md).

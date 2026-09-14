@@ -24,12 +24,26 @@ import (
 //
 // Returns nil when there are no characters at all.
 func SelectCurrent(characters []blizzard.Character) *blizzard.Character {
+	ranked := Rank(characters)
+	if len(ranked) == 0 {
+		return nil
+	}
+	return &ranked[0]
+}
+
+// Rank returns every character in the FR-006 order, with IsCurrent set on the
+// first.
+//
+// The dashboard shows the whole roster as cards, and the "most current" one is
+// simply the one this order puts first -- so selection and presentation share a
+// single comparison rather than drifting into two nearly-identical ones. The
+// returned slice is a copy: the profile is shared across the request and other
+// components may rely on its original order.
+func Rank(characters []blizzard.Character) []blizzard.Character {
 	if len(characters) == 0 {
 		return nil
 	}
 
-	// Copy so the caller's slice order is untouched; the profile is shared
-	// across the request and other components may rely on its order.
 	ranked := make([]blizzard.Character, len(characters))
 	copy(ranked, characters)
 
@@ -37,9 +51,8 @@ func SelectCurrent(characters []blizzard.Character) *blizzard.Character {
 		return less(ranked[i], ranked[j])
 	})
 
-	winner := ranked[0]
-	winner.IsCurrent = true
-	return &winner
+	ranked[0].IsCurrent = true
+	return ranked
 }
 
 // less reports whether a should rank ahead of b under FR-006's total order.
