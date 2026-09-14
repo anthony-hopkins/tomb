@@ -275,8 +275,10 @@ main:has(.dashboard) { max-width: none; }
   top: -1px;
   left: calc(100% + 1.5rem);
   z-index: 5;
-  width: 22rem;
-  max-width: min(22rem, 70vw);
+  /* Wide enough that a date and a raid's progress each sit on one line
+     beside a capped label column; see the dl rule below. */
+  width: 24rem;
+  max-width: min(24rem, 70vw);
   /* More opaque than a normal panel: this one overlays other content, so the
      artwork behind it must not compete with the text on it. */
   background: rgba(6, 16, 25, 0.94);
@@ -482,10 +484,19 @@ main:has(.dashboard) { max-width: none; }
 .character-card dl,
 .armory-detail dl {
   display: grid;
-  grid-template-columns: max-content 1fr;
-  gap: 0.4rem 1.5rem;
+  /* The label column takes what it needs up to a cap, then wraps. It used to
+     be max-content, which let one long raid name -- "Aberrus, the Shadowed
+     Crucible" -- widen the column until the values beside it were squeezed
+     into a sliver four lines tall, while a card with only short labels looked
+     fine. A capped column keeps every card the same shape whatever it has to
+     say; the cap is generous enough that only raid names ever reach it. */
+  grid-template-columns: fit-content(10rem) minmax(0, 1fr);
+  gap: 0.4rem 1rem;
   margin: 1rem 0 0;
 }
+
+.character-card dt,
+.armory-detail dt { overflow-wrap: anywhere; }
 
 .character-card dt,
 .armory-detail dt { color: var(--muted); }
