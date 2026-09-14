@@ -71,7 +71,7 @@ cmd/tomb/            Composition root: config, database, deps, app list, serve
 internal/platform/   The thin core — routing, sessions, guild gate, layout, health
 internal/auth/       Battle.net OAuth2 and session management
 internal/blizzard/   Blizzard API client (behind one narrow interface)
-internal/apps/       One directory per app: guild (the home page), dashboard, comingsoon, logs (officers)
+internal/apps/       One directory per app: guild (the home page), dashboard, comingsoon, calendar, logs (officers)
 internal/armory/     The Armory panel both guild and dashboard render: one character, their render and gear
 deploy/              Production Compose project, Caddyfile, VM startup and deploy scripts
 tofu/                OpenTofu: the VM, network, disks and secrets

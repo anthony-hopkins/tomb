@@ -37,7 +37,14 @@ func SessionFrom(ctx context.Context) (auth.Session, bool) {
 
 // withProfile attaches this request's live character fetch.
 func withProfile(r *http.Request, p Profile) *http.Request {
-	return r.WithContext(context.WithValue(r.Context(), profileKey{}, p))
+	return r.WithContext(ContextWithProfile(r.Context(), p))
+}
+
+// ContextWithProfile attaches a profile to a context. Exported for the same
+// reason ContextWithSession is: an app's tests need to stand a viewer up --
+// member, officer -- without a database or a Blizzard client behind them.
+func ContextWithProfile(ctx context.Context, p Profile) context.Context {
+	return context.WithValue(ctx, profileKey{}, p)
 }
 
 // ProfileFrom returns the characters fetched for this request.

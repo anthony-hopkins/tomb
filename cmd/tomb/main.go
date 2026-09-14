@@ -15,6 +15,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/anthony-hopkins/tomb/internal/apps/calendar"
 	"github.com/anthony-hopkins/tomb/internal/apps/comingsoon"
 	"github.com/anthony-hopkins/tomb/internal/apps/dashboard"
 	"github.com/anthony-hopkins/tomb/internal/apps/guild"
@@ -108,6 +109,7 @@ func run() error {
 			Guild:    guildCfg,
 			Roster:   roster,
 			Audit:    audit,
+			CSRF:     csrf,
 		},
 		Sessions: sessions,
 		Profiles: &platform.ProfileFetcher{
@@ -164,6 +166,11 @@ func run() error {
 		return fmt.Errorf("build logs app: %w", err)
 	}
 
+	schedule, err := calendar.New(core.Deps)
+	if err != nil {
+		return fmt.Errorf("build calendar app: %w", err)
+	}
+
 	// The single registration point. Adding an app means adding one line here
 	// and nothing else (Principle II, contracts/app-registration.md).
 	//
@@ -175,6 +182,7 @@ func run() error {
 		guildOverview,
 		characterDashboard,
 		comingSoon,
+		schedule,
 		auditLogs,
 	}
 

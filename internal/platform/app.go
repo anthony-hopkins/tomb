@@ -60,6 +60,11 @@ type AppMeta struct {
 	OfficerOnly bool
 }
 
+// CSRFVerifier is the one method of the core's CSRF guard an app needs.
+type CSRFVerifier interface {
+	Verify(r *http.Request) bool
+}
+
 // Registrar is the narrow slice of routing an app is allowed to touch. Patterns
 // are relative to the app's RoutePrefix and use net/http.ServeMux syntax,
 // e.g. "GET /" or "GET /char/{name}".
@@ -91,6 +96,11 @@ type Deps struct {
 	// it changed here; the Logs app reads it. Append-only by interface and
 	// by database rule alike.
 	Audit AuditStore
+
+	// CSRF verifies a form. An app that accepts a POST checks it before
+	// changing anything; the token to put in the form is CSRFTokenFrom, the
+	// field name CSRFFieldName.
+	CSRF CSRFVerifier
 
 	// RenderInLayout draws an app's rendered body inside the shared page
 	// shell, so apps own their own content without owning the site chrome,

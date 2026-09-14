@@ -115,12 +115,22 @@ A few things worth knowing:
 - **Not every character has a render.** If Blizzard has never generated an image
   for one, the panel says so and shows everything else as normal.
 
+## Calendar
+
+The guild's schedule, under **Calendar** in the navigation: what is happening
+and when, by day. All times are UTC — the guild is spread across time zones,
+and a schedule that quietly meant one officer's local time would be wrong for
+most people reading it.
+
+The guild master and officers can add, change and remove events; everyone else
+reads. Every change is recorded in the Logs: who, when, and what changed.
+
 ## Logs (guild master and officers)
 
 Officers have a **Logs** entry in the navigation that nobody else sees or can
-open. It is the audit trail: who signed in and out, and every change an
-officer makes through the site — what was changed, by whom, and when — newest
-first, filterable by kind. Nothing in it can be edited or removed, by anyone,
+open. It is the audit trail: who signed in and out, and every change to the
+calendar — what was changed, by whom, and when — newest first, filterable by
+kind. Nothing in it can be edited or removed, by anyone,
 and the database is set up to refuse it even if somebody tried.
 
 ## Coming to TOMB
