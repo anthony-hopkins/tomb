@@ -1246,3 +1246,50 @@ func TestPickedSuggestionResolvesToOneMember(t *testing.T) {
 			rec.Code, rec.Header().Get("Location"))
 	}
 }
+
+// TestClassBarsCarryRoles: under each class, how many tank, heal and DPS by
+// their active spec -- only roles anyone fills, only members with a spec.
+func TestClassBarsCarryRoles(t *testing.T) {
+	a := snapshotApp(&fakeClient{}, time.Hour)
+	members := []blizzard.GuildMember{
+		{Name: "Tankpal", Rank: 1, Level: 90, Class: "Paladin", RealmSlug: "elune"},
+		{Name: "Holypal", Rank: 1, Level: 90, Class: "Paladin", RealmSlug: "elune"},
+		{Name: "Retpal", Rank: 1, Level: 90, Class: "Paladin", RealmSlug: "elune"},
+		{Name: "Retpaltwo", Rank: 1, Level: 90, Class: "Paladin", RealmSlug: "elune"},
+		{Name: "Mystery", Rank: 1, Level: 90, Class: "Paladin", RealmSlug: "elune"}, // no profile
+		{Name: "Icemage", Rank: 1, Level: 90, Class: "Mage", RealmSlug: "elune"},
+	}
+	details := map[string]memberDetail{}
+	spec := map[string]string{"Tankpal": "Protection", "Holypal": "Holy", "Retpal": "Retribution", "Retpaltwo": "Retribution", "Icemage": "Frost"}
+	for _, m := range members {
+		if sp, ok := spec[m.Name]; ok {
+			details[memberKey(m)] = memberDetail{Character: blizzard.Character{Name: m.Name, RealmSlug: m.RealmSlug, Class: m.Class, ActiveSpec: sp}}
+		}
+	}
+
+	sum := a.summarise(members, a.group(members, details), details)
+	pal := sum.Classes[0]
+	if pal.Label != "Paladin" || pal.Count != 5 {
+		t.Fatalf("first class = %+v, want Paladin with 5", pal)
+	}
+	want := []roleCount{{blizzard.RoleTank, 1}, {blizzard.RoleHealer, 1}, {blizzard.RoleDPS, 2}}
+	if len(pal.Roles) != 3 || pal.Roles[0] != want[0] || pal.Roles[1] != want[1] || pal.Roles[2] != want[2] {
+		t.Errorf("Paladin roles = %+v, want %+v (Mystery, with no spec, in no role)", pal.Roles, want)
+	}
+	// One Frost Mage: DPS only, tank and healer omitted rather than shown as 0.
+	mage := sum.Classes[1]
+	if len(mage.Roles) != 1 || mage.Roles[0] != (roleCount{blizzard.RoleDPS, 1}) {
+		t.Errorf("Mage roles = %+v, want DPS 1 alone", mage.Roles)
+	}
+
+	body := html.UnescapeString(render(t, view{Groups: a.group(members, details), Summary: sum, Total: 6, Home: routePrefix}))
+	for _, want := range []string{
+		`<span class="bar-role"><span class="bar-role-name">Tank</span> 1</span>`,
+		`<span class="bar-role-name">Healer</span> 1`,
+		`<span class="bar-role-name">DPS</span> 2`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the class chart is missing %s", want)
+		}
+	}
+}

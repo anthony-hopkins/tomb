@@ -1027,10 +1027,33 @@ main:has(.dashboard) { max-width: none; }
 .bar-row {
   display: grid;
   grid-template-columns: minmax(5.5rem, 8.5rem) minmax(0, 1fr) 2.5rem;
-  gap: 0.75rem;
+  /* A second row under the bar for the role breakdown, when there is one. */
+  grid-template-areas:
+    "label bar n"
+    ".     roles roles";
+  gap: 0.1rem 0.75rem;
   align-items: center;
   font-size: 0.9rem;
 }
+
+.bar-row .bar-label { grid-area: label; }
+.bar-row .bar       { grid-area: bar; }
+.bar-row .bar-n     { grid-area: n; }
+
+/* Tank · Healer · DPS under a class bar: small, muted, the numbers in ink so
+   they read as numbers and the role names recede to labels. */
+.bar-roles {
+  grid-area: roles;
+  font-size: 0.75rem;
+  color: var(--muted);
+  line-height: 1.4;
+  margin-bottom: 0.25rem;
+}
+
+.bar-role { white-space: nowrap; }
+.bar-role-name { letter-spacing: 0.04em; text-transform: uppercase; font-size: 0.68rem; }
+.bar-role { color: var(--ink); }
+.bar-role .bar-role-name { color: var(--muted); }
 
 .bar-label { overflow-wrap: anywhere; }
 
