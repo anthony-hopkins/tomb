@@ -134,11 +134,60 @@ func TestDenialDistinguishesRealmMismatch(t *testing.T) {
 		t.Fatalf("Fetch() error = %v", err)
 	}
 
-	record := denialRecord(t, logs())
+	records := logs()
+
+	record := denialRecord(t, records)
 	seen, _ := record["guilds_seen"].([]any)
 	if len(seen) != 1 || seen[0] != "TOMB@some-other-realm" {
 		t.Errorf("guilds_seen = %v, want [TOMB@some-other-realm] so the realm mismatch is visible",
 			seen)
+	}
+
+	// The near-miss line is the one that turns this from a puzzle into a
+	// one-line configuration fix, so it gets asserted on its own.
+	var hint map[string]any
+	for _, r := range records {
+		if r["msg"] == "guild name matched but realm did not" {
+			hint = r
+		}
+	}
+	if hint == nil {
+		t.Fatal("no near-miss record: a matching guild name on a different realm went unremarked")
+	}
+	if got := hint["configured"]; got != "TOMB@area-52" {
+		t.Errorf("configured = %v, want TOMB@area-52", got)
+	}
+	if got := hint["found"]; got != "TOMB@some-other-realm" {
+		t.Errorf("found = %v, want TOMB@some-other-realm", got)
+	}
+}
+
+// TestNoNearMissWhenTheNameDiffers keeps the hint honest. A different guild
+// entirely is not a realm problem, and saying so would send the next person
+// looking in the wrong place.
+func TestNoNearMissWhenTheNameDiffers(t *testing.T) {
+	fake := &fakeClient{
+		refs: refsFor("Main"),
+		profileFor: func(blizzard.CharacterRef) (blizzard.Character, error) {
+			return blizzard.Character{
+				Name:      "Main",
+				RealmSlug: "area-52",
+				Guild:     &blizzard.Guild{Name: "WRATH", RealmSlug: "elune"},
+				LastLogin: time.Now(),
+			}, nil
+		},
+	}
+
+	f, logs := captureFetcher(t, fake, GuildConfig{Name: "TOMB", RealmSlug: "area-52"})
+
+	if _, err := f.Fetch(context.Background(), "token"); err != nil {
+		t.Fatalf("Fetch() error = %v", err)
+	}
+
+	for _, r := range logs() {
+		if r["msg"] == "guild name matched but realm did not" {
+			t.Errorf("near-miss logged for a guild with a different name: %v", r)
+		}
 	}
 }
 
