@@ -2,6 +2,7 @@ package blizzard
 
 import (
 	"context"
+	"sort"
 	"strings"
 	"time"
 )
@@ -18,6 +19,89 @@ type Client interface {
 
 	// CharacterProfile fetches one character's full summary.
 	CharacterProfile(ctx context.Context, token string, ref CharacterRef) (Character, error)
+
+	// CharacterMedia fetches the images Blizzard renders for a character.
+	//
+	// Separate from the profile because it is a separate endpoint and a
+	// separate cost: fetched for the one character being looked at, never for
+	// the whole roster, which would double the per-view fan-out (FR-016).
+	CharacterMedia(ctx context.Context, token string, ref CharacterRef) (Media, error)
+
+	// CharacterEquipment fetches what a character is currently wearing. Same
+	// cost argument as CharacterMedia: one character, never the roster.
+	CharacterEquipment(ctx context.Context, token string, ref CharacterRef) ([]EquippedItem, error)
+}
+
+// EquippedItem is one filled gear slot.
+type EquippedItem struct {
+	// SlotType is Blizzard's key, e.g. "HEAD" or "FINGER_1". Kept because the
+	// display name is localised and the key is what ordering keys off.
+	SlotType string
+	SlotName string
+
+	Name string
+
+	// Quality is Blizzard's key, e.g. "EPIC". The colours players read gear by
+	// are a presentation concern, so only the key travels this far.
+	Quality string
+
+	// Level is the item level of this piece, which is the number people
+	// actually compare.
+	Level int
+}
+
+// slotOrder is the order the game lays gear out in, which is the order players
+// expect to read it in. Anything Blizzard returns that is not listed here sorts
+// to the end rather than vanishing, so a new slot in a future patch shows up
+// unordered instead of not at all.
+var slotOrder = map[string]int{
+	"HEAD": 0, "NECK": 1, "SHOULDER": 2, "BACK": 3, "CHEST": 4,
+	"SHIRT": 5, "TABARD": 6, "WRIST": 7,
+	"HANDS": 8, "WAIST": 9, "LEGS": 10, "FEET": 11,
+	"FINGER_1": 12, "FINGER_2": 13, "TRINKET_1": 14, "TRINKET_2": 15,
+	"MAIN_HAND": 16, "OFF_HAND": 17, "RANGED": 18,
+}
+
+// SortEquipment puts gear into the game's own slot order, in place.
+func SortEquipment(items []EquippedItem) {
+	sort.SliceStable(items, func(i, j int) bool {
+		return slotRank(items[i].SlotType) < slotRank(items[j].SlotType)
+	})
+}
+
+func slotRank(slot string) int {
+	if rank, ok := slotOrder[slot]; ok {
+		return rank
+	}
+	return len(slotOrder)
+}
+
+// Media is the set of images Blizzard renders for a character, in its current
+// gear, on its own servers.
+//
+// This is how the site shows a character without shipping a 3D viewer: no
+// extracted game assets, no WebGL, no JavaScript, and nothing to re-extract
+// every patch. The trade is that these are stills -- there is no rotating it.
+type Media struct {
+	// Avatar is a square bust. Inset is waist-up on a scene background.
+	Avatar string
+	Inset  string
+
+	// Main is full-body on a background; MainRaw is the same cut out, with
+	// transparency, which is the one that suits a dark page.
+	Main    string
+	MainRaw string
+}
+
+// Hero is the largest usable image, preferring the cut-out so the character
+// sits on the page's own background rather than in a grey box.
+func (m Media) Hero() string {
+	for _, candidate := range []string{m.MainRaw, m.Main, m.Inset, m.Avatar} {
+		if candidate != "" {
+			return candidate
+		}
+	}
+	return ""
 }
 
 // Identity is the subset of /userinfo this platform uses.

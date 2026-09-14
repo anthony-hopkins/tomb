@@ -1,8 +1,8 @@
 {{define "dashboard.html"}}
-{{/* Two columns for the whole page: a character rail on the left, everything
-     else to its right. The rail is a page-level navigation pane rather than
-     part of the reading column, which is why it sits outside .dashboard-main
-     and why the stylesheet widens <main> when this layout is present. */}}
+{{/* Two columns: the character rail on the left, the selected character's
+     Armory panel on the right. Switching character is a plain link to the same
+     page with ?c=<realm>/<name> -- a GET, so it is bookmarkable, works without
+     JavaScript, and the back button does what it should. */}}
 <div class="dashboard{{if not .Characters}} is-empty{{end}}">
 
   {{if .Characters}}
@@ -11,17 +11,17 @@
 
     {{/* tabindex on each row is what makes this usable without a mouse: the
          card is revealed by :hover OR :focus-within, so tabbing through the
-         list opens each card in turn. A hover-only disclosure is unreachable
-         by keyboard and unusable on a touch screen. */}}
+         list opens each card in turn, and the link inside it is the next stop
+         after that. */}}
     <ul class="character-list">
       {{range .Characters}}
-      <li class="character-row{{if .Current}} is-current{{end}}" tabindex="0">
+      <li class="character-row{{if .Current}} is-current{{end}}{{if .Selected}} is-selected{{end}}" tabindex="0"{{if .Selected}} aria-current="true"{{end}}>
         <span class="row-name">{{.Name}}</span>
         <span class="row-meta">{{.Level}} {{.Class}}{{if .Guild}} &middot; &lt;{{.Guild}}&gt;{{end}}</span>
 
         <div class="character-card popover" role="group" aria-label="{{.Name}} details">
           {{if .Current}}<p class="badge">Most recently played</p>{{end}}
-          <h2>{{.Name}}</h2>
+          <h2><a href="?c={{.Key}}">{{.Name}}</a></h2>
           <p class="realm">
             {{.RealmName}}{{if .Guild}} &middot; &lt;{{.Guild}}&gt;{{end}}
           </p>
@@ -54,29 +54,60 @@
     </p>
     {{end}}
 
-    {{if .Characters}}
-    <p class="roster-hint">Hover a character, or tab to it, for the details.</p>
+    {{with .Selected}}
+    <section class="armory" aria-label="{{.Name}}">
+      <div class="armory-figure">
+        {{if .Render}}
+        {{/* Blizzard's own render of this character in its current gear,
+             served from render.worldofwarcraft.com, which the page's CSP
+             already allows. No game assets, no WebGL, no JavaScript. */}}
+        <img src="{{.Render}}" alt="{{.Name}} in their current gear" loading="lazy">
+        {{else}}
+        <p class="armory-norender">
+          Blizzard has no render for this character yet.
+        </p>
+        {{end}}
+      </div>
+
+      <div class="armory-detail">
+        {{if .Current}}<p class="badge">Most recently played</p>{{end}}
+        <h2>{{.Name}}</h2>
+        <p class="realm">
+          {{.RealmName}}{{if .Guild}} &middot; &lt;{{.Guild}}&gt;{{end}}
+        </p>
+        <dl>
+          <dt>Class</dt>
+          <dd>{{.Class}}</dd>
+          {{if .ActiveSpec}}
+          <dt>Specialization</dt>
+          <dd>{{.ActiveSpec}}</dd>
+          {{end}}
+          <dt>Level</dt>
+          <dd>{{.Level}}</dd>
+          <dt>Average item level</dt>
+          <dd>{{.AverageItemLevel}}</dd>
+          <dt>Last played</dt>
+          <dd>{{.LastLogin}}</dd>
+        </dl>
+
+        {{if .Gear}}
+        <h3 class="gear-heading">Equipped</h3>
+        <ul class="gear-list">
+          {{range .Gear}}
+          <li>
+            <span class="gear-slot">{{.Slot}}</span>
+            <span class="gear-name {{.QualityClass}}">{{.Name}}</span>
+            <span class="gear-ilvl">{{if .Level}}{{.Level}}{{end}}</span>
+          </li>
+          {{end}}
+        </ul>
+        {{end}}
+      </div>
+    </section>
     {{else}}
     <section class="panel">
       <h1>No characters found</h1>
       <p>Blizzard did not return any World of Warcraft characters for this account.</p>
-    </section>
-    {{end}}
-
-    {{if .Roadmap}}
-    <section class="panel roadmap">
-      <h2>Coming to TOMB</h2>
-      <p class="fineprint">
-        None of this is built yet — it is what the site is being pointed at.
-      </p>
-      <ul class="roadmap-list">
-        {{range .Roadmap}}
-        <li>
-          <h3>{{.Title}}{{if .AI}} <span class="tag-ai">AI</span>{{end}}</h3>
-          <p>{{.Blurb}}</p>
-        </li>
-        {{end}}
-      </ul>
     </section>
     {{end}}
   </div>

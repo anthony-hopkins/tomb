@@ -12,6 +12,7 @@ import (
 	"embed"
 	"html/template"
 	"net/http"
+	"strings"
 
 	"github.com/anthony-hopkins/tomb/internal/blizzard"
 	"github.com/anthony-hopkins/tomb/internal/platform"
@@ -55,56 +56,14 @@ func (a *App) Routes(r platform.Registrar) {
 	r.Handle("GET /", http.HandlerFunc(a.show))
 }
 
-// roadmapItem is one entry in the "what's coming" list at the foot of the
-// dashboard.
-//
-// Placeholder copy, deliberately: nothing here is wired to anything, and none
-// of it should be read as a promise about dates. It sits in Go rather than in
-// the template so the list is data -- testable, and extendable without touching
-// markup -- and so that the AI flag is a field rather than a hand-repeated bit
-// of styling.
-type roadmapItem struct {
-	Title string
-	Blurb string
-	AI    bool
-}
-
-var roadmap = []roadmapItem{
-	{
-		Title: "Guildmates' characters",
-		Blurb: "See what the rest of TOMB is playing, not just your own roster.",
-	},
-	{
-		Title: "Guild calendar",
-		Blurb: "Events and plans in one place, so raid nights stop living in Discord scrollback.",
-	},
-	{
-		Title: "Ask TOMB Bot",
-		AI:    true,
-		Blurb: "Ask about the guild, the schedule, what is running this week, or just for advice.",
-	},
-	{
-		Title: "Combat log analysis",
-		AI:    true,
-		Blurb: "Compare your logs against the top performers of your class, see exactly where " +
-			"the differences are and what each one costs you, with suggested fixes.",
-	},
-	{
-		Title: "Gear analysis",
-		AI:    true,
-		Blurb: "Compare your gear to the top performers and get the path of least resistance to " +
-			"your next upgrades, prioritised so your resources always go where they matter most.",
-	},
-}
-
 // view is what the dashboard template renders.
 type view struct {
 	// Characters is the whole roster in FR-006 order, most current first.
 	Characters []characterView
 
-	// Roadmap is the placeholder "what's coming" list. Shown whether or not the
-	// roster loaded: it is about the site, not about this account.
-	Roadmap []roadmapItem
+	// Selected is the character shown in the Armory-style panel: the most
+	// recently played one, or whichever the URL asks for.
+	Selected *armoryView
 
 	// Partial reports that some characters could not be loaded, so the page can
 	// say so rather than quietly showing an incomplete roster (research.md D9).
@@ -126,9 +85,71 @@ type characterView struct {
 	LastLogin        string
 	Guild            string
 
+	// Key identifies this character in a URL, so its name can link to its own
+	// Armory panel. Raw, not escaped: html/template knows it lands in a URL
+	// query and escapes it correctly there.
+	Key string
+
+	// Selected marks the character the Armory panel is currently showing,
+	// which is not the same thing as Current: Current never moves, Selected
+	// follows whichever name was last clicked.
+	Selected bool
+
 	// Current marks the most recently played character, which the roster still
 	// leads with and calls out (FR-006, FR-007).
 	Current bool
+}
+
+// armoryView is the selected character, shown the way the Armory shows one.
+type armoryView struct {
+	characterView
+
+	// Render is Blizzard's own image of this character in its current gear, or
+	// empty when there is none. Empty is normal, not an error: a character
+	// Blizzard has never rendered simply has no assets.
+	Render string
+
+	// Gear is what the character is wearing, in the game's own slot order.
+	Gear []gearView
+}
+
+// gearView is one equipped item, ready for the template.
+type gearView struct {
+	Slot    string
+	Name    string
+	Level   int
+	Quality string
+
+	// QualityClass is the CSS class for the item's colour, pre-computed so the
+	// template does not have to lowercase anything. Empty for an unknown
+	// quality, which renders in the ordinary text colour rather than guessing.
+	QualityClass string
+}
+
+// characterKey identifies a character in a URL. Realm first, because a
+// character name is only unique within one realm.
+func characterKey(c blizzard.Character) string {
+	return c.RealmSlug + "/" + strings.ToLower(c.Name)
+}
+
+// selectIndex finds the character the URL asks for, falling back to the first
+// -- the most recently played -- when it asks for nothing or for something that
+// is not there.
+//
+// Falling back rather than 404ing is deliberate: the thing that produces an
+// unknown key is a bookmark to a character that has since been deleted or
+// transferred, and showing that member their main is a better answer than an
+// error page.
+func selectIndex(ranked []blizzard.Character, key string) int {
+	if key == "" {
+		return 0
+	}
+	for i := range ranked {
+		if strings.EqualFold(characterKey(ranked[i]), key) {
+			return i
+		}
+	}
+	return 0
 }
 
 // show renders the member's roster, most recently played first (FR-006, FR-007).
@@ -147,20 +168,26 @@ func (a *App) show(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	v := view{Partial: profile.Partial, Roadmap: roadmap}
+	v := view{Partial: profile.Partial}
 
-	for _, c := range Rank(profile.Characters) {
-		v.Characters = append(v.Characters, characterView{
-			Name:             c.Name,
-			RealmName:        realmLabel(&c),
-			Class:            c.Class,
-			ActiveSpec:       c.ActiveSpec,
-			Level:            c.Level,
-			AverageItemLevel: c.AverageItemLevel,
-			LastLogin:        c.LastLogin.Format("2 Jan 2006, 15:04 MST"),
-			Guild:            guildLabel(&c),
-			Current:          c.IsCurrent,
-		})
+	ranked := Rank(profile.Characters)
+	chosen := -1
+	if len(ranked) > 0 {
+		chosen = selectIndex(ranked, r.URL.Query().Get("c"))
+	}
+
+	for i, c := range ranked {
+		cv := a.characterView(c)
+		cv.Selected = i == chosen
+		v.Characters = append(v.Characters, cv)
+	}
+
+	if chosen >= 0 {
+		v.Selected = &armoryView{
+			characterView: a.characterView(ranked[chosen]),
+			Render:        a.render(r, ranked[chosen]),
+			Gear:          a.gear(r, ranked[chosen]),
+		}
 	}
 
 	var body bytes.Buffer
@@ -171,6 +198,98 @@ func (a *App) show(w http.ResponseWriter, r *http.Request) {
 	}
 
 	a.deps.RenderInLayout(w, r, http.StatusOK, "My Characters", template.HTML(body.String()))
+}
+
+// characterView flattens one character for the templates.
+func (a *App) characterView(c blizzard.Character) characterView {
+	return characterView{
+		Name:             c.Name,
+		RealmName:        realmLabel(&c),
+		Class:            c.Class,
+		ActiveSpec:       c.ActiveSpec,
+		Level:            c.Level,
+		AverageItemLevel: c.AverageItemLevel,
+		LastLogin:        c.LastLogin.Format("2 Jan 2006, 15:04 MST"),
+		Guild:            guildLabel(&c),
+		Current:          c.IsCurrent,
+		Key:              characterKey(c),
+	}
+}
+
+// render fetches Blizzard's image of one character.
+//
+// One call, for the one character on display -- never for the roster, which
+// would double the per-view fan-out that FR-016 already re-pays on every view.
+//
+// A failure here costs the picture and nothing else. The page is about the
+// character's data, which is already in hand; refusing to render it because an
+// image was unavailable would turn a cosmetic outage into a broken site.
+func (a *App) render(r *http.Request, c blizzard.Character) string {
+	session, ok := platform.SessionFrom(r.Context())
+	if !ok {
+		return ""
+	}
+
+	media, err := a.deps.Blizzard.CharacterMedia(
+		r.Context(), session.AccessToken,
+		blizzard.CharacterRef{Name: c.Name, RealmSlug: c.RealmSlug},
+	)
+	if err != nil {
+		a.deps.Logger.Warn("character media unavailable",
+			"realm", c.RealmSlug,
+			"outcome", blizzard.OutcomeOf(err).String(),
+		)
+		return ""
+	}
+	return media.Hero()
+}
+
+// knownQualities are the item qualities the stylesheet has a colour for.
+//
+// A map rather than trusting the API's string straight into a class name: that
+// value reaches the page, and building a CSS class out of unvalidated input is
+// how markup gets injected. Anything unrecognised renders uncoloured.
+var knownQualities = map[string]string{
+	"POOR": "q-poor", "COMMON": "q-common", "UNCOMMON": "q-uncommon",
+	"RARE": "q-rare", "EPIC": "q-epic", "LEGENDARY": "q-legendary",
+	"ARTIFACT": "q-artifact", "HEIRLOOM": "q-heirloom",
+}
+
+// gear fetches what the character is wearing.
+//
+// One call, for the one character on display -- the same argument as render.
+// Failing costs the gear list and nothing else: everything above it on the page
+// is already in hand, and a missing equipment endpoint is no reason to refuse
+// to show somebody their character.
+func (a *App) gear(r *http.Request, c blizzard.Character) []gearView {
+	session, ok := platform.SessionFrom(r.Context())
+	if !ok {
+		return nil
+	}
+
+	items, err := a.deps.Blizzard.CharacterEquipment(
+		r.Context(), session.AccessToken,
+		blizzard.CharacterRef{Name: c.Name, RealmSlug: c.RealmSlug},
+	)
+	if err != nil {
+		a.deps.Logger.Warn("character equipment unavailable",
+			"realm", c.RealmSlug,
+			"outcome", blizzard.OutcomeOf(err).String(),
+		)
+		return nil
+	}
+
+	gear := make([]gearView, 0, len(items))
+	for _, it := range items {
+		gear = append(gear, gearView{
+			Slot:         it.SlotName,
+			Name:         it.Name,
+			Level:        it.Level,
+			Quality:      it.Quality,
+			QualityClass: knownQualities[it.Quality],
+		})
+	}
+	return gear
 }
 
 // guildLabel is the character's guild, or empty when it has none.
