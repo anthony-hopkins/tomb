@@ -458,13 +458,7 @@ main:has(.dashboard) { max-width: none; }
   gap: 0.3rem;
 }
 
-.gear-list li {
-  display: grid;
-  grid-template-columns: 6.5rem minmax(0, 1fr) 3rem;
-  gap: 0.75rem;
-  align-items: baseline;
-  font-size: 0.9rem;
-}
+.gear-list li { font-size: 0.9rem; }
 
 .gear-slot { color: var(--muted); }
 .gear-name { overflow-wrap: anywhere; }
@@ -490,8 +484,119 @@ main:has(.dashboard) { max-width: none; }
 .q-artifact { color: #e6cc80; }
 .q-heirloom { color: #00ccff; }
 
+/* Item tooltips.
+   
+   Opened by CSS alone -- :hover and :focus-within -- so they work with the
+   script blocked. tooltip.js only improves WHERE the box lands and lights up
+   the other pieces of a set; it adds .tip-open and inline coordinates, which
+   the rules below defer to when present. */
+.gear-item { position: relative; }
+
+.gear-row {
+  display: grid;
+  grid-template-columns: 1.75rem 6rem minmax(0, 1fr) 3rem;
+  gap: 0.7rem;
+  align-items: center;
+  width: 100%;
+  padding: 0.25rem 0.35rem;
+  font: inherit;
+  text-align: left;
+  color: inherit;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: default;
+}
+
+.gear-row:hover,
+.gear-row:focus-visible {
+  background: rgba(54, 158, 232, 0.12);
+  border-color: var(--line);
+  outline: none;
+}
+
+.gear-icon {
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 4px;
+  display: block;
+}
+.gear-icon-blank { border: 1px solid var(--line); }
+
+/* The other pieces of the set currently being hovered. */
+.gear-item.set-related .gear-row {
+  background: rgba(74, 249, 231, 0.09);
+  border-color: rgba(74, 249, 231, 0.35);
+}
+
+.item-tooltip {
+  position: absolute;
+  left: calc(100% + 0.75rem);
+  top: 0;
+  z-index: 20;
+  width: 21rem;
+  max-width: min(21rem, 80vw);
+  padding: 0.85rem 1rem;
+  /* Near-opaque: a tooltip overlays other text, and this one is dense. */
+  background: rgba(4, 11, 18, 0.97);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 20px 44px -18px #000;
+  font-size: 0.85rem;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 90ms ease, visibility 0s linear 90ms;
+}
+
+.gear-item:hover .item-tooltip,
+.gear-item:focus-within .item-tooltip,
+.gear-item.tip-open .item-tooltip {
+  opacity: 1;
+  visibility: visible;
+  transition-delay: 0s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .item-tooltip { transition: none; }
+}
+
+.item-tooltip p { margin: 0 0 0.15rem; }
+
+.tt-name { font-weight: 600; font-size: 0.95rem; }
+.tt-ilvl { color: var(--accent); }
+.tt-transmog { color: var(--accent-2); }
+.tt-stat { color: #6ee7a8; }
+.tt-enchant { color: #6ee7a8; }
+.tt-socket { color: var(--muted); }
+.tt-socket.is-empty { font-style: italic; }
+.tt-line { color: var(--ink); }
+.tt-dim { color: var(--muted); }
+
+.tt-split { display: flex; justify-content: space-between; gap: 1rem; }
+
+.tt-set-name { margin-top: 0.6rem; color: var(--accent); }
+.tt-set-piece { color: var(--ink); padding-left: 0.6rem; }
+.tt-set-piece.is-missing { color: var(--muted); }
+.tt-set-effect { margin-top: 0.4rem; color: #6ee7a8; }
+
 @media (max-width: 48rem) {
-  .gear-list li { grid-template-columns: 5.5rem minmax(0, 1fr) 2.5rem; }
+  /* No room beside a row on a phone; drop it underneath instead. */
+  .item-tooltip {
+    position: static;
+    width: auto;
+    max-width: none;
+    margin: 0.4rem 0 0.6rem;
+    box-shadow: none;
+    display: none;
+    opacity: 1;
+    visibility: visible;
+  }
+  .gear-item:hover .item-tooltip,
+  .gear-item:focus-within .item-tooltip,
+  .gear-item.tip-open .item-tooltip { display: block; }
+
+  .gear-row { grid-template-columns: 1.75rem 4.5rem minmax(0, 1fr) 2.5rem; }
 }
 
 /* Roadmap: placeholder copy for things that do not exist yet. Styled plainly

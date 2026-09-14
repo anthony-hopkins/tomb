@@ -14,6 +14,8 @@ import (
 	"net/http"
 	"strings"
 
+	"golang.org/x/sync/errgroup"
+
 	"github.com/anthony-hopkins/tomb/internal/blizzard"
 	"github.com/anthony-hopkins/tomb/internal/platform"
 )
@@ -124,6 +126,24 @@ type gearView struct {
 	// template does not have to lowercase anything. Empty for an unknown
 	// quality, which renders in the ordinary text colour rather than guessing.
 	QualityClass string
+
+	// The tooltip. Blizzard's own display strings, carried through unchanged.
+	Icon         string
+	Subclass     string
+	Binding      string
+	Armor        string
+	Stats        []string
+	Enchantments []string
+	Sockets      []blizzard.Socket
+	Transmog     string
+	Durability   string
+	Requirement  string
+	Set          *blizzard.ItemSet
+
+	// SetKey groups the pieces of one tier set, so hovering a set line can
+	// highlight the other pieces the character is wearing. Empty when the item
+	// is not part of a set.
+	SetKey string
 }
 
 // characterKey identifies a character in a URL. Realm first, because a
@@ -244,6 +264,10 @@ func (a *App) render(r *http.Request, c blizzard.Character) string {
 	return media.Hero()
 }
 
+// maxConcurrentIconFetches bounds the icon fan-out, on the same reasoning as
+// the character fan-out in the platform: far inside Blizzard's 100/second.
+const maxConcurrentIconFetches = 8
+
 // knownQualities are the item qualities the stylesheet has a colour for.
 //
 // A map rather than trusting the API's string straight into a class name: that
@@ -279,17 +303,89 @@ func (a *App) gear(r *http.Request, c blizzard.Character) []gearView {
 		return nil
 	}
 
+	a.resolveIcons(r, items)
+
 	gear := make([]gearView, 0, len(items))
 	for _, it := range items {
-		gear = append(gear, gearView{
+		g := gearView{
 			Slot:         it.SlotName,
 			Name:         it.Name,
 			Level:        it.Level,
 			Quality:      it.Quality,
 			QualityClass: knownQualities[it.Quality],
-		})
+			Icon:         it.IconURL,
+			Subclass:     it.Subclass,
+			Binding:      it.Binding,
+			Armor:        it.Armor,
+			Stats:        it.Stats,
+			Enchantments: it.Enchantments,
+			Sockets:      it.Sockets,
+			Transmog:     it.Transmog,
+			Durability:   it.Durability,
+			Requirement:  it.Requirement,
+			Set:          it.Set,
+		}
+		if it.Set != nil {
+			g.SetKey = setKey(it.Set.Display)
+		}
+		gear = append(gear, g)
 	}
 	return gear
+}
+
+// setKey turns a set's display name into something usable as an HTML id
+// fragment, so the pieces of one set can be grouped without putting the raw
+// name -- which comes from a remote API and contains apostrophes and spaces --
+// into an attribute selector.
+func setKey(display string) string {
+	var b strings.Builder
+	for _, r := range strings.ToLower(display) {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
+			b.WriteRune(r)
+		case r == ' ' && b.Len() > 0:
+			b.WriteByte('-')
+		}
+	}
+	return strings.Trim(b.String(), "-")
+}
+
+// resolveIcons fills in each item's icon URL, in parallel and bounded.
+//
+// Sixteen items is sixteen calls the first time a member looks at a character.
+// After that the client's cache answers them, because an item's icon never
+// changes -- so the cost is paid once per process, not once per view.
+//
+// A failure is per-item and silent in the page: an item without an icon renders
+// without one. Losing a picture is not a reason to lose a tooltip.
+func (a *App) resolveIcons(r *http.Request, items []blizzard.EquippedItem) {
+	session, ok := platform.SessionFrom(r.Context())
+	if !ok {
+		return
+	}
+
+	g, gctx := errgroup.WithContext(r.Context())
+	g.SetLimit(maxConcurrentIconFetches)
+
+	for i := range items {
+		i := i
+		if items[i].MediaID == 0 {
+			continue
+		}
+		g.Go(func() error {
+			icon, err := a.deps.Blizzard.ItemIcon(gctx, session.AccessToken, items[i].MediaID)
+			if err != nil {
+				a.deps.Logger.Warn("item icon unavailable",
+					"media_id", items[i].MediaID,
+					"outcome", blizzard.OutcomeOf(err).String(),
+				)
+				return nil
+			}
+			items[i].IconURL = icon
+			return nil
+		})
+	}
+	_ = g.Wait()
 }
 
 // guildLabel is the character's guild, or empty when it has none.

@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{if .Title}}{{.Title}} · TOMB{{else}}TOMB{{end}}</title>
   <link rel="stylesheet" href="/static/style.css">
+  {{/* defer, so it never blocks the page it only enhances. Every tooltip
+       opens without it; the script places them and lights up set pieces. */}}
+  <script src="/static/tooltip.js" defer></script>
 </head>
 <body>
   <header class="site-header">

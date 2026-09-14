@@ -64,6 +64,42 @@ func TestStaticHandlerServesTheBanner(t *testing.T) {
 	}
 }
 
+// TestLayoutScriptIsServed pairs the layout's <script src> with the embedded
+// FS, the same way TestStylesheetAssetsExist pairs the stylesheet's url()s.
+//
+// A script tag pointing at a file that is not there fails silently: the page
+// renders, the enhancement does not, and nothing says why. That is precisely
+// how the CSP bugs behaved, and it is worth one test not to repeat it.
+func TestLayoutScriptIsServed(t *testing.T) {
+	layout, err := fs.ReadFile(coreTemplateFS, "templates/layout.html")
+	if err != nil {
+		t.Fatalf("reading the layout: %v", err)
+	}
+
+	refs := regexp.MustCompile(`<script[^>]+src="([^"]+)"`).FindAllStringSubmatch(string(layout), -1)
+	if len(refs) == 0 {
+		t.Skip("the layout loads no scripts")
+	}
+
+	for _, m := range refs {
+		ref := m[1]
+		if !strings.HasPrefix(ref, "/static/") {
+			t.Errorf("script %q is not served from /static/", ref)
+			continue
+		}
+		embedded := "static/" + strings.TrimPrefix(ref, "/static/")
+		if _, err := fs.Stat(staticFS, embedded); err != nil {
+			t.Errorf("the layout loads %s but %s is not embedded: %v", ref, embedded, err)
+		}
+
+		rec := httptest.NewRecorder()
+		StaticHandler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, ref, nil))
+		if rec.Code != http.StatusOK {
+			t.Errorf("GET %s = %d, want 200", ref, rec.Code)
+		}
+	}
+}
+
 // TestCSPAllowsTheStylesheetsImages is the pairing that bit this project twice
 // tonight: a header that forbids what the page needs, failing invisibly.
 //
