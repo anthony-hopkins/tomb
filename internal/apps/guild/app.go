@@ -87,13 +87,20 @@ func New(deps platform.Deps) (*App, error) {
 	return &App{deps: deps, tmpl: tmpl, refreshEvery: refresh}, nil
 }
 
-// rosterSnapshot is the roster and every member's profile summary, as of one
-// refresh. Profiles is keyed by memberKey and is missing any member whose
-// profile Blizzard would not serve; the roster row still stands for them.
+// rosterSnapshot is the roster and every member's detail, as of one refresh.
+// Details is keyed by memberKey and is missing any member whose profile
+// Blizzard would not serve; the roster row still stands for them.
 type rosterSnapshot struct {
-	members  []blizzard.GuildMember
-	profiles map[string]blizzard.Character
-	fetched  time.Time
+	members []blizzard.GuildMember
+	details map[string]memberDetail
+	fetched time.Time
+}
+
+// memberDetail is what the roster does not carry about a member: their
+// profile summary, and their season standing.
+type memberDetail struct {
+	blizzard.Character
+	blizzard.Progress
 }
 
 // parseTemplates builds this app's template set.
@@ -150,6 +157,8 @@ type memberView struct {
 	ActiveSpec       string
 	AverageItemLevel int
 	LastLogin        string
+	MythicPlusRating int
+	Raids            []blizzard.RaidProgress
 
 	// Rank is the label of the rank this character holds, repeated onto the
 	// member so the card can name it. The heading above the group says it too,
@@ -256,7 +265,7 @@ func (a *App) show(w http.ResponseWriter, r *http.Request) {
 		v.Unavailable = true
 	} else {
 		members := snap.members
-		v.Groups = a.group(members, snap.profiles)
+		v.Groups = a.group(members, snap.details)
 		v.Total = len(members)
 
 		if key := r.URL.Query().Get("c"); key != "" {
@@ -326,6 +335,17 @@ func (a *App) snapshot(r *http.Request) (*rosterSnapshot, error) {
 	defer cancel()
 
 	loaded, err, _ := a.flight.Do("roster", func() (any, error) {
+		// Re-check under the lock. A view that found no snapshot a moment ago
+		// may reach here after another view's load has already landed and its
+		// flight has closed -- singleflight shares a load in progress, not one
+		// just finished -- and there is no reason to fetch the roster twice.
+		a.mu.Lock()
+		if s := a.snap; s != nil {
+			a.mu.Unlock()
+			return s, nil
+		}
+		a.mu.Unlock()
+
 		s, err := a.load(ctx, token)
 		if err != nil {
 			return nil, err
@@ -373,36 +393,40 @@ func (a *App) load(ctx context.Context, token string) (*rosterSnapshot, error) {
 		return nil, err
 	}
 	return &rosterSnapshot{
-		members:  members,
-		profiles: a.profiles(ctx, token, members),
-		fetched:  time.Now(),
+		members: members,
+		details: a.details(ctx, token, members),
+		fetched: time.Now(),
 	}, nil
 }
 
-// profiles fetches each member's profile summary, bounded and in parallel.
+// details fetches each member's profile summary and season standing, bounded
+// and in parallel: three calls per member, the profile first and the two
+// standing calls together behind it.
 //
 // A member whose profile Blizzard will not serve -- renamed, transferred, or
 // just not right now -- keeps their roster row and loses the detail. That is
 // counted and logged once per refresh rather than once per member: at roster
 // scale, a line each is a page of warnings nobody reads.
-func (a *App) profiles(ctx context.Context, token string, members []blizzard.GuildMember) map[string]blizzard.Character {
-	fetched := make([]*blizzard.Character, len(members))
+func (a *App) details(ctx context.Context, token string, members []blizzard.GuildMember) map[string]memberDetail {
+	fetched := make([]*memberDetail, len(members))
+	b := &armory.Builder{Client: a.deps.Blizzard, Logger: a.deps.Logger}
 
 	g, gctx := errgroup.WithContext(ctx)
 	g.SetLimit(maxConcurrentProfileFetches)
 	for i, m := range members {
 		g.Go(func() error {
-			c, err := a.deps.Blizzard.CharacterProfile(gctx, token,
-				blizzard.CharacterRef{Name: m.Name, RealmSlug: m.RealmSlug})
-			if err == nil {
-				fetched[i] = &c
+			ref := blizzard.CharacterRef{Name: m.Name, RealmSlug: m.RealmSlug}
+			c, err := a.deps.Blizzard.CharacterProfile(gctx, token, ref)
+			if err != nil {
+				return nil
 			}
+			fetched[i] = &memberDetail{Character: c, Progress: b.Progress(gctx, token, ref)}
 			return nil
 		})
 	}
 	_ = g.Wait()
 
-	out := make(map[string]blizzard.Character, len(members))
+	out := make(map[string]memberDetail, len(members))
 	for i, m := range members {
 		if fetched[i] != nil {
 			out[memberKey(m)] = *fetched[i]
@@ -416,12 +440,12 @@ func (a *App) profiles(ctx context.Context, token string, members []blizzard.Gui
 }
 
 // group turns the sorted roster into rank groups, filling each card from the
-// member's profile where one was fetched.
+// member's detail where it was fetched.
 //
 // The roster arrives already ordered -- by rank, then alphabetically within
 // each rank -- so this only has to notice where one rank ends and the next
 // begins. Doing the ordering here as well would be two places to get it wrong.
-func (a *App) group(members []blizzard.GuildMember, profiles map[string]blizzard.Character) []rankGroup {
+func (a *App) group(members []blizzard.GuildMember, details map[string]memberDetail) []rankGroup {
 	var groups []rankGroup
 	current := -1
 
@@ -441,21 +465,23 @@ func (a *App) group(members []blizzard.GuildMember, profiles map[string]blizzard
 			Rank:  g.Label,
 			Key:   memberKey(m),
 		}
-		if c, ok := profiles[mv.Key]; ok {
+		if d, ok := details[mv.Key]; ok {
 			// The profile carries the realm's display name; the roster only
 			// its slug. "Area 52", not "area-52", the same as My Characters.
-			mv.Realm = c.RealmLabel()
-			if c.Class != "" {
-				mv.Class = c.Class
+			mv.Realm = d.RealmLabel()
+			if d.Class != "" {
+				mv.Class = d.Class
 			}
-			if c.Level > 0 {
-				mv.Level = c.Level
+			if d.Level > 0 {
+				mv.Level = d.Level
 			}
-			mv.ActiveSpec = c.ActiveSpec
-			mv.AverageItemLevel = c.AverageItemLevel
-			if c.LastLogin.Unix() > 0 {
-				mv.LastLogin = armory.LastPlayed(c.LastLogin)
+			mv.ActiveSpec = d.ActiveSpec
+			mv.AverageItemLevel = d.AverageItemLevel
+			if d.LastLogin.Unix() > 0 {
+				mv.LastLogin = armory.LastPlayed(d.LastLogin)
 			}
+			mv.MythicPlusRating = d.MythicPlusRating
+			mv.Raids = d.Raids
 		}
 		g.Members = append(g.Members, mv)
 	}

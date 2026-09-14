@@ -94,8 +94,10 @@ re-paid per view. The fan-out is bounded at 8 concurrent requests, well inside
 Blizzard's 36,000/hour and 100/second limits, and a single character's failure
 degrades to a notice rather than an error page.
 
-The Armory panel adds exactly two more — the render and the equipment — and only
-for the one character on display. Fetching either per character would double a
+Each card also carries the character's season standing — Mythic+ rating and raid
+progress — from two more endpoints per character, so a dashboard view is `1 + 3N`
+in total, still bounded at 8 in flight. The Armory panel adds the render and the
+equipment for the one character on display. Fetching either per character would double a
 cost that is already re-paid on every view, which is why selecting a different
 character is a fresh request rather than something the page holds in reserve.
 Both degrade independently: losing the render still leaves the gear, losing the
@@ -104,8 +106,9 @@ costs one round trip plus the icon fan-out rather than two.
 
 **The guild page is served from a snapshot, refreshed in the background.** Each
 member's card shows what My Characters shows -- spec, item level, last played --
-and those live on the per-character profile, one call per member. For a
-roster of two hundred that cannot be paid per view, so the roster and every
+plus Mythic+ rating and raid progress -- and those live on the per-character
+profile and two further endpoints, three calls per member. For a roster of two
+hundred that cannot be paid per view, so the roster and every
 profile are taken together, kept, and refreshed once they are older than
 `TOMB_GUILD_ROSTER_TTL` (an hour by default). A view is handed the last snapshot
 at once and the refresh runs after it; only the first view after a start waits,

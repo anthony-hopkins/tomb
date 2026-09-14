@@ -47,8 +47,9 @@ The rows work exactly like the ones on My Characters:
   level, and every equipped slot with its tooltip, gems and set pieces.
 
 The card is the same one your own characters get — class, specialisation,
-level, average item level and when they last played — so you can size up a
-guildmate without opening them.
+level, average item level, when they last played, their Mythic+ rating and how
+far they are into each current raid — so you can size up a guildmate without
+opening them.
 
 It is the same panel your own characters get, because it is literally the same
 page component — so anything that improves one improves the other.
@@ -84,8 +85,13 @@ first.
 
 The main panel is the Armory-style view: your character as Blizzard renders it,
 in the gear it is wearing right now, alongside its realm and guild, class and
-specialisation, level and item level, and every equipped slot with its own item
-level and quality colour.
+specialisation, level and item level, this season's Mythic+ rating and raid
+progress ("8/8 H · 3/8 M"), and every equipped slot with its own item level and
+quality colour.
+
+The Mythic+ rating is the one the game shows, straight from Blizzard. It is
+close to a Raider.IO score but not the same number — Raider.IO computes its
+own — so do not be surprised if the two differ by a little.
 
 It opens on whatever you played last, so the common case takes no clicks at all.
 

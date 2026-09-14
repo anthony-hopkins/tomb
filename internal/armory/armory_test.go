@@ -26,12 +26,28 @@ type fakeClient struct {
 	medErr  error
 	items   []blizzard.EquippedItem
 	eqErr   error
+	rating  int
+	ratErr  error
+	raids   []blizzard.RaidProgress
+	raidErr error
 
 	// delay makes each call take long enough that a serial implementation is
 	// measurably slower than a parallel one.
 	delay time.Duration
 
-	profiles, medias, equipments atomic.Int32
+	profiles, medias, equipments, ratings, raidings atomic.Int32
+}
+
+func (f *fakeClient) MythicPlusRating(context.Context, string, blizzard.CharacterRef) (int, error) {
+	f.ratings.Add(1)
+	time.Sleep(f.delay)
+	return f.rating, f.ratErr
+}
+
+func (f *fakeClient) RaidProgression(context.Context, string, blizzard.CharacterRef) ([]blizzard.RaidProgress, error) {
+	f.raidings.Add(1)
+	time.Sleep(f.delay)
+	return f.raids, f.raidErr
 }
 
 func (f *fakeClient) CharacterProfile(context.Context, string, blizzard.CharacterRef) (blizzard.Character, error) {
@@ -144,12 +160,14 @@ func TestRenderAndGearAreFetchedTogether(t *testing.T) {
 	builder(f).Of(context.Background(), "t", nekromoo, "")
 	took := time.Since(start)
 
-	if f.medias.Load() != 1 || f.equipments.Load() != 1 {
-		t.Fatalf("calls = %d media, %d equipment; want one of each", f.medias.Load(), f.equipments.Load())
+	if f.medias.Load() != 1 || f.equipments.Load() != 1 || f.ratings.Load() != 1 || f.raidings.Load() != 1 {
+		t.Fatalf("calls = %d media, %d equipment, %d rating, %d raids; want one of each",
+			f.medias.Load(), f.equipments.Load(), f.ratings.Load(), f.raidings.Load())
 	}
-	// Generous headroom for a slow CI runner, but well inside 2*delay.
+	// Four calls of `delay` each: serially that is 4*delay, in parallel about
+	// one. Generous headroom for a slow CI runner, but well inside 2*delay.
 	if took >= 2*delay-10*time.Millisecond {
-		t.Errorf("the two fetches took %v back to back; they should overlap", took)
+		t.Errorf("the four fetches took %v; they should overlap", took)
 	}
 }
 
@@ -203,5 +221,31 @@ func TestSetKeyIsSelectorSafe(t *testing.T) {
 		if got := setKey(in); got != want {
 			t.Errorf("setKey(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+// --- Season standing --------------------------------------------------------
+
+// TestOfCarriesSeasonStanding: the panel shows the rating and raid progress
+// alongside the gear, and a failed lookup costs only its own row.
+func TestOfCarriesSeasonStanding(t *testing.T) {
+	f := &fakeClient{
+		rating: 2431,
+		raids: []blizzard.RaidProgress{{Name: "Liberation of Undermine",
+			Modes: []blizzard.RaidMode{{Difficulty: "HEROIC", Completed: 8, Total: 8}}}},
+	}
+
+	p := builder(f).Of(context.Background(), "t", nekromoo, "")
+	if p.MythicPlusRating != 2431 || len(p.Raids) != 1 {
+		t.Errorf("panel standing = rating %d, %d raids; want 2431 and 1", p.MythicPlusRating, len(p.Raids))
+	}
+
+	f = &fakeClient{rating: 2431, raidErr: errors.New("encounters down")}
+	p = builder(f).Of(context.Background(), "t", nekromoo, "")
+	if p.MythicPlusRating != 2431 {
+		t.Error("a failed raid lookup cost the rating too")
+	}
+	if len(p.Raids) != 0 {
+		t.Error("a failed raid lookup produced raids")
 	}
 }

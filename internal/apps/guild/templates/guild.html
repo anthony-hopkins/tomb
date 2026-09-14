@@ -71,6 +71,14 @@
             <dt>Last played</dt>
             <dd>{{.}}</dd>
             {{end}}
+            {{if .MythicPlusRating}}
+            <dt>Mythic+ rating</dt>
+            <dd>{{.MythicPlusRating}}</dd>
+            {{end}}
+            {{range .Raids}}
+            <dt>{{.Name}}</dt>
+            <dd>{{.Summary}}</dd>
+            {{end}}
           </dl>
         </div>
       </li>

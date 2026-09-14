@@ -2,6 +2,7 @@ package blizzard
 
 import (
 	"context"
+	"fmt"
 	"net/url"
 	"sort"
 	"strings"
@@ -38,6 +39,16 @@ type Client interface {
 	// times, which is what the game means by a roster and what the API returns.
 	GuildRoster(ctx context.Context, token, realmSlug, guildName string) ([]GuildMember, error)
 
+	// MythicPlusRating is the character's current in-game Mythic+ rating,
+	// rounded, or zero for a character who has none. Not Raider.IO's score:
+	// that is a third party's own number, and this site shows Blizzard's.
+	MythicPlusRating(ctx context.Context, token string, ref CharacterRef) (int, error)
+
+	// RaidProgression is how far the character is into the current
+	// expansion's raids, per difficulty, omitting raids and difficulties
+	// with no kills.
+	RaidProgression(ctx context.Context, token string, ref CharacterRef) ([]RaidProgress, error)
+
 	// ItemIcon resolves an item's media id to an icon URL.
 	//
 	// One call per item, which is the expensive one -- a full set of gear is
@@ -45,6 +56,68 @@ type Client interface {
 	// changes, so this is static game data rather than character data and
 	// FR-016's ban on caching does not reach it.
 	ItemIcon(ctx context.Context, token string, mediaID int) (string, error)
+}
+
+// Progress is where a character stands this season: Mythic+ rating and raid
+// progress. Both come from Blizzard, from two endpoints the profile summary
+// does not cover, so they are fetched together and shown together.
+type Progress struct {
+	// MythicPlusRating is the in-game rating, rounded. Zero means unrated.
+	MythicPlusRating int
+
+	// Raids is the current expansion's raids the character has any kills in,
+	// in the order Blizzard lists them.
+	Raids []RaidProgress
+}
+
+// RaidProgress is one raid and how far the character is into it at each
+// difficulty they have touched.
+type RaidProgress struct {
+	Name  string
+	Modes []RaidMode // easiest first; only difficulties with a kill
+}
+
+// RaidMode is one difficulty of one raid: bosses down over bosses total.
+type RaidMode struct {
+	// Difficulty is Blizzard's key: LFR, NORMAL, HEROIC or MYTHIC.
+	Difficulty string
+	Completed  int
+	Total      int
+}
+
+// difficultyOrder is easiest first, which is how progress reads: "8/8 H · 3/8
+// M" says where somebody is at a glance. Anything Blizzard adds sorts last
+// rather than vanishing.
+var difficultyOrder = map[string]int{"LFR": 0, "NORMAL": 1, "HEROIC": 2, "MYTHIC": 3}
+
+// difficultyShort is how the game abbreviates each difficulty in chat.
+var difficultyShort = map[string]string{"LFR": "LFR", "NORMAL": "N", "HEROIC": "H", "MYTHIC": "M"}
+
+// Summary is the one-line form players use: "8/8 N · 8/8 H · 3/8 M".
+func (r RaidProgress) Summary() string {
+	parts := make([]string, 0, len(r.Modes))
+	for _, m := range r.Modes {
+		short, ok := difficultyShort[m.Difficulty]
+		if !ok {
+			short = m.Difficulty
+		}
+		parts = append(parts, fmt.Sprintf("%d/%d %s", m.Completed, m.Total, short))
+	}
+	return strings.Join(parts, " · ")
+}
+
+// SortModes puts a raid's difficulties easiest first, in place.
+func SortModes(modes []RaidMode) {
+	sort.SliceStable(modes, func(i, j int) bool {
+		return difficultyRank(modes[i].Difficulty) < difficultyRank(modes[j].Difficulty)
+	})
+}
+
+func difficultyRank(d string) int {
+	if r, ok := difficultyOrder[d]; ok {
+		return r
+	}
+	return len(difficultyOrder)
 }
 
 // GuildMember is one character on a guild's roster.

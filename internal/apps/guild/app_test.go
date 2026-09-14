@@ -377,6 +377,20 @@ type fakeClient struct {
 	roster     []blizzard.GuildMember
 	rosterErr  error
 	rosterGets atomic.Int32
+
+	// ratingFor gives a member a Mythic+ rating by lowercase name; absent
+	// means unrated. Raids are not driven here: the row rendering is covered
+	// by the armory and template tests, and the snapshot only needs to prove
+	// it carries what it fetched.
+	ratingFor map[string]int
+}
+
+func (f *fakeClient) MythicPlusRating(_ context.Context, _ string, ref blizzard.CharacterRef) (int, error) {
+	return f.ratingFor[strings.ToLower(ref.Name)], nil
+}
+
+func (f *fakeClient) RaidProgression(context.Context, string, blizzard.CharacterRef) ([]blizzard.RaidProgress, error) {
+	return nil, nil
 }
 
 func (f *fakeClient) CharacterProfile(_ context.Context, _ string, ref blizzard.CharacterRef) (blizzard.Character, error) {
@@ -616,10 +630,10 @@ var profiled = map[string]blizzard.Character{
 
 // byKey re-keys a name-keyed profile map the way group expects it -- by
 // memberKey, realm first -- which is also how load builds the real one.
-func byKey(m map[string]blizzard.Character) map[string]blizzard.Character {
-	out := make(map[string]blizzard.Character, len(m))
+func byKey(m map[string]blizzard.Character) map[string]memberDetail {
+	out := make(map[string]memberDetail, len(m))
 	for _, c := range m {
-		out[c.RealmSlug+"/"+strings.ToLower(c.Name)] = c
+		out[c.RealmSlug+"/"+strings.ToLower(c.Name)] = memberDetail{Character: c}
 	}
 	return out
 }
@@ -691,8 +705,8 @@ func TestSnapshotLoadsOnceAndIsReused(t *testing.T) {
 		t.Fatalf("first view made %d roster and %d profile calls; want 1 and %d",
 			f.rosterGets.Load(), f.profileCalls(), len(twoMembers))
 	}
-	if len(first.profiles) != 2 {
-		t.Errorf("snapshot holds %d profiles, want 2", len(first.profiles))
+	if len(first.details) != 2 {
+		t.Errorf("snapshot holds %d member details, want 2", len(first.details))
 	}
 
 	second, err := a.snapshot(signedIn(t))
@@ -821,5 +835,55 @@ func TestNoSnapshotAndNoRosterIsUnavailable(t *testing.T) {
 
 	if _, err := a.snapshot(signedIn(t)); err == nil {
 		t.Error("expected an error with no snapshot and no roster")
+	}
+}
+
+// --- Season standing on the card --------------------------------------------
+
+// TestCardsShowSeasonStanding: the Mythic+ rating and raid progress reach the
+// guild card, from the snapshot, the same way the profile fields do.
+func TestCardsShowSeasonStanding(t *testing.T) {
+	a := snapshotApp(&fakeClient{}, time.Hour)
+	details := byKey(profiled)
+	nek := details["area-52/nekromoo"]
+	nek.MythicPlusRating = 2431
+	nek.Raids = []blizzard.RaidProgress{{
+		Name: "Liberation of Undermine",
+		Modes: []blizzard.RaidMode{
+			{Difficulty: "HEROIC", Completed: 8, Total: 8},
+			{Difficulty: "MYTHIC", Completed: 3, Total: 8},
+		},
+	}}
+	details["area-52/nekromoo"] = nek
+
+	groups := a.group(twoMembers, details)
+	body := html.UnescapeString(render(t, view{Groups: groups, Total: 2, Home: routePrefix}))
+
+	for _, want := range []string{"Mythic+ rating", "2431", "Liberation of Undermine", "8/8 H · 3/8 M"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the guild card is missing %q", want)
+		}
+	}
+	// Lazzlowe has no standing: exactly one rating row on the page.
+	if n := strings.Count(body, "Mythic+ rating"); n != 1 {
+		t.Errorf("found %d rating rows, want 1; an unrated member must not get a zero", n)
+	}
+}
+
+// TestSnapshotCarriesSeasonStanding proves the load path fetches it, not only
+// that the template can show it.
+func TestSnapshotCarriesSeasonStanding(t *testing.T) {
+	f := &fakeClient{roster: twoMembers, byName: profiled, ratingFor: map[string]int{"nekromoo": 2431}}
+	a := snapshotApp(f, time.Hour)
+
+	snap, err := a.snapshot(signedIn(t))
+	if err != nil {
+		t.Fatalf("snapshot: %v", err)
+	}
+	if got := snap.details["area-52/nekromoo"].MythicPlusRating; got != 2431 {
+		t.Errorf("Nekromoo's rating = %d, want 2431", got)
+	}
+	if got := snap.details["elune/lazzlowe"].MythicPlusRating; got != 0 {
+		t.Errorf("Lazzlowe's rating = %d, want 0 (unrated)", got)
 	}
 }

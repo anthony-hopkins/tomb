@@ -38,6 +38,14 @@
       <dd>{{.AverageItemLevel}}</dd>
       <dt>Last played</dt>
       <dd>{{.LastLogin}}</dd>
+      {{if .MythicPlusRating}}
+      <dt>Mythic+ rating</dt>
+      <dd>{{.MythicPlusRating}}</dd>
+      {{end}}
+      {{range .Raids}}
+      <dt>{{.Name}}</dt>
+      <dd>{{.Summary}}</dd>
+      {{end}}
     </dl>
 
     {{if .Gear}}

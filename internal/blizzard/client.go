@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -506,6 +507,102 @@ func (c *HTTPClient) fetchRoster(ctx context.Context, token, realmSlug, guildNam
 	}
 	SortRoster(members)
 	return members, nil
+}
+
+// MythicPlusRating fetches the character's current in-game Mythic+ rating.
+func (c *HTTPClient) MythicPlusRating(ctx context.Context, token string, ref CharacterRef) (int, error) {
+	const endpoint = "mythic-keystone-profile"
+
+	var payload struct {
+		CurrentMythicRating struct {
+			Rating float64 `json:"rating"`
+		} `json:"current_mythic_rating"`
+	}
+
+	err := c.get(ctx, endpoint, c.APIHost+characterPath(ref, "/mythic-keystone-profile"), c.profileQuery(), token, &payload)
+	if err != nil {
+		// A character who has never run a key has no keystone profile at all,
+		// and Blizzard says so with a 404. That is "unrated", not a failure.
+		if OutcomeOf(err) == OutcomeNotFound {
+			return 0, nil
+		}
+		return 0, err
+	}
+	// The game shows the rating as a whole number; the API carries decimals.
+	return int(math.Round(payload.CurrentMythicRating.Rating)), nil
+}
+
+// RaidProgression fetches how far the character is into the current
+// expansion's raids.
+func (c *HTTPClient) RaidProgression(ctx context.Context, token string, ref CharacterRef) ([]RaidProgress, error) {
+	const endpoint = "encounters-raids"
+
+	var payload struct {
+		Expansions []struct {
+			Expansion struct {
+				ID int `json:"id"`
+			} `json:"expansion"`
+			Instances []struct {
+				Instance struct {
+					Name string `json:"name"`
+				} `json:"instance"`
+				Modes []struct {
+					Difficulty struct {
+						Type string `json:"type"`
+					} `json:"difficulty"`
+					Progress struct {
+						Completed int `json:"completed_count"`
+						Total     int `json:"total_count"`
+					} `json:"progress"`
+				} `json:"modes"`
+			} `json:"instances"`
+		} `json:"expansions"`
+	}
+
+	err := c.get(ctx, endpoint, c.APIHost+characterPath(ref, "/encounters/raids"), c.profileQuery(), token, &payload)
+	if err != nil {
+		// No raid history at all comes back as a 404, not an empty list.
+		if OutcomeOf(err) == OutcomeNotFound {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	// The current expansion is the one with the highest id. Blizzard's
+	// expansion ids climb with each release, and the response carries every
+	// expansion the character has ever raided in, oldest first -- so "last in
+	// the list" would work today and break the first time they reorder it.
+	current := -1
+	for i := range payload.Expansions {
+		if current < 0 || payload.Expansions[i].Expansion.ID > payload.Expansions[current].Expansion.ID {
+			current = i
+		}
+	}
+	if current < 0 {
+		return nil, nil
+	}
+
+	var raids []RaidProgress
+	for _, inst := range payload.Expansions[current].Instances {
+		r := RaidProgress{Name: inst.Instance.Name}
+		for _, m := range inst.Modes {
+			// A difficulty with nothing killed says nothing worth a row.
+			if m.Progress.Completed == 0 {
+				continue
+			}
+			r.Modes = append(r.Modes, RaidMode{
+				Difficulty: m.Difficulty.Type,
+				Completed:  m.Progress.Completed,
+				Total:      m.Progress.Total,
+			})
+		}
+		if len(r.Modes) == 0 {
+			continue
+		}
+		SortModes(r.Modes)
+		raids = append(raids, r)
+	}
+	return raids, nil
 }
 
 // ItemIcon resolves an item's media id to its icon URL, caching the result for
