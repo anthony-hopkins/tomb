@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"testing"
@@ -310,36 +311,36 @@ func TestBattleNetEndpointMatchesDiscovery(t *testing.T) {
 // because the comment explaining the rule necessarily contains the very path
 // the rule forbids, and a grep would trip over the explanation.
 func TestSignInNamesNoApp(t *testing.T) {
-	fset := token.NewFileSet()
-	pkg, err := parser.ParseDir(fset, ".", nil, 0)
+	entries, err := os.ReadDir(".")
 	if err != nil {
-		t.Fatalf("parsing the auth package: %v", err)
+		t.Fatalf("listing the auth package: %v", err)
 	}
 
-	for name, p := range pkg {
-		if strings.HasSuffix(name, "_test") {
+	fset := token.NewFileSet()
+	for _, e := range entries {
+		path := e.Name()
+		if e.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
 			continue
 		}
-		for path, file := range p.Files {
-			if strings.HasSuffix(path, "_test.go") {
-				continue
-			}
-			ast.Inspect(file, func(n ast.Node) bool {
-				lit, ok := n.(*ast.BasicLit)
-				if !ok || lit.Kind != token.STRING {
-					return true
-				}
-				v, err := strconv.Unquote(lit.Value)
-				if err != nil {
-					return true
-				}
-				if strings.HasPrefix(v, "/app/") {
-					t.Errorf("%s: auth names the app route %q. Where home is belongs to "+
-						"the app registry; redirect to \"/\" and let it decide.",
-						fset.Position(lit.Pos()), v)
-				}
-				return true
-			})
+		file, err := parser.ParseFile(fset, path, nil, 0)
+		if err != nil {
+			t.Fatalf("parsing %s: %v", path, err)
 		}
+		ast.Inspect(file, func(n ast.Node) bool {
+			lit, ok := n.(*ast.BasicLit)
+			if !ok || lit.Kind != token.STRING {
+				return true
+			}
+			v, err := strconv.Unquote(lit.Value)
+			if err != nil {
+				return true
+			}
+			if strings.HasPrefix(v, "/app/") {
+				t.Errorf("%s: auth names the app route %q. Where home is belongs to "+
+					"the app registry; redirect to \"/\" and let it decide.",
+					fset.Position(lit.Pos()), v)
+			}
+			return true
+		})
 	}
 }

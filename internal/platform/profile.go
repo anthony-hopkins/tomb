@@ -71,7 +71,6 @@ func (f *ProfileFetcher) Fetch(ctx context.Context, accessToken string) (Profile
 	g.SetLimit(maxConcurrentCharacterFetches)
 
 	for i, ref := range refs {
-		i, ref := i, ref
 		g.Go(func() error {
 			ch, err := f.Client.CharacterProfile(gctx, accessToken, ref)
 			if err != nil {
@@ -102,10 +101,9 @@ func (f *ProfileFetcher) Fetch(ctx context.Context, accessToken string) (Profile
 		// FR-017. A 404 means the character is gone -- deleted, renamed, or
 		// transferred off the account -- and Blizzard's account summary keeps
 		// listing it regardless. That is not a partial failure, it is a stale
-		// entry, and
-		// telling a member their roster "may be incomplete" every single visit
-		// because of characters they deleted years ago is a notice that trains
-		// people to ignore notices. Genuine failures still set it.
+		// entry, and telling a member their roster "may be incomplete" every
+		// single visit because of characters they deleted years ago is a notice
+		// that trains people to ignore notices. Genuine failures still set it.
 		if blizzard.OutcomeOf(failures[i]) != blizzard.OutcomeNotFound {
 			p.Partial = true
 		}

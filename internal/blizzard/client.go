@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -74,6 +75,27 @@ func NewHTTPClient(apiHost, namespace, region string) *HTTPClient {
 // Compile-time proof the live client satisfies the interface.
 var _ Client = (*HTTPClient)(nil)
 
+// profileQuery is the query string every profile-namespace call carries.
+func (c *HTTPClient) profileQuery() url.Values {
+	return url.Values{
+		"namespace": {c.Namespace},
+		"locale":    {c.Locale},
+	}
+}
+
+// characterPath builds the path to one character's profile endpoints: the
+// summary itself with an empty suffix, or a sub-resource such as
+// "/equipment".
+//
+// Blizzard requires both the realm slug and the name lowercased, and both are
+// escaped because names can contain non-ASCII characters.
+func characterPath(ref CharacterRef, suffix string) string {
+	return "/profile/wow/character/" +
+		url.PathEscape(strings.ToLower(ref.RealmSlug)) + "/" +
+		url.PathEscape(strings.ToLower(ref.Name)) +
+		suffix
+}
+
 func (c *HTTPClient) UserInfo(ctx context.Context, token string) (Identity, error) {
 	const endpoint = "userinfo"
 
@@ -91,7 +113,7 @@ func (c *HTTPClient) UserInfo(ctx context.Context, token string) (Identity, erro
 	// identity key, which would collide across accounts on the UNIQUE index.
 	sub := strings.TrimSpace(payload.Sub)
 	if sub == "" && payload.ID != 0 {
-		sub = fmt.Sprintf("%d", payload.ID)
+		sub = strconv.FormatInt(payload.ID, 10)
 	}
 	if sub == "" {
 		return Identity{}, &APIError{
@@ -118,11 +140,7 @@ func (c *HTTPClient) AccountCharacters(ctx context.Context, token string) ([]Cha
 		} `json:"wow_accounts"`
 	}
 
-	q := url.Values{
-		"namespace": {c.Namespace},
-		"locale":    {c.Locale},
-	}
-	if err := c.get(ctx, endpoint, c.APIHost+"/profile/user/wow", q, token, &payload); err != nil {
+	if err := c.get(ctx, endpoint, c.APIHost+"/profile/user/wow", c.profileQuery(), token, &payload); err != nil {
 		return nil, err
 	}
 
@@ -167,17 +185,7 @@ func (c *HTTPClient) CharacterProfile(ctx context.Context, token string, ref Cha
 		} `json:"guild"`
 	}
 
-	// Blizzard requires the character name lowercased, and it must be escaped
-	// because names can contain non-ASCII characters.
-	path := fmt.Sprintf("/profile/wow/character/%s/%s",
-		url.PathEscape(strings.ToLower(ref.RealmSlug)),
-		url.PathEscape(strings.ToLower(ref.Name)),
-	)
-	q := url.Values{
-		"namespace": {c.Namespace},
-		"locale":    {c.Locale},
-	}
-	if err := c.get(ctx, endpoint, c.APIHost+path, q, token, &payload); err != nil {
+	if err := c.get(ctx, endpoint, c.APIHost+characterPath(ref, ""), c.profileQuery(), token, &payload); err != nil {
 		return Character{}, err
 	}
 
@@ -225,15 +233,7 @@ func (c *HTTPClient) CharacterMedia(ctx context.Context, token string, ref Chara
 		} `json:"assets"`
 	}
 
-	path := fmt.Sprintf("/profile/wow/character/%s/%s/character-media",
-		url.PathEscape(strings.ToLower(ref.RealmSlug)),
-		url.PathEscape(strings.ToLower(ref.Name)),
-	)
-	q := url.Values{
-		"namespace": {c.Namespace},
-		"locale":    {c.Locale},
-	}
-	if err := c.get(ctx, endpoint, c.APIHost+path, q, token, &payload); err != nil {
+	if err := c.get(ctx, endpoint, c.APIHost+characterPath(ref, "/character-media"), c.profileQuery(), token, &payload); err != nil {
 		return Media{}, err
 	}
 
@@ -320,15 +320,7 @@ func (c *HTTPClient) CharacterEquipment(ctx context.Context, token string, ref C
 		} `json:"equipped_items"`
 	}
 
-	path := fmt.Sprintf("/profile/wow/character/%s/%s/equipment",
-		url.PathEscape(strings.ToLower(ref.RealmSlug)),
-		url.PathEscape(strings.ToLower(ref.Name)),
-	)
-	q := url.Values{
-		"namespace": {c.Namespace},
-		"locale":    {c.Locale},
-	}
-	if err := c.get(ctx, endpoint, c.APIHost+path, q, token, &payload); err != nil {
+	if err := c.get(ctx, endpoint, c.APIHost+characterPath(ref, "/equipment"), c.profileQuery(), token, &payload); err != nil {
 		return nil, err
 	}
 
@@ -494,11 +486,7 @@ func (c *HTTPClient) fetchRoster(ctx context.Context, token, realmSlug, guildNam
 		url.PathEscape(strings.ToLower(realmSlug)),
 		url.PathEscape(GuildNameSlug(guildName)),
 	)
-	q := url.Values{
-		"namespace": {c.Namespace},
-		"locale":    {c.Locale},
-	}
-	if err := c.get(ctx, endpoint, c.APIHost+path, q, token, &payload); err != nil {
+	if err := c.get(ctx, endpoint, c.APIHost+path, c.profileQuery(), token, &payload); err != nil {
 		return nil, err
 	}
 
@@ -599,9 +587,12 @@ func (c *HTTPClient) get(ctx context.Context, endpoint, rawURL string, q url.Val
 		// Timeouts and transport errors are retry-able.
 		return &APIError{Endpoint: endpoint, Outcome: OutcomeUnavailable, Err: err}
 	}
+	// Drain before closing so the connection goes back to the pool. Neither
+	// error is actionable here: the body has either been decoded below or the
+	// request has already failed on its own terms.
 	defer func() {
-		io.Copy(io.Discard, resp.Body)
-		resp.Body.Close()
+		_, _ = io.Copy(io.Discard, resp.Body)
+		_ = resp.Body.Close()
 	}()
 
 	if resp.StatusCode != http.StatusOK {

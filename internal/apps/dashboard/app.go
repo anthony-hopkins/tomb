@@ -158,7 +158,7 @@ func (a *App) show(w http.ResponseWriter, r *http.Request) {
 	}
 
 	for i, c := range ranked {
-		cv := a.characterView(c)
+		cv := newCharacterView(c)
 		cv.Selected = i == chosen
 		v.Characters = append(v.Characters, cv)
 	}
@@ -177,17 +177,17 @@ func (a *App) show(w http.ResponseWriter, r *http.Request) {
 	a.deps.RenderInLayout(w, r, http.StatusOK, "My Characters", template.HTML(body.String()))
 }
 
-// characterView flattens one character for the templates.
-func (a *App) characterView(c blizzard.Character) characterView {
+// newCharacterView flattens one character for the templates.
+func newCharacterView(c blizzard.Character) characterView {
 	return characterView{
 		Name:             c.Name,
-		RealmName:        realmLabel(&c),
+		RealmName:        c.RealmLabel(),
 		Class:            c.Class,
 		ActiveSpec:       c.ActiveSpec,
 		Level:            c.Level,
 		AverageItemLevel: c.AverageItemLevel,
 		LastLogin:        c.LastLogin.Format("2 Jan 2006, 15:04 MST"),
-		Guild:            guildLabel(&c),
+		Guild:            c.GuildName(),
 		Current:          c.IsCurrent,
 		Key:              characterKey(c),
 	}
@@ -214,24 +214,4 @@ func (a *App) panel(r *http.Request, c blizzard.Character) *armory.Panel {
 
 	b := &armory.Builder{Client: a.deps.Blizzard, Logger: a.deps.Logger}
 	return b.Of(r.Context(), session.AccessToken, c, badge)
-}
-
-// guildLabel is the character's guild, or empty when it has none.
-//
-// Shown per card because it is the one field that makes the guild gate legible
-// from the outside: a member refused entry can see at a glance which guild each
-// character is actually in, and on which realm.
-func guildLabel(c *blizzard.Character) string {
-	if c.Guild == nil {
-		return ""
-	}
-	return c.Guild.Name
-}
-
-// realmLabel prefers the display name, falling back to the slug.
-func realmLabel(c *blizzard.Character) string {
-	if c.RealmName != "" {
-		return c.RealmName
-	}
-	return c.RealmSlug
 }

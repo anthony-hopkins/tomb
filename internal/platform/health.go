@@ -16,12 +16,12 @@ type Health struct {
 // Live answers GET /healthz.
 //
 // It performs no database work on purpose: a database outage must not make
-// Cloud Run kill containers that are otherwise serving fine
+// the container healthcheck restart an app that is otherwise serving fine
 // (contracts/http-routes.md).
 func (h *Health) Live(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("ok"))
+	_, _ = w.Write([]byte("ok"))
 }
 
 // Ready answers GET /readyz, reporting 503 when the database is unreachable.
@@ -30,7 +30,7 @@ func (h *Health) Ready(w http.ResponseWriter, r *http.Request) {
 
 	if h.DB == nil {
 		w.WriteHeader(http.StatusServiceUnavailable)
-		w.Write([]byte("no database configured"))
+		_, _ = w.Write([]byte("no database configured"))
 		return
 	}
 
@@ -40,10 +40,10 @@ func (h *Health) Ready(w http.ResponseWriter, r *http.Request) {
 	if err := h.DB.PingContext(ctx); err != nil {
 		w.WriteHeader(http.StatusServiceUnavailable)
 		// The reason is safe to expose: it names no credential.
-		w.Write([]byte("database unreachable"))
+		_, _ = w.Write([]byte("database unreachable"))
 		return
 	}
 
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("ok"))
+	_, _ = w.Write([]byte("ok"))
 }

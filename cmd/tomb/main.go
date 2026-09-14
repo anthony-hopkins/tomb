@@ -55,7 +55,9 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	defer db.Close()
+	// Closing on the way out of the process; there is nothing to do with an
+	// error from it.
+	defer func() { _ = db.Close() }()
 
 	if err := platform.Migrate(ctx, db); err != nil {
 		return err
@@ -222,7 +224,7 @@ func probeReadiness() int {
 	if err != nil {
 		return 1
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		return 1
 	}

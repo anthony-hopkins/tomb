@@ -32,7 +32,7 @@ func OpenDB(ctx context.Context, databaseURL string) (*sql.DB, error) {
 	pingCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	if err := db.PingContext(pingCtx); err != nil {
-		db.Close()
+		_ = db.Close() // the ping failure is the error worth reporting
 		return nil, fmt.Errorf("ping database: %w", err)
 	}
 	return db, nil
@@ -79,14 +79,16 @@ func Migrate(ctx context.Context, db *sql.DB) error {
 		if err != nil {
 			return fmt.Errorf("begin migration %s: %w", path, err)
 		}
+		// A rollback error after a failed statement adds nothing to the
+		// statement's own error, which is the one returned.
 		if _, err := tx.ExecContext(ctx, string(body)); err != nil {
-			tx.Rollback()
+			_ = tx.Rollback()
 			return fmt.Errorf("apply migration %s: %w", path, err)
 		}
 		if _, err := tx.ExecContext(ctx,
 			`INSERT INTO schema_migrations (name) VALUES ($1)`, path,
 		); err != nil {
-			tx.Rollback()
+			_ = tx.Rollback()
 			return fmt.Errorf("record migration %s: %w", path, err)
 		}
 		if err := tx.Commit(); err != nil {

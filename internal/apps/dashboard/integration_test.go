@@ -464,7 +464,7 @@ func TestArmoryShowsEquippedGear(t *testing.T) {
 	// Head before Chest before Main Hand: the order the game lays gear out in.
 	head, chest, hand := strings.Index(panel, "Sturdy Helm"),
 		strings.Index(panel, "Plate Chest"), strings.Index(panel, "Big Axe")
-	if !(head < chest && chest < hand) {
+	if head >= chest || chest >= hand {
 		t.Error("gear is not in the game's slot order")
 	}
 
