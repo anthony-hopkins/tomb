@@ -242,6 +242,6 @@ type recordingApp struct {
 func (r *recordingApp) Routes(reg Registrar) {
 	reg.Handle("GET /", http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		*r.reached = true
-		w.Write([]byte("should not happen"))
+		_, _ = w.Write([]byte("should not happen"))
 	}))
 }

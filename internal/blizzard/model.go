@@ -2,6 +2,7 @@ package blizzard
 
 import (
 	"context"
+	"fmt"
 	"net/url"
 	"sort"
 	"strings"
@@ -38,6 +39,16 @@ type Client interface {
 	// times, which is what the game means by a roster and what the API returns.
 	GuildRoster(ctx context.Context, token, realmSlug, guildName string) ([]GuildMember, error)
 
+	// MythicPlusRating is the character's current in-game Mythic+ rating,
+	// rounded, or zero for a character who has none. Not Raider.IO's score:
+	// that is a third party's own number, and this site shows Blizzard's.
+	MythicPlusRating(ctx context.Context, token string, ref CharacterRef) (int, error)
+
+	// RaidProgression is how far the character is into the current
+	// expansion's raids, per difficulty, omitting raids and difficulties
+	// with no kills.
+	RaidProgression(ctx context.Context, token string, ref CharacterRef) ([]RaidProgress, error)
+
 	// ItemIcon resolves an item's media id to an icon URL.
 	//
 	// One call per item, which is the expensive one -- a full set of gear is
@@ -45,6 +56,68 @@ type Client interface {
 	// changes, so this is static game data rather than character data and
 	// FR-016's ban on caching does not reach it.
 	ItemIcon(ctx context.Context, token string, mediaID int) (string, error)
+}
+
+// Progress is where a character stands this season: Mythic+ rating and raid
+// progress. Both come from Blizzard, from two endpoints the profile summary
+// does not cover, so they are fetched together and shown together.
+type Progress struct {
+	// MythicPlusRating is the in-game rating, rounded. Zero means unrated.
+	MythicPlusRating int
+
+	// Raids is the current expansion's raids the character has any kills in,
+	// in the order Blizzard lists them.
+	Raids []RaidProgress
+}
+
+// RaidProgress is one raid and how far the character is into it at each
+// difficulty they have touched.
+type RaidProgress struct {
+	Name  string
+	Modes []RaidMode // easiest first; only difficulties with a kill
+}
+
+// RaidMode is one difficulty of one raid: bosses down over bosses total.
+type RaidMode struct {
+	// Difficulty is Blizzard's key: LFR, NORMAL, HEROIC or MYTHIC.
+	Difficulty string
+	Completed  int
+	Total      int
+}
+
+// difficultyOrder is easiest first, which is how progress reads: "8/8 H · 3/8
+// M" says where somebody is at a glance. Anything Blizzard adds sorts last
+// rather than vanishing.
+var difficultyOrder = map[string]int{"LFR": 0, "NORMAL": 1, "HEROIC": 2, "MYTHIC": 3}
+
+// difficultyShort is how the game abbreviates each difficulty in chat.
+var difficultyShort = map[string]string{"LFR": "LFR", "NORMAL": "N", "HEROIC": "H", "MYTHIC": "M"}
+
+// Summary is the one-line form players use: "8/8 N · 8/8 H · 3/8 M".
+func (r RaidProgress) Summary() string {
+	parts := make([]string, 0, len(r.Modes))
+	for _, m := range r.Modes {
+		short, ok := difficultyShort[m.Difficulty]
+		if !ok {
+			short = m.Difficulty
+		}
+		parts = append(parts, fmt.Sprintf("%d/%d %s", m.Completed, m.Total, short))
+	}
+	return strings.Join(parts, " · ")
+}
+
+// SortModes puts a raid's difficulties easiest first, in place.
+func SortModes(modes []RaidMode) {
+	sort.SliceStable(modes, func(i, j int) bool {
+		return difficultyRank(modes[i].Difficulty) < difficultyRank(modes[j].Difficulty)
+	})
+}
+
+func difficultyRank(d string) int {
+	if r, ok := difficultyOrder[d]; ok {
+		return r
+	}
+	return len(difficultyOrder)
 }
 
 // GuildMember is one character on a guild's roster.
@@ -65,6 +138,15 @@ type GuildMember struct {
 	Class string
 }
 
+// RealmLabel is the realm as a person would write it, falling back to the slug
+// when the roster carried no display name.
+func (m GuildMember) RealmLabel() string {
+	if m.RealmName != "" {
+		return m.RealmName
+	}
+	return m.RealmSlug
+}
+
 // classNames maps Blizzard's playable class ids to names.
 //
 // The roster returns an id and nothing else, and resolving each one properly
@@ -77,18 +159,52 @@ var classNames = map[int]string{
 	11: "Druid", 12: "Demon Hunter", 13: "Evoker",
 }
 
+// Role is what a specialisation does in a group: tank, healer or damage.
+type Role string
+
+const (
+	RoleTank   Role = "Tank"
+	RoleHealer Role = "Healer"
+	RoleDPS    Role = "DPS"
+
+	// RoleUnknown is a specialisation this build does not know, or none at
+	// all -- a member whose profile could not be fetched has no spec.
+	RoleUnknown Role = ""
+)
+
+// Roles is every role, in the order a group is called for: tank, healer, DPS.
+var Roles = []Role{RoleTank, RoleHealer, RoleDPS}
+
+// specRoles maps the specialisations that are not damage to what they are.
+//
+// Keyed on the spec name alone rather than class and spec, which works
+// because the game never gives one name two roles: Protection tanks whether
+// it is a Paladin's or a Warrior's, Holy and Restoration heal for both classes
+// that have them, and Frost is damage for both a Death Knight and a Mage.
+// Anything not listed is damage, which is what the majority of specs are and
+// what a newly added one most likely is.
+var specRoles = map[string]Role{
+	"Blood": RoleTank, "Vengeance": RoleTank, "Guardian": RoleTank,
+	"Brewmaster": RoleTank, "Protection": RoleTank,
+
+	"Restoration": RoleHealer, "Preservation": RoleHealer, "Mistweaver": RoleHealer,
+	"Holy": RoleHealer, "Discipline": RoleHealer,
+}
+
+// RoleOf reports what a specialisation does. An empty spec is RoleUnknown.
+func RoleOf(spec string) Role {
+	if spec == "" {
+		return RoleUnknown
+	}
+	if r, ok := specRoles[spec]; ok {
+		return r
+	}
+	return RoleDPS
+}
+
 // GuildNameSlug turns a guild's display name into the slug its API path uses.
 func GuildNameSlug(name string) string {
-	var b strings.Builder
-	for _, r := range strings.ToLower(strings.TrimSpace(name)) {
-		switch {
-		case r == ' ':
-			b.WriteByte('-')
-		default:
-			b.WriteRune(r)
-		}
-	}
-	return b.String()
+	return strings.ReplaceAll(strings.ToLower(strings.TrimSpace(name)), " ", "-")
 }
 
 // SortRoster orders a roster the way a guild page should read: by rank, guild
@@ -317,6 +433,31 @@ type Character struct {
 
 	// IsCurrent is set on exactly one character by the selection rule.
 	IsCurrent bool
+}
+
+// RealmLabel is the realm as a person would write it, falling back to the slug
+// when Blizzard sent no display name.
+//
+// Here rather than in each app that shows a realm, because three of them did,
+// and three copies of a two-line fallback is three places for the fallback to
+// differ.
+func (c Character) RealmLabel() string {
+	if c.RealmName != "" {
+		return c.RealmName
+	}
+	return c.RealmSlug
+}
+
+// GuildName is the character's guild, or empty when it has none.
+//
+// Shown on every card because it is the one field that makes the guild gate
+// legible from the outside: a member refused entry can see at a glance which
+// guild each character is actually in.
+func (c Character) GuildName() string {
+	if c.Guild == nil {
+		return ""
+	}
+	return c.Guild.Name
 }
 
 // InGuild reports whether this character belongs to the named guild on the

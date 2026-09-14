@@ -69,11 +69,38 @@ Called: **once per character**, per dashboard view (FR-016)
 **`guild` is omitted entirely for an unguilded character.** Absent `guild` and "not in
 TOMB" are the same outcome: not a member.
 
-### Not called by this feature
+### 4. Mythic+ rating — `GET /profile/wow/character/{realmSlug}/{characterName}/mythic-keystone-profile`
 
-`/data/wow/guild/{realmSlug}/{nameSlug}/roster` — deliberately unused (research D4). It
-needs a client-credentials token and adds a call for an answer endpoint 3 already
-provides. A future Roster app will need it.
+Host, query and auth as endpoint 3.
+Called: once per character shown on a card (dashboard: per view; guild: per
+snapshot refresh).
+
+| Read | Used for |
+|---|---|
+| `current_mythic_rating.rating` | FR-007 display, rounded to a whole number |
+
+**404 means "has never run a key", not failure.** It is read as unrated and the
+row is omitted.
+
+### 5. Raid progression — `GET /profile/wow/character/{realmSlug}/{characterName}/encounters/raids`
+
+Host, query and auth as endpoint 3. Called as endpoint 4 is.
+
+| Read | Used for |
+|---|---|
+| `expansions[].expansion.id` | Picks the current expansion: the highest id |
+| `expansions[].instances[].instance.name` | FR-007 display: the raid's name |
+| `expansions[].instances[].modes[].difficulty.type` | `LFR`, `NORMAL`, `HEROIC`, `MYTHIC`; ordered easiest first |
+| `...modes[].progress.completed_count`, `total_count` | "3/8" |
+
+Difficulties with no kills, and raids with none at any difficulty, are omitted.
+**404 means "has never raided"** and is read as no progress.
+
+### Guild roster — `GET /data/wow/guild/{realmSlug}/{nameSlug}/roster`
+
+Used by the guild overview (FR-018), not by the membership check: the check
+still reads `guild` off each character's profile (research D4). See the
+`GuildRoster` method.
 
 ## Rate limits and concurrency
 

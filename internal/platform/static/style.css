@@ -49,7 +49,7 @@ body {
   /* Hold the footer at the bottom of the page on short pages -- the landing
      page is one screen of content in a tall viewport, and without this the
      footer sat halfway up with the banner showing below it.
-     
+
      A column flex body with a growing main, rather than position: fixed: the
      footer belongs at the end of the PAGE, not stuck to the viewport, so on the
      roster it scrolls away under the cards like an ordinary footer instead of
@@ -62,7 +62,7 @@ body {
 
 /* The banner, held in the centre of the VIEWPORT -- position: fixed, so it
    stays put while the page scrolls -- and kept behind everything.
-   
+
    Its edges are feathered into --bg with a radial mask. Matching the page
    colour to the artwork's edge does most of the blending; the mask removes the
    last visible seam, so the image appears to hover rather than to be pasted on.
@@ -181,7 +181,7 @@ button:hover { border-color: var(--accent); }
 
 /* Roster: a left-hand list of characters with the detail card revealed on
    hover, in the shape of a console side-nav.
-   
+
    Entirely CSS. The site ships no JavaScript and the CSP has no script-src at
    all, so a scripted popover is not an option here -- which is fine, because
    :hover and :focus-within do the whole job. */
@@ -189,7 +189,7 @@ button:hover { border-color: var(--accent); }
 
 /* The dashboard is the one page that wants the whole width: its character list
    is a page-level rail, not part of the reading column.
-   
+
    :has() rather than a class on <main>, because the core owns the layout and an
    app supplies only its own content -- an app cannot put a class on <main>
    without the platform growing an API for it, and one app is not a reason to
@@ -215,6 +215,39 @@ main:has(.dashboard) { max-width: none; }
 /* Sticky, so the roster stays to hand while the roadmap scrolls past it --
    which is the whole point of a navigation pane. */
 .character-nav { position: sticky; top: 1.5rem; }
+
+/* A pinned rail whose LIST scrolls, with the heading and the note above it
+   and the total below it staying put.
+
+   Only once tooltip.js has marked it: a scrolling box clips anything
+   positioned outside it, and the hover cards sit beside their rows, outside
+   the rail. The script places them in viewport coordinates, where the rail
+   cannot clip them, and only then adds this class. Without the script the
+   rail is the tall sticky column it always was -- reachable, just not pinned.
+
+   dvh, so the height follows mobile browser chrome; the 100vh line is the
+   fallback where dvh is unsupported. */
+.character-nav.is-scrollable {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 3rem);
+  max-height: calc(100dvh - 3rem);
+}
+
+.character-nav.is-scrollable > .character-list,
+.character-nav.is-scrollable > .roster-groups {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  /* Reaching the end of the list must not start scrolling the page. */
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+
+/* Scrollbars come inside the box, so the last row's right edge and the
+   frame's rounded corners are already accounted for by the border radius on
+   the list; nothing to add. */
 
 .character-list {
   list-style: none;
@@ -250,7 +283,7 @@ main:has(.dashboard) { max-width: none; }
   background: rgba(74, 249, 231, 0.1);
   border-left-color: var(--accent);
 }
-.character-row.is-selected .row-name { color: var(--accent); }
+.character-row.is-selected .row-name { color: var(--cls-text, var(--accent)); }
 
 .character-row:hover,
 .character-row:focus,
@@ -264,7 +297,7 @@ main:has(.dashboard) { max-width: none; }
 .row-meta { color: var(--muted); font-size: 0.85rem; }
 
 /* The card, floated to the right of the row it belongs to.
-   
+
    Hidden with visibility and opacity rather than display:none so it can fade,
    and pointer-events:none so a card that is invisible can never intercept a
    click meant for the row underneath it. visibility is transitioned with a
@@ -275,8 +308,10 @@ main:has(.dashboard) { max-width: none; }
   top: -1px;
   left: calc(100% + 1.5rem);
   z-index: 5;
-  width: 22rem;
-  max-width: min(22rem, 70vw);
+  /* Wide enough that a date and a raid's progress each sit on one line
+     beside a capped label column; see the dl rule below. */
+  width: 24rem;
+  max-width: min(24rem, 70vw);
   /* More opaque than a normal panel: this one overlays other content, so the
      artwork behind it must not compete with the text on it. */
   background: rgba(6, 16, 25, 0.94);
@@ -302,7 +337,7 @@ main:has(.dashboard) { max-width: none; }
 }
 
 /* A transparent bridge across the gap between row and card.
-   
+
    Without it the pointer leaves the row on its way to the card, the card
    closes, and the link inside is unreachable by mouse -- the classic hover-menu
    failure. The card is a child of the row, so anything over this bridge still
@@ -323,12 +358,12 @@ main:has(.dashboard) { max-width: none; }
 .roster-hint { color: var(--muted); font-size: 0.9rem; margin: 0.25rem 0 0; }
 
 /* Guild roster: the same rail, grouped by rank.
-   
+
    The heading is what makes the order legible -- a roster sorted by rank with
    no headings reads as an arbitrary order to anyone who does not already know
    the ranks. */
 /* The roster is ONE panel with rank sections inside it, not a panel per rank.
-   
+
    Five stacked boxes read as five lists; one box with headings in it reads as
    one roster, which is what it is -- and matches the character rail exactly. */
 .roster-groups {
@@ -371,6 +406,70 @@ main:has(.dashboard) { max-width: none; }
   font-size: 0.8rem;
   color: var(--muted);
 }
+
+/* The roster search: an input and a small go button, above the list. */
+.roster-search {
+  display: flex;
+  gap: 0.4rem;
+  margin: 0 0 0.75rem;
+}
+
+.roster-search input {
+  flex: 1 1 auto;
+  min-width: 0;
+  font: inherit;
+  font-size: 0.9rem;
+  color: var(--ink);
+  background: rgba(16, 48, 72, 0.35);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0.45rem 0.65rem;
+}
+
+.roster-search input::placeholder { color: var(--muted); }
+
+.roster-search input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(74, 249, 231, 0.2);
+}
+
+.roster-search button {
+  flex: none;
+  padding: 0.45rem 0.7rem;
+  font-size: 0.9rem;
+}
+
+/* Off-screen, not display:none, so a screen reader still gets the label. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Several members matched a search: a short list to pick from. */
+.search-matches h2 { margin: 0; font-size: 1.25rem; }
+.search-matches .fineprint { margin: 0.25rem 0 0; }
+.search-matches code { color: var(--accent-2); }
+
+.match-list {
+  list-style: none;
+  margin: 1rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.match-list li { display: flex; flex-direction: column; }
+.match-list a { font-weight: 600; text-decoration: none; }
+.match-list a:hover,
+.match-list a:focus { text-decoration: underline; }
 .roster-note code {
   color: var(--accent-2);
   font-size: 0.95em;
@@ -466,7 +565,7 @@ main:has(.dashboard) { max-width: none; }
 .character-card h2 { margin: 0; font-size: 1.25rem; }
 
 .character-card h2 a {
-  color: var(--ink);
+  color: var(--cls-text, var(--ink));
   text-decoration: none;
   border-bottom: 1px solid transparent;
 }
@@ -482,10 +581,19 @@ main:has(.dashboard) { max-width: none; }
 .character-card dl,
 .armory-detail dl {
   display: grid;
-  grid-template-columns: max-content 1fr;
-  gap: 0.4rem 1.5rem;
+  /* The label column takes what it needs up to a cap, then wraps. It used to
+     be max-content, which let one long raid name -- "Aberrus, the Shadowed
+     Crucible" -- widen the column until the values beside it were squeezed
+     into a sliver four lines tall, while a card with only short labels looked
+     fine. A capped column keeps every card the same shape whatever it has to
+     say; the cap is generous enough that only raid names ever reach it. */
+  grid-template-columns: fit-content(10rem) minmax(0, 1fr);
+  gap: 0.4rem 1rem;
   margin: 1rem 0 0;
 }
+
+.character-card dt,
+.armory-detail dt { overflow-wrap: anywhere; }
 
 .character-card dt,
 .armory-detail dt { color: var(--muted); }
@@ -516,7 +624,7 @@ main:has(.dashboard) { max-width: none; }
 }
 
 /* The Armory panel: one character, shown the way the Armory shows one.
-   
+
    The image is Blizzard's own render of that character in its current gear,
    served from render.worldofwarcraft.com. No extracted game assets, no WebGL
    and no JavaScript -- the trade being that it is a still, not a model you can
@@ -594,7 +702,7 @@ main:has(.dashboard) { max-width: none; }
 }
 
 /* Item quality, the colours players read gear by.
-   
+
    Six are the game's own values unchanged. Rare and Epic are lightened:
    at #0070dd and #a335ee they land near 3:1 on this background, which is
    below AA and exactly the two qualities most gear is. The hue and
@@ -610,7 +718,7 @@ main:has(.dashboard) { max-width: none; }
 .q-heirloom { color: #00ccff; }
 
 /* Item tooltips.
-   
+
    Opened by CSS alone -- :hover and :focus-within -- so they work with the
    script blocked. tooltip.js only improves WHERE the box lands and lights up
    the other pieces of a set; it adds .tip-open and inline coordinates, which
@@ -809,4 +917,272 @@ main:has(.dashboard) { max-width: none; }
   color: var(--muted);
   font-size: 0.8rem;
   text-align: center;
+}
+
+
+/* ---------------------------------------------------------------------------
+   The guild overview: stat tiles, bar charts and leaderboards.
+
+   Everything here is CSS over SVG attributes. The Content-Security-Policy
+   allows no inline styles, and the site ships no charting script, so a bar's
+   length is a rect's width attribute, the ring is a dasharray over a
+   pathLength of 100, and the growth on load is a keyframe. Nothing below is
+   load-bearing: with animation off the charts are simply already drawn.
+
+   Marks follow the house rules for charts: thin bars capped well under 24px,
+   4px rounded ends, a single hue for a single series, labels in ink rather
+   than in the data colour, the value at the tip of each bar.
+   ------------------------------------------------------------------------ */
+
+/* Two columns -- the summary and the leaderboards -- which is why the main
+   column drops its reading measure on this page. */
+.dashboard-main--wide { max-width: none; }
+
+.guild-overview {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(16rem, 0.85fr);
+  gap: 1.5rem;
+  align-items: start;
+}
+
+@media (max-width: 68rem) {
+  .guild-overview { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* ---- Stat tiles ---------------------------------------------------------- */
+
+.stat-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem 2.25rem;
+  margin: 1.25rem 0 0;
+}
+
+.stat { display: flex; flex-direction: column; }
+
+.stat-label {
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* Proportional figures, on purpose: tabular digits make a display-size number
+   look loose. Tabular is reserved for the columns of numbers further down. */
+.stat-value {
+  font-size: 2.25rem;
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+}
+
+.stat-value small {
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: var(--accent);
+  margin-left: 0.15rem;
+}
+
+/* The ring meter beside the at-cap tile. */
+.stat-ring {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+.ring { width: 3.5rem; height: 3.5rem; flex: none; }
+
+.ring-track,
+.ring-fill {
+  fill: none;
+  stroke-width: 3.2;
+}
+
+.ring-track { stroke: var(--line); }
+
+/* The arc starts at twelve o'clock -- the rotation -- and draws itself in.
+   pathLength="100" on the circle is what lets the dasharray be a percentage. */
+.ring-fill {
+  stroke: var(--accent);
+  stroke-linecap: round;
+  transform: rotate(-90deg);
+  transform-origin: 50% 50%;
+  animation: ring-draw 900ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+@keyframes ring-draw {
+  from { stroke-dasharray: 0 100; }
+}
+
+/* ---- Bar charts ---------------------------------------------------------- */
+
+.bars {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.bar-row {
+  display: grid;
+  grid-template-columns: minmax(5.5rem, 8.5rem) minmax(0, 1fr) 2.5rem;
+  /* A second row under the bar for the role breakdown, when there is one. */
+  grid-template-areas:
+    "label bar n"
+    ".     roles roles";
+  gap: 0.1rem 0.75rem;
+  align-items: center;
+  font-size: 0.9rem;
+}
+
+.bar-row .bar-label { grid-area: label; }
+.bar-row .bar       { grid-area: bar; }
+.bar-row .bar-n     { grid-area: n; }
+
+/* Tank · Healer · DPS under a class bar: small, muted, the numbers in ink so
+   they read as numbers and the role names recede to labels. */
+.bar-roles {
+  grid-area: roles;
+  font-size: 0.75rem;
+  color: var(--muted);
+  line-height: 1.4;
+  margin-bottom: 0.25rem;
+}
+
+.bar-role { white-space: nowrap; }
+.bar-role-name { letter-spacing: 0.04em; text-transform: uppercase; font-size: 0.68rem; }
+.bar-role { color: var(--ink); }
+.bar-role .bar-role-name { color: var(--muted); }
+
+.bar-label { overflow-wrap: anywhere; }
+
+/* The svg is the track: full width, the rect inside it a percentage of it. */
+.bar {
+  display: block;
+  width: 100%;
+  height: 10px;
+  border-radius: 5px;
+  background: rgba(16, 48, 72, 0.55);
+}
+
+.bar-fill {
+  fill: var(--cls, var(--accent));
+  transform-origin: 0 50%;
+  animation: bar-grow 700ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+@keyframes bar-grow {
+  from { transform: scaleX(0); }
+}
+
+.bar-n {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+/* Class colours, as the game paints them, in two roles.
+
+   --cls is the canonical hue, for marks: bar fills and swatches, where
+   contrast against the surface is not at stake.
+
+   --cls-text is what a NAME is written in. Every character name on the site
+   wears its class colour, the way the game does it, so the rail, the cards,
+   the leaderboards and the Armory panel all agree with the class chart. It is
+   the same hue except where the canonical one cannot clear 4.5:1 on the
+   panel -- Death Knight, Demon Hunter and Shaman -- which are lightened just
+   far enough to pass, exactly as the item quality colours were. Every
+   --cls-text is held to that by TestClassTextColoursClearAA; do not add or
+   change one without running it. */
+.cls-death-knight { --cls: #c41e3a; --cls-text: #e14b62; }
+.cls-demon-hunter { --cls: #a330c9; --cls-text: #c06adf; }
+.cls-druid        { --cls: #ff7c0a; --cls-text: #ff7c0a; }
+.cls-evoker       { --cls: #33937f; --cls-text: #33937f; }
+.cls-hunter       { --cls: #aad372; --cls-text: #aad372; }
+.cls-mage         { --cls: #3fc7eb; --cls-text: #3fc7eb; }
+.cls-monk         { --cls: #00ff98; --cls-text: #00ff98; }
+.cls-paladin      { --cls: #f48cba; --cls-text: #f48cba; }
+.cls-priest       { --cls: #ffffff; --cls-text: #ffffff; }
+.cls-rogue        { --cls: #fff468; --cls-text: #fff468; }
+.cls-shaman       { --cls: #0070dd; --cls-text: #2f8cff; }
+.cls-warlock      { --cls: #8788ee; --cls-text: #8788ee; }
+.cls-warrior      { --cls: #c69b3a; --cls-text: #c69b3a; }
+
+/* A name in its class's colour. Falls back to whatever the element would
+   have been, so an unknown class reads as ordinary text rather than vanishing. */
+.class-name { color: var(--cls-text, inherit); }
+
+/* The authority mark before a guild master's or an officer's name: a gold
+   crown, a silver shield. Sized to the text it sits beside, so it scales with
+   a rail row and a card heading alike. Gold and silver are their own tokens,
+   not class colours: the mark says standing, and the name beside it still
+   says class. */
+.rank-mark {
+  width: 0.95em;
+  height: 0.95em;
+  margin-right: 0.3em;
+  vertical-align: -0.1em;
+  flex: none;
+}
+
+.rank-mark--gm      { fill: #f2c14e; }
+.rank-mark--officer { fill: #b8c7d3; }
+
+/* ---- Leaderboards -------------------------------------------------------- */
+
+.leaderboards {
+  display: grid;
+  gap: 1rem;
+}
+
+.board { padding: 1rem 1.25rem; }
+.board .summary-heading { margin-top: 0; }
+
+.board-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.2rem;
+}
+
+.board-list li {
+  display: grid;
+  grid-template-columns: 1.25rem minmax(0, 1fr) auto;
+  gap: 0.55rem;
+  align-items: center;
+  font-size: 0.9rem;
+  line-height: 1.7;
+}
+
+.board-rank {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+/* The first place gets the accent; the rest read as the list they are. */
+.board-list li:first-child .board-rank { color: var(--accent); font-weight: 600; }
+
+.board-list a {
+  color: var(--cls-text, var(--ink));
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.board-list a:hover,
+.board-list a:focus { color: var(--accent); text-decoration: underline; }
+
+.board-n {
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bar-fill,
+  .ring-fill { animation: none; }
 }

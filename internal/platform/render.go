@@ -30,25 +30,15 @@ type NavItem struct {
 
 // renderPage writes a shared template through the layout.
 func (c *Core) renderPage(w http.ResponseWriter, r *http.Request, status int, name string, data PageData) {
-	data.Nav = c.navFor(r)
-	data.CSRFToken = CSRFTokenFrom(r.Context())
-	if sess, ok := SessionFrom(r.Context()); ok {
-		data.SignedIn = true
-		data.BattleTag = sess.User.BattleTag
-	}
+	c.decorate(r, &data)
 
-	// Render to a buffer first so a template error cannot emit a half-written
-	// page on top of an already-sent status code.
 	var buf bytes.Buffer
 	if err := c.Templates.ExecutePage(&buf, name, data); err != nil {
 		c.Deps.Logger.Error("render template", "template", name, "error", err)
 		http.Error(w, "Something went wrong rendering this page.", http.StatusInternalServerError)
 		return
 	}
-
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.WriteHeader(status)
-	buf.WriteTo(w)
+	writeHTML(w, status, &buf)
 }
 
 // RenderInLayout wraps an app's pre-rendered body in the shared shell. It is
@@ -56,12 +46,7 @@ func (c *Core) renderPage(w http.ResponseWriter, r *http.Request, status int, na
 // (contracts/app-registration.md).
 func (c *Core) RenderInLayout(w http.ResponseWriter, r *http.Request, status int, title string, content template.HTML) {
 	data := PageData{Title: title, Content: content}
-	data.Nav = c.navFor(r)
-	data.CSRFToken = CSRFTokenFrom(r.Context())
-	if sess, ok := SessionFrom(r.Context()); ok {
-		data.SignedIn = true
-		data.BattleTag = sess.User.BattleTag
-	}
+	c.decorate(r, &data)
 
 	var buf bytes.Buffer
 	if err := c.Templates.ExecuteLayout(&buf, data); err != nil {
@@ -69,10 +54,30 @@ func (c *Core) RenderInLayout(w http.ResponseWriter, r *http.Request, status int
 		http.Error(w, "Something went wrong rendering this page.", http.StatusInternalServerError)
 		return
 	}
+	writeHTML(w, status, &buf)
+}
 
+// decorate fills in what every page shares: the navigation, the CSRF token for
+// the logout form, and who is signed in.
+func (c *Core) decorate(r *http.Request, data *PageData) {
+	data.Nav = c.navFor(r)
+	data.CSRFToken = CSRFTokenFrom(r.Context())
+	if sess, ok := SessionFrom(r.Context()); ok {
+		data.SignedIn = true
+		data.BattleTag = sess.User.BattleTag
+	}
+}
+
+// writeHTML sends a fully rendered page.
+//
+// Rendering to a buffer first and only then writing is what keeps a template
+// error from emitting half a page on top of an already-sent 200. Once the
+// buffer is complete the write can fail only for reasons on the client's side
+// -- a closed connection -- and there is nobody left to report that to.
+func writeHTML(w http.ResponseWriter, status int, buf *bytes.Buffer) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(status)
-	buf.WriteTo(w)
+	_, _ = buf.WriteTo(w)
 }
 
 // RenderLoginFailed satisfies auth.Renderer: login did not complete (FR-009).

@@ -21,7 +21,7 @@
 
   <div class="armory-detail">
     {{with .Badge}}<p class="badge">{{.}}</p>{{end}}
-    <h2>{{.Name}}</h2>
+    <h2 class="class-name cls-{{.ClassSlug}}">{{.Name}}</h2>
     <p class="realm">
       {{.RealmName}}{{if .Guild}} &middot; &lt;{{.Guild}}&gt;{{end}}
     </p>
@@ -38,6 +38,14 @@
       <dd>{{.AverageItemLevel}}</dd>
       <dt>Last played</dt>
       <dd>{{.LastLogin}}</dd>
+      {{if .MythicPlusRating}}
+      <dt>Mythic+ rating</dt>
+      <dd>{{.MythicPlusRating}}</dd>
+      {{end}}
+      {{range .Raids}}
+      <dt>{{.Name}}</dt>
+      <dd>{{.Summary}}</dd>
+      {{end}}
     </dl>
 
     {{if .Gear}}

@@ -31,13 +31,16 @@ type Config struct {
 	// name shows as "Rank N", which is honest rather than wrong.
 	GuildRanks []string
 
-	// GuildRosterTTL is how long a fetched guild roster may be reused before it
-	// is fetched again, from TOMB_GUILD_ROSTER_TTL as a Go duration ("30m",
-	// "3h"). Zero -- the default -- fetches live every time.
+	// GuildRosterTTL is how often the guild page refreshes its roster and its
+	// members' profile summaries, from TOMB_GUILD_ROSTER_TTL as a Go duration
+	// ("30m", "3h"). Zero -- the default -- leaves it to the guild app's own
+	// default of an hour. The refresh runs in the background, so this is how
+	// stale the rail may be, never how long a view waits.
 	//
-	// Separate from FR-016's ban on caching character data: this is the guild's
-	// membership list, which changes in days, and the FR-013 access check is a
-	// different path that stays live regardless.
+	// Separate from FR-016's ban on caching character data, which governs My
+	// Characters and the Armory panel: those stay live. This is the guild's
+	// membership list and each member's headline stats, which change in days,
+	// and the FR-013 access check is a different path that stays live too.
 	GuildRosterTTL time.Duration
 
 	DatabaseURL string
@@ -120,22 +123,25 @@ func LoadConfig() (Config, error) {
 	}
 	c.SessionCookieSecure = secure
 
+	// A slice, not a map, so the error lists what is missing in the same order
+	// on every start. Alphabetical, because that is the order a person scans a
+	// list of environment variables in.
+	required := []struct{ name, value string }{
+		{"BNET_CLIENT_ID", c.BnetClientID},
+		{"BNET_CLIENT_SECRET", c.BnetClientSecret},
+		{"BNET_REDIRECT_URL", c.BnetRedirectURL},
+		{"BNET_REGION", c.BnetRegion},
+		{"DATABASE_URL", c.DatabaseURL},
+		{"TOMB_GUILD_NAME", c.GuildName},
+		{"TOMB_GUILD_REALM", c.GuildRealm},
+	}
 	var missing []string
-	for name, value := range map[string]string{
-		"BNET_CLIENT_ID":     c.BnetClientID,
-		"BNET_CLIENT_SECRET": c.BnetClientSecret,
-		"BNET_REDIRECT_URL":  c.BnetRedirectURL,
-		"BNET_REGION":        c.BnetRegion,
-		"TOMB_GUILD_NAME":    c.GuildName,
-		"TOMB_GUILD_REALM":   c.GuildRealm,
-		"DATABASE_URL":       c.DatabaseURL,
-	} {
-		if strings.TrimSpace(value) == "" {
-			missing = append(missing, name)
+	for _, v := range required {
+		if strings.TrimSpace(v.value) == "" {
+			missing = append(missing, v.name)
 		}
 	}
 	if len(missing) > 0 {
-		sortStrings(missing)
 		return Config{}, fmt.Errorf("%w: %s", ErrMissingConfig, strings.Join(missing, ", "))
 	}
 
@@ -154,14 +160,4 @@ func envOr(key, fallback string) string {
 		return v
 	}
 	return fallback
-}
-
-// sortStrings is a tiny insertion sort, used so config error messages list
-// missing variables in a stable order without importing sort for one call.
-func sortStrings(s []string) {
-	for i := 1; i < len(s); i++ {
-		for j := i; j > 0 && s[j] < s[j-1]; j-- {
-			s[j], s[j-1] = s[j-1], s[j]
-		}
-	}
 }

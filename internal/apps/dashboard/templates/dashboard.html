@@ -16,12 +16,14 @@
     <ul class="character-list">
       {{range .Characters}}
       <li class="character-row{{if .Current}} is-current{{end}}{{if .Selected}} is-selected{{end}}" tabindex="0"{{if .Selected}} aria-current="true"{{end}}>
-        <span class="row-name">{{.Name}}</span>
+        {{/* Names wear their class's colour, everywhere, the way the game
+             paints them. The stylesheet keys the colour on cls-<slug>. */}}
+        <span class="row-name class-name cls-{{.ClassSlug}}">{{.Name}}</span>
         <span class="row-meta">{{.Level}} {{.Class}}{{if .Guild}} &middot; &lt;{{.Guild}}&gt;{{end}}</span>
 
         <div class="character-card popover" role="group" aria-label="{{.Name}} details">
           {{if .Current}}<p class="badge">Most recently played</p>{{end}}
-          <h2><a href="?c={{.Key}}">{{.Name}}</a></h2>
+          <h2><a class="class-name cls-{{.ClassSlug}}" href="?c={{.Key}}">{{.Name}}</a></h2>
           <p class="realm">
             {{.RealmName}}{{if .Guild}} &middot; &lt;{{.Guild}}&gt;{{end}}
           </p>
@@ -38,6 +40,17 @@
             <dd>{{.AverageItemLevel}}</dd>
             <dt>Last played</dt>
             <dd>{{.LastLogin}}</dd>
+            {{/* This season's standing: the in-game Mythic+ rating, and each
+                 current raid as "8/8 H · 3/8 M". Rows appear only when there
+                 is something to say. */}}
+            {{if .MythicPlusRating}}
+            <dt>Mythic+ rating</dt>
+            <dd>{{.MythicPlusRating}}</dd>
+            {{end}}
+            {{range .Raids}}
+            <dt>{{.Name}}</dt>
+            <dd>{{.Summary}}</dd>
+            {{end}}
           </dl>
         </div>
       </li>

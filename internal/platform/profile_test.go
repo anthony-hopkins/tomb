@@ -34,6 +34,16 @@ func (f *fakeClient) UserInfo(context.Context, string) (blizzard.Identity, error
 	return blizzard.Identity{Sub: "sub", BattleTag: "Tester#1234"}, nil
 }
 
+// The core never asks about season standing; these exist to satisfy the
+// interface, and a call to either would be a bug worth a panic.
+func (f *fakeClient) MythicPlusRating(context.Context, string, blizzard.CharacterRef) (int, error) {
+	panic("the core must not fetch season standing")
+}
+
+func (f *fakeClient) RaidProgression(context.Context, string, blizzard.CharacterRef) ([]blizzard.RaidProgress, error) {
+	panic("the core must not fetch season standing")
+}
+
 func (f *fakeClient) AccountCharacters(context.Context, string) ([]blizzard.CharacterRef, error) {
 	if f.accountErr != nil {
 		return nil, f.accountErr

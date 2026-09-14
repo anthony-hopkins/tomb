@@ -8,7 +8,7 @@
 # lower environment that quietly differs from production is worse than none.
 # Everything below compiles, checks or packages. Nothing below serves.
 
-.PHONY: build vet test docker check fmt tidy
+.PHONY: build vet test docker check lint fmt tidy
 
 build:
 	go build ./...
@@ -24,6 +24,11 @@ docker:
 
 # The full pre-merge gate. Run this before opening a pull request into develop.
 check: build vet test docker
+
+# The same linters CI runs (.golangci.yml). Not part of `check`, which is the
+# constitution's gate; CI enforces this one, the way it already enforces gofmt.
+lint:
+	golangci-lint run ./...
 
 fmt:
 	gofmt -l -w .

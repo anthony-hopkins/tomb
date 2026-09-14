@@ -16,6 +16,8 @@ import (
 	"embed"
 	"log/slog"
 	"strings"
+	"sync"
+	"time"
 
 	"golang.org/x/sync/errgroup"
 
@@ -58,10 +60,20 @@ type Panel struct {
 	LastLogin        string
 	Guild            string
 
+	// ClassSlug is Class as a CSS class fragment -- "death-knight" -- so the
+	// name can be written in the class's colour. See ClassSlug.
+	ClassSlug string
+
 	// Badge is the one line above the name: "Most recently played" on your own
 	// dashboard, the member's rank on the guild roster. The caller supplies it
 	// because it is the one thing that genuinely differs between the two pages.
 	Badge string
+
+	// MythicPlusRating and Raids are this season's standing, from two
+	// endpoints the profile does not cover. Zero and empty when the character
+	// has none, which the template reads as "leave the row out".
+	MythicPlusRating int
+	Raids            []blizzard.RaidProgress
 
 	// Render is Blizzard's own image of this character in its current gear, or
 	// empty when there is none. Empty is normal, not an error: a character
@@ -103,6 +115,24 @@ type Item struct {
 	SetKey string
 }
 
+// ClassSlug turns a class name into the CSS class fragment the stylesheet
+// keys its class colours on: "Death Knight" becomes "death-knight", so that
+// "cls-death-knight" paints a mark or a name in the class's colour.
+//
+// Every name on the site is written in its class's colour, the way the game
+// does it, so this lives with the other shared presentation rather than being
+// three private copies of a lowercase-and-hyphenate.
+func ClassSlug(class string) string {
+	return strings.ReplaceAll(strings.ToLower(class), " ", "-")
+}
+
+// LastPlayed formats a last-login time the way every card on the site shows
+// it. One place, because three did, and a date that reads differently between
+// the rail and the panel looks like two different characters.
+func LastPlayed(t time.Time) string {
+	return t.Format("2 Jan 2006, 15:04 MST")
+}
+
 // Builder fetches the parts of a panel that are not already in hand.
 type Builder struct {
 	Client blizzard.Client
@@ -117,19 +147,63 @@ type Builder struct {
 func (b *Builder) Of(ctx context.Context, token string, c blizzard.Character, badge string) *Panel {
 	p := &Panel{
 		Name:             c.Name,
-		RealmName:        realmLabel(&c),
+		RealmName:        c.RealmLabel(),
 		Class:            c.Class,
+		ClassSlug:        ClassSlug(c.Class),
 		ActiveSpec:       c.ActiveSpec,
 		Level:            c.Level,
 		AverageItemLevel: c.AverageItemLevel,
-		LastLogin:        c.LastLogin.Format("2 Jan 2006, 15:04 MST"),
-		Guild:            guildLabel(&c),
+		LastLogin:        LastPlayed(c.LastLogin),
+		Guild:            c.GuildName(),
 		Badge:            badge,
 	}
 
+	// The render, the gear and the season's standing are independent calls to
+	// independent endpoints, so they go out together: the panel costs one
+	// round trip plus the icon fan-out, not four. Each writes its own fields,
+	// so there is nothing to lock.
 	ref := blizzard.CharacterRef{Name: c.Name, RealmSlug: c.RealmSlug}
-	p.Render = b.render(ctx, token, ref)
-	p.Gear = b.gear(ctx, token, ref)
+	var wg sync.WaitGroup
+	wg.Go(func() { p.Render = b.render(ctx, token, ref) })
+	wg.Go(func() { p.Gear = b.gear(ctx, token, ref) })
+	wg.Go(func() {
+		pr := b.Progress(ctx, token, ref)
+		p.MythicPlusRating, p.Raids = pr.MythicPlusRating, pr.Raids
+	})
+	wg.Wait()
+	return p
+}
+
+// Progress fetches where a character stands this season: their Mythic+ rating
+// and their raid progress, two endpoints, in parallel.
+//
+// Shared by every card on the site rather than only the panel, because the
+// question "how far along is this character" is one people ask of a roster,
+// not only of the one they have opened. Either call failing leaves its half
+// empty and the card omits that row; logged at debug because on a roster of
+// two hundred a warning each would be a page of them.
+func (b *Builder) Progress(ctx context.Context, token string, ref blizzard.CharacterRef) blizzard.Progress {
+	var p blizzard.Progress
+	var wg sync.WaitGroup
+	wg.Go(func() {
+		rating, err := b.Client.MythicPlusRating(ctx, token, ref)
+		if err != nil {
+			b.Logger.Debug("mythic+ rating unavailable",
+				"realm", ref.RealmSlug, "outcome", blizzard.OutcomeOf(err).String())
+			return
+		}
+		p.MythicPlusRating = rating
+	})
+	wg.Go(func() {
+		raids, err := b.Client.RaidProgression(ctx, token, ref)
+		if err != nil {
+			b.Logger.Debug("raid progression unavailable",
+				"realm", ref.RealmSlug, "outcome", blizzard.OutcomeOf(err).String())
+			return
+		}
+		p.Raids = raids
+	})
+	wg.Wait()
 	return p
 }
 
@@ -216,19 +290,29 @@ func (b *Builder) gear(ctx context.Context, token string, ref blizzard.Character
 
 // setKey turns a set's display name into something usable as an HTML id
 // fragment, so the pieces of one set can be grouped without putting the raw
-// name -- which comes from a remote API and contains apostrophes and spaces --
-// into an attribute selector.
+// name -- which comes from a remote API and contains apostrophes, parentheses
+// and spaces -- into an attribute selector.
+//
+// Letters and digits pass through; any run of anything else becomes a single
+// hyphen; the ends are trimmed. Two pieces of one set produce the same key
+// because Blizzard sends the same display string for both, so the mapping only
+// has to be deterministic and selector-safe, not reversible.
 func setKey(display string) string {
 	var b strings.Builder
+	pendingSep := false
 	for _, r := range strings.ToLower(display) {
 		switch {
 		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
+			if pendingSep && b.Len() > 0 {
+				b.WriteByte('-')
+			}
+			pendingSep = false
 			b.WriteRune(r)
-		case r == ' ' && b.Len() > 0:
-			b.WriteByte('-')
+		default:
+			pendingSep = true
 		}
 	}
-	return strings.Trim(b.String(), "-")
+	return b.String()
 }
 
 // resolveIcons fills in each item's icon URL, in parallel and bounded.
@@ -281,20 +365,4 @@ func (b *Builder) resolveIcons(ctx context.Context, token string, items []blizza
 		})
 	}
 	_ = g.Wait()
-}
-
-// guildLabel is the character's guild, or empty when it has none.
-func guildLabel(c *blizzard.Character) string {
-	if c.Guild == nil {
-		return ""
-	}
-	return c.Guild.Name
-}
-
-// realmLabel prefers the display name, falling back to the slug.
-func realmLabel(c *blizzard.Character) string {
-	if c.RealmName != "" {
-		return c.RealmName
-	}
-	return c.RealmSlug
 }

@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -74,6 +76,27 @@ func NewHTTPClient(apiHost, namespace, region string) *HTTPClient {
 // Compile-time proof the live client satisfies the interface.
 var _ Client = (*HTTPClient)(nil)
 
+// profileQuery is the query string every profile-namespace call carries.
+func (c *HTTPClient) profileQuery() url.Values {
+	return url.Values{
+		"namespace": {c.Namespace},
+		"locale":    {c.Locale},
+	}
+}
+
+// characterPath builds the path to one character's profile endpoints: the
+// summary itself with an empty suffix, or a sub-resource such as
+// "/equipment".
+//
+// Blizzard requires both the realm slug and the name lowercased, and both are
+// escaped because names can contain non-ASCII characters.
+func characterPath(ref CharacterRef, suffix string) string {
+	return "/profile/wow/character/" +
+		url.PathEscape(strings.ToLower(ref.RealmSlug)) + "/" +
+		url.PathEscape(strings.ToLower(ref.Name)) +
+		suffix
+}
+
 func (c *HTTPClient) UserInfo(ctx context.Context, token string) (Identity, error) {
 	const endpoint = "userinfo"
 
@@ -91,7 +114,7 @@ func (c *HTTPClient) UserInfo(ctx context.Context, token string) (Identity, erro
 	// identity key, which would collide across accounts on the UNIQUE index.
 	sub := strings.TrimSpace(payload.Sub)
 	if sub == "" && payload.ID != 0 {
-		sub = fmt.Sprintf("%d", payload.ID)
+		sub = strconv.FormatInt(payload.ID, 10)
 	}
 	if sub == "" {
 		return Identity{}, &APIError{
@@ -118,11 +141,7 @@ func (c *HTTPClient) AccountCharacters(ctx context.Context, token string) ([]Cha
 		} `json:"wow_accounts"`
 	}
 
-	q := url.Values{
-		"namespace": {c.Namespace},
-		"locale":    {c.Locale},
-	}
-	if err := c.get(ctx, endpoint, c.APIHost+"/profile/user/wow", q, token, &payload); err != nil {
+	if err := c.get(ctx, endpoint, c.APIHost+"/profile/user/wow", c.profileQuery(), token, &payload); err != nil {
 		return nil, err
 	}
 
@@ -167,17 +186,7 @@ func (c *HTTPClient) CharacterProfile(ctx context.Context, token string, ref Cha
 		} `json:"guild"`
 	}
 
-	// Blizzard requires the character name lowercased, and it must be escaped
-	// because names can contain non-ASCII characters.
-	path := fmt.Sprintf("/profile/wow/character/%s/%s",
-		url.PathEscape(strings.ToLower(ref.RealmSlug)),
-		url.PathEscape(strings.ToLower(ref.Name)),
-	)
-	q := url.Values{
-		"namespace": {c.Namespace},
-		"locale":    {c.Locale},
-	}
-	if err := c.get(ctx, endpoint, c.APIHost+path, q, token, &payload); err != nil {
+	if err := c.get(ctx, endpoint, c.APIHost+characterPath(ref, ""), c.profileQuery(), token, &payload); err != nil {
 		return Character{}, err
 	}
 
@@ -225,15 +234,7 @@ func (c *HTTPClient) CharacterMedia(ctx context.Context, token string, ref Chara
 		} `json:"assets"`
 	}
 
-	path := fmt.Sprintf("/profile/wow/character/%s/%s/character-media",
-		url.PathEscape(strings.ToLower(ref.RealmSlug)),
-		url.PathEscape(strings.ToLower(ref.Name)),
-	)
-	q := url.Values{
-		"namespace": {c.Namespace},
-		"locale":    {c.Locale},
-	}
-	if err := c.get(ctx, endpoint, c.APIHost+path, q, token, &payload); err != nil {
+	if err := c.get(ctx, endpoint, c.APIHost+characterPath(ref, "/character-media"), c.profileQuery(), token, &payload); err != nil {
 		return Media{}, err
 	}
 
@@ -320,15 +321,7 @@ func (c *HTTPClient) CharacterEquipment(ctx context.Context, token string, ref C
 		} `json:"equipped_items"`
 	}
 
-	path := fmt.Sprintf("/profile/wow/character/%s/%s/equipment",
-		url.PathEscape(strings.ToLower(ref.RealmSlug)),
-		url.PathEscape(strings.ToLower(ref.Name)),
-	)
-	q := url.Values{
-		"namespace": {c.Namespace},
-		"locale":    {c.Locale},
-	}
-	if err := c.get(ctx, endpoint, c.APIHost+path, q, token, &payload); err != nil {
+	if err := c.get(ctx, endpoint, c.APIHost+characterPath(ref, "/equipment"), c.profileQuery(), token, &payload); err != nil {
 		return nil, err
 	}
 
@@ -494,11 +487,7 @@ func (c *HTTPClient) fetchRoster(ctx context.Context, token, realmSlug, guildNam
 		url.PathEscape(strings.ToLower(realmSlug)),
 		url.PathEscape(GuildNameSlug(guildName)),
 	)
-	q := url.Values{
-		"namespace": {c.Namespace},
-		"locale":    {c.Locale},
-	}
-	if err := c.get(ctx, endpoint, c.APIHost+path, q, token, &payload); err != nil {
+	if err := c.get(ctx, endpoint, c.APIHost+path, c.profileQuery(), token, &payload); err != nil {
 		return nil, err
 	}
 
@@ -518,6 +507,102 @@ func (c *HTTPClient) fetchRoster(ctx context.Context, token, realmSlug, guildNam
 	}
 	SortRoster(members)
 	return members, nil
+}
+
+// MythicPlusRating fetches the character's current in-game Mythic+ rating.
+func (c *HTTPClient) MythicPlusRating(ctx context.Context, token string, ref CharacterRef) (int, error) {
+	const endpoint = "mythic-keystone-profile"
+
+	var payload struct {
+		CurrentMythicRating struct {
+			Rating float64 `json:"rating"`
+		} `json:"current_mythic_rating"`
+	}
+
+	err := c.get(ctx, endpoint, c.APIHost+characterPath(ref, "/mythic-keystone-profile"), c.profileQuery(), token, &payload)
+	if err != nil {
+		// A character who has never run a key has no keystone profile at all,
+		// and Blizzard says so with a 404. That is "unrated", not a failure.
+		if OutcomeOf(err) == OutcomeNotFound {
+			return 0, nil
+		}
+		return 0, err
+	}
+	// The game shows the rating as a whole number; the API carries decimals.
+	return int(math.Round(payload.CurrentMythicRating.Rating)), nil
+}
+
+// RaidProgression fetches how far the character is into the current
+// expansion's raids.
+func (c *HTTPClient) RaidProgression(ctx context.Context, token string, ref CharacterRef) ([]RaidProgress, error) {
+	const endpoint = "encounters-raids"
+
+	var payload struct {
+		Expansions []struct {
+			Expansion struct {
+				ID int `json:"id"`
+			} `json:"expansion"`
+			Instances []struct {
+				Instance struct {
+					Name string `json:"name"`
+				} `json:"instance"`
+				Modes []struct {
+					Difficulty struct {
+						Type string `json:"type"`
+					} `json:"difficulty"`
+					Progress struct {
+						Completed int `json:"completed_count"`
+						Total     int `json:"total_count"`
+					} `json:"progress"`
+				} `json:"modes"`
+			} `json:"instances"`
+		} `json:"expansions"`
+	}
+
+	err := c.get(ctx, endpoint, c.APIHost+characterPath(ref, "/encounters/raids"), c.profileQuery(), token, &payload)
+	if err != nil {
+		// No raid history at all comes back as a 404, not an empty list.
+		if OutcomeOf(err) == OutcomeNotFound {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	// The current expansion is the one with the highest id. Blizzard's
+	// expansion ids climb with each release, and the response carries every
+	// expansion the character has ever raided in, oldest first -- so "last in
+	// the list" would work today and break the first time they reorder it.
+	current := -1
+	for i := range payload.Expansions {
+		if current < 0 || payload.Expansions[i].Expansion.ID > payload.Expansions[current].Expansion.ID {
+			current = i
+		}
+	}
+	if current < 0 {
+		return nil, nil
+	}
+
+	var raids []RaidProgress
+	for _, inst := range payload.Expansions[current].Instances {
+		r := RaidProgress{Name: inst.Instance.Name}
+		for _, m := range inst.Modes {
+			// A difficulty with nothing killed says nothing worth a row.
+			if m.Progress.Completed == 0 {
+				continue
+			}
+			r.Modes = append(r.Modes, RaidMode{
+				Difficulty: m.Difficulty.Type,
+				Completed:  m.Progress.Completed,
+				Total:      m.Progress.Total,
+			})
+		}
+		if len(r.Modes) == 0 {
+			continue
+		}
+		SortModes(r.Modes)
+		raids = append(raids, r)
+	}
+	return raids, nil
 }
 
 // ItemIcon resolves an item's media id to its icon URL, caching the result for
@@ -599,9 +684,12 @@ func (c *HTTPClient) get(ctx context.Context, endpoint, rawURL string, q url.Val
 		// Timeouts and transport errors are retry-able.
 		return &APIError{Endpoint: endpoint, Outcome: OutcomeUnavailable, Err: err}
 	}
+	// Drain before closing so the connection goes back to the pool. Neither
+	// error is actionable here: the body has either been decoded below or the
+	// request has already failed on its own terms.
 	defer func() {
-		io.Copy(io.Discard, resp.Body)
-		resp.Body.Close()
+		_, _ = io.Copy(io.Discard, resp.Body)
+		_ = resp.Body.Close()
 	}()
 
 	if resp.StatusCode != http.StatusOK {

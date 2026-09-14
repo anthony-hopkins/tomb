@@ -48,6 +48,28 @@ func hashToken(raw string) []byte {
 	return sum[:]
 }
 
+// cookie builds one of this manager's cookies.
+//
+// Every cookie the site sets has the same shape -- HttpOnly, SameSite=Lax,
+// Secure whenever the site is -- and differs only in name, value and lifetime.
+// Writing the shape once means a hardening change lands on all of them, rather
+// than on the three literals somebody remembered to edit.
+//
+// SameSite=Lax, not Strict: the OAuth callback is a cross-site top-level
+// redirect back from Blizzard and must arrive with these cookies intact. A
+// negative maxAge expires the cookie, which is how the clear* methods work.
+func (m *SessionManager) cookie(name, value string, maxAge int) *http.Cookie {
+	return &http.Cookie{
+		Name:     name,
+		Value:    value,
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   m.CookieSecure,
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   maxAge,
+	}
+}
+
 // Issue creates a session for the user and sets the cookie.
 //
 // expiresAt MUST come from the OAuth token's expiry, not a local constant:
@@ -62,18 +84,12 @@ func (m *SessionManager) Issue(ctx context.Context, w http.ResponseWriter, user 
 		return err
 	}
 
-	// SameSite=Lax, not Strict: the OAuth callback is a cross-site top-level
-	// redirect back from Blizzard and must arrive with this cookie intact.
-	http.SetCookie(w, &http.Cookie{
-		Name:     SessionCookieName,
-		Value:    raw,
-		Path:     "/",
-		HttpOnly: true,
-		Secure:   m.CookieSecure,
-		SameSite: http.SameSiteLaxMode,
-		Expires:  expiresAt,
-		MaxAge:   int(time.Until(expiresAt).Seconds()),
-	})
+	// Both Expires and Max-Age, for the same instant: Max-Age wins where it is
+	// understood and Expires covers the rest. The server-side expiry in the
+	// store is the authority either way.
+	c := m.cookie(SessionCookieName, raw, int(time.Until(expiresAt).Seconds()))
+	c.Expires = expiresAt
+	http.SetCookie(w, c)
 	return nil
 }
 
@@ -103,39 +119,15 @@ func (m *SessionManager) Revoke(ctx context.Context, w http.ResponseWriter, r *h
 
 // ClearCookie expires the session cookie in the browser.
 func (m *SessionManager) ClearCookie(w http.ResponseWriter) {
-	http.SetCookie(w, &http.Cookie{
-		Name:     SessionCookieName,
-		Value:    "",
-		Path:     "/",
-		HttpOnly: true,
-		Secure:   m.CookieSecure,
-		SameSite: http.SameSiteLaxMode,
-		MaxAge:   -1,
-	})
+	http.SetCookie(w, m.cookie(SessionCookieName, "", -1))
 }
 
 // setStateCookie stores the OAuth state value for the duration of the consent
 // round trip.
 func (m *SessionManager) setStateCookie(w http.ResponseWriter, state string) {
-	http.SetCookie(w, &http.Cookie{
-		Name:     StateCookieName,
-		Value:    state,
-		Path:     "/",
-		HttpOnly: true,
-		Secure:   m.CookieSecure,
-		SameSite: http.SameSiteLaxMode,
-		MaxAge:   int(stateTTL.Seconds()),
-	})
+	http.SetCookie(w, m.cookie(StateCookieName, state, int(stateTTL.Seconds())))
 }
 
 func (m *SessionManager) clearStateCookie(w http.ResponseWriter) {
-	http.SetCookie(w, &http.Cookie{
-		Name:     StateCookieName,
-		Value:    "",
-		Path:     "/",
-		HttpOnly: true,
-		Secure:   m.CookieSecure,
-		SameSite: http.SameSiteLaxMode,
-		MaxAge:   -1,
-	})
+	http.SetCookie(w, m.cookie(StateCookieName, "", -1))
 }

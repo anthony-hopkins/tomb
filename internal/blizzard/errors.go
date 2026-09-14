@@ -93,12 +93,12 @@ func RetryAfterOf(err error) time.Duration {
 func classify(endpoint string, resp *http.Response) *APIError {
 	e := &APIError{Endpoint: endpoint, StatusCode: resp.StatusCode}
 
-	switch {
-	case resp.StatusCode == http.StatusUnauthorized:
+	switch resp.StatusCode {
+	case http.StatusUnauthorized:
 		e.Outcome = OutcomeRevoked
-	case resp.StatusCode == http.StatusNotFound:
+	case http.StatusNotFound:
 		e.Outcome = OutcomeNotFound
-	case resp.StatusCode == http.StatusTooManyRequests:
+	case http.StatusTooManyRequests:
 		e.Outcome = OutcomeUnavailable
 		e.RetryAfter = parseRetryAfter(resp.Header.Get("Retry-After"))
 	default:

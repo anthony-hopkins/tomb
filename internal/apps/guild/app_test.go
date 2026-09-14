@@ -5,12 +5,18 @@ import (
 	"context"
 	"errors"
 	"html"
+	"html/template"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/anthony-hopkins/tomb/internal/auth"
 	"github.com/anthony-hopkins/tomb/internal/blizzard"
@@ -53,7 +59,7 @@ func TestGroupsFollowTheRoster(t *testing.T) {
 		{Name: "Alpha", Rank: 1, Level: 90},
 		{Name: "Beta", Rank: 1, Level: 90},
 		{Name: "Zed", Rank: 3, Level: 71},
-	})
+	}, nil)
 
 	if len(groups) != 3 {
 		t.Fatalf("got %d rank groups, want 3 (ranks 0, 1 and 3)", len(groups))
@@ -82,7 +88,7 @@ func TestRosterRendersRankHeadings(t *testing.T) {
 		Groups: a.group([]blizzard.GuildMember{
 			{Name: "Nekromoo", Rank: 0, Level: 90, Class: "Death Knight", RealmName: "Area 52"},
 			{Name: "Lazzlowe", Rank: 1, Level: 90, Class: "Paladin", RealmName: "Area 52"},
-		}),
+		}, nil),
 		Total: 2,
 	}
 
@@ -120,7 +126,7 @@ func TestRosterRowsBehaveLikeCharacterRows(t *testing.T) {
 		Groups: a.group([]blizzard.GuildMember{
 			{Name: "Nekromoo", Rank: 0, Level: 90, Class: "Death Knight", RealmName: "Area 52"},
 			{Name: "Lazzlowe", Rank: 1, Level: 90, Class: "Paladin", RealmName: "Area 52"},
-		}),
+		}, nil),
 		Total: 2,
 	}
 
@@ -161,7 +167,7 @@ func TestRosterIsOnePanel(t *testing.T) {
 			{Name: "Arcanost", Rank: 1, Level: 90},
 			{Name: "Azelora", Rank: 1, Level: 90},
 			{Name: "Someone", Rank: 2, Level: 71},
-		}),
+		}, nil),
 		Total: 4,
 	}
 
@@ -197,8 +203,8 @@ func TestSummaryCountsTheRoster(t *testing.T) {
 		{Name: "Azelora", Rank: 1, Level: 90, Class: "Mage"},
 		{Name: "Boodytv", Rank: 1, Level: 64, Class: "Hunter"},
 	}
-	groups := a.group(members)
-	sum := a.summarise(members, groups)
+	groups := a.group(members, nil)
+	sum := a.summarise(members, groups, nil)
 
 	if sum == nil {
 		t.Fatal("no summary for a roster with members in it")
@@ -241,7 +247,7 @@ func TestClassOrderIsStable(t *testing.T) {
 
 	var first []string
 	for i := 0; i < 20; i++ {
-		sum := a.summarise(members, a.group(members))
+		sum := a.summarise(members, a.group(members, nil), nil)
 		var order []string
 		for _, c := range sum.Classes {
 			order = append(order, c.Label)
@@ -267,14 +273,14 @@ func TestSummaryRenders(t *testing.T) {
 	a := appWith([]string{"Guild Master"})
 	members := []blizzard.GuildMember{{Name: "Cwds", Rank: 0, Level: 90, Class: "Monk"}}
 	v := view{
-		Groups:  a.group(members),
+		Groups:  a.group(members, nil),
 		Total:   1,
-		Summary: a.summarise(members, a.group(members)),
+		Summary: a.summarise(members, a.group(members, nil), nil),
 	}
 
 	body := html.UnescapeString(render(t, v))
 
-	for _, want := range []string{"guild-summary", "TOMB", "Characters", "At level 90", "By rank", "By class", "Monk"} {
+	for _, want := range []string{"guild-summary", "TOMB", "Characters", "At level 90", "By class", "Monk"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("the summary panel is missing %q", want)
 		}
@@ -285,7 +291,7 @@ func TestSummaryRenders(t *testing.T) {
 // full of zeroes, which would read as a guild with nobody in it.
 func TestNoSummaryWithoutARoster(t *testing.T) {
 	a := appWith(nil)
-	if sum := a.summarise(nil, nil); sum != nil {
+	if sum := a.summarise(nil, nil, nil); sum != nil {
 		t.Errorf("summarised an empty roster into %v", sum)
 	}
 
@@ -300,7 +306,7 @@ func TestUnnamedRanksSaySo(t *testing.T) {
 	a := appWith(nil)
 	v := view{
 		RanksUnnamed: true,
-		Groups:       a.group([]blizzard.GuildMember{{Name: "Someone", Rank: 4, Level: 80}}),
+		Groups:       a.group([]blizzard.GuildMember{{Name: "Someone", Rank: 4, Level: 80}}, nil),
 		Total:        1,
 	}
 
@@ -361,17 +367,61 @@ func TestMetaIsTheHome(t *testing.T) {
 type fakeClient struct {
 	blizzard.Client // embedded: the methods these tests never call stay nil
 
+	mu       sync.Mutex
 	profiled []blizzard.CharacterRef
 	profile  blizzard.Character
 	profErr  error
+
+	// byName answers CharacterProfile per character when set, so a snapshot
+	// test can give each member their own spec and item level; otherwise
+	// every call returns profile.
+	byName map[string]blizzard.Character
+
+	roster     []blizzard.GuildMember
+	rosterErr  error
+	rosterGets atomic.Int32
+
+	// ratingFor gives a member a Mythic+ rating by lowercase name; absent
+	// means unrated. Raids are not driven here: the row rendering is covered
+	// by the armory and template tests, and the snapshot only needs to prove
+	// it carries what it fetched.
+	ratingFor map[string]int
+}
+
+func (f *fakeClient) MythicPlusRating(_ context.Context, _ string, ref blizzard.CharacterRef) (int, error) {
+	return f.ratingFor[strings.ToLower(ref.Name)], nil
+}
+
+func (f *fakeClient) RaidProgression(context.Context, string, blizzard.CharacterRef) ([]blizzard.RaidProgress, error) {
+	return nil, nil
 }
 
 func (f *fakeClient) CharacterProfile(_ context.Context, _ string, ref blizzard.CharacterRef) (blizzard.Character, error) {
+	f.mu.Lock()
 	f.profiled = append(f.profiled, ref)
+	f.mu.Unlock()
 	if f.profErr != nil {
 		return blizzard.Character{}, f.profErr
 	}
+	if f.byName != nil {
+		c, ok := f.byName[strings.ToLower(ref.Name)]
+		if !ok {
+			return blizzard.Character{}, errors.New("no such character")
+		}
+		return c, nil
+	}
 	return f.profile, nil
+}
+
+func (f *fakeClient) GuildRoster(context.Context, string, string, string) ([]blizzard.GuildMember, error) {
+	f.rosterGets.Add(1)
+	return f.roster, f.rosterErr
+}
+
+func (f *fakeClient) profileCalls() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return len(f.profiled)
 }
 
 func (f *fakeClient) CharacterMedia(context.Context, string, blizzard.CharacterRef) (blizzard.Media, error) {
@@ -395,7 +445,7 @@ func selecting(t *testing.T, f *fakeClient, ranks []string, key string, members 
 	r := httptest.NewRequest(http.MethodGet, "/app/guild?c="+key, nil)
 	r = r.WithContext(platform.ContextWithSession(r.Context(), auth.Session{AccessToken: "t"}))
 
-	v := view{Groups: a.group(members), Total: len(members)}
+	v := view{Groups: a.group(members, nil), Total: len(members)}
 	a.selectMember(r, &v, members, key)
 	return v
 }
@@ -409,7 +459,7 @@ var twoMembers = []blizzard.GuildMember{
 // guild card is a link, exactly as it is on My Characters.
 func TestNamesLinkToTheirArmory(t *testing.T) {
 	a := appWith([]string{"Guild Master", "Officer"})
-	body := render(t, view{Groups: a.group(twoMembers), Total: 2, Home: routePrefix})
+	body := render(t, view{Groups: a.group(twoMembers, nil), Total: 2, Home: routePrefix})
 
 	// %2f, not "/": html/template escapes the separator inside a URL query,
 	// and r.URL.Query().Get decodes it again on the way back in. Asserting the
@@ -552,5 +602,694 @@ func TestBackLinkIsAbsolute(t *testing.T) {
 
 	if got := render(t, v); !strings.Contains(got, "href=\"/app/guild\"") {
 		t.Error("the way back out of a member's panel is not an absolute path")
+	}
+}
+
+// --- The card, and the snapshot behind it -----------------------------------
+
+func signedIn(t *testing.T) *http.Request {
+	t.Helper()
+	r := httptest.NewRequest(http.MethodGet, "/app/guild", nil)
+	return r.WithContext(platform.ContextWithSession(r.Context(), auth.Session{AccessToken: "t"}))
+}
+
+func snapshotApp(f *fakeClient, refresh time.Duration) *App {
+	return &App{
+		deps: platform.Deps{
+			Guild:    platform.GuildConfig{Name: "TOMB", RealmSlug: "elune", Ranks: []string{"Guild Master", "Officer"}},
+			Blizzard: f,
+			Logger:   slog.New(slog.NewTextHandler(io.Discard, nil)),
+		},
+		refreshEvery: refresh,
+	}
+}
+
+var profiled = map[string]blizzard.Character{
+	"nekromoo": {Name: "Nekromoo", RealmSlug: "area-52", RealmName: "Area 52", Class: "Death Knight",
+		ActiveSpec: "Blood", Level: 90, AverageItemLevel: 311, LastLogin: time.Date(2026, 9, 14, 7, 5, 0, 0, time.UTC)},
+	"lazzlowe": {Name: "Lazzlowe", RealmSlug: "elune", RealmName: "Elune", Class: "Paladin",
+		ActiveSpec: "Retribution", Level: 90, AverageItemLevel: 298, LastLogin: time.Date(2026, 9, 10, 20, 0, 0, 0, time.UTC)},
+}
+
+// byKey re-keys a name-keyed profile map the way group expects it -- by
+// memberKey, realm first -- which is also how load builds the real one.
+func byKey(m map[string]blizzard.Character) map[string]memberDetail {
+	out := make(map[string]memberDetail, len(m))
+	for _, c := range m {
+		out[c.RealmSlug+"/"+strings.ToLower(c.Name)] = memberDetail{Character: c}
+	}
+	return out
+}
+
+// TestCardsMatchMyCharacters is the request that produced this: the guild rail's
+// card was missing specialisation, item level and last played, which My
+// Characters shows. The rows the two cards have must be the same rows.
+func TestCardsMatchMyCharacters(t *testing.T) {
+	a := snapshotApp(&fakeClient{}, time.Hour)
+	groups := a.group(twoMembers, byKey(profiled))
+
+	nek := groups[0].Members[0]
+	if nek.ActiveSpec != "Blood" || nek.AverageItemLevel != 311 || nek.LastLogin != "14 Sep 2026, 07:05 UTC" {
+		t.Errorf("card = spec %q ilvl %d played %q; want Blood, 311, 14 Sep 2026, 07:05 UTC",
+			nek.ActiveSpec, nek.AverageItemLevel, nek.LastLogin)
+	}
+	// The profile's realm display name, not the roster's slug.
+	if nek.Realm != "Area 52" {
+		t.Errorf("realm = %q, want the display name from the profile", nek.Realm)
+	}
+
+	body := html.UnescapeString(render(t, view{Groups: groups, Total: 2, Home: routePrefix}))
+	for _, want := range []string{
+		"Specialization", "Blood", "Retribution",
+		"Average item level", "311", "298",
+		"Last played", "14 Sep 2026, 07:05 UTC",
+		"Area 52 · <TOMB>", // the realm line reads exactly as it does on My Characters
+		// The name wears its class colour, in the rail and on the card.
+		`class="row-name class-name cls-death-knight"`,
+		`<a class="class-name cls-paladin" href="?c=elune%2flazzlowe">`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the guild card is missing %q", want)
+		}
+	}
+}
+
+// TestMissingProfileKeepsTheRosterRow: a member Blizzard would not serve a
+// profile for is still on the roster, with what the roster knows and nothing
+// invented for the rest.
+func TestMissingProfileKeepsTheRosterRow(t *testing.T) {
+	a := snapshotApp(&fakeClient{}, time.Hour)
+	only := byKey(map[string]blizzard.Character{"nekromoo": profiled["nekromoo"]})
+	groups := a.group(twoMembers, only)
+
+	laz := groups[1].Members[0]
+	if laz.Name != "Lazzlowe" || laz.Level != 90 || laz.Class != "Paladin" {
+		t.Errorf("roster fields lost: %+v", laz)
+	}
+	if laz.ActiveSpec != "" || laz.AverageItemLevel != 0 || laz.LastLogin != "" {
+		t.Errorf("profile fields invented for a member with no profile: %+v", laz)
+	}
+
+	// And the card omits the rows rather than printing a zero.
+	body := render(t, view{Groups: groups, Total: 2, Home: routePrefix})
+	if strings.Count(body, "Average item level") != 1 {
+		t.Errorf("expected exactly one item-level row (Nekromoo's), the card for the profile-less member should omit it")
+	}
+}
+
+// TestSnapshotLoadsOnceAndIsReused: the first view pays for the roster and
+// every profile; the next view within the interval pays for nothing.
+func TestSnapshotLoadsOnceAndIsReused(t *testing.T) {
+	f := &fakeClient{roster: twoMembers, byName: profiled}
+	a := snapshotApp(f, time.Hour)
+
+	first, err := a.snapshot(signedIn(t))
+	if err != nil {
+		t.Fatalf("first snapshot: %v", err)
+	}
+	if f.rosterGets.Load() != 1 || f.profileCalls() != len(twoMembers) {
+		t.Fatalf("first view made %d roster and %d profile calls; want 1 and %d",
+			f.rosterGets.Load(), f.profileCalls(), len(twoMembers))
+	}
+	if len(first.details) != 2 {
+		t.Errorf("snapshot holds %d member details, want 2", len(first.details))
+	}
+
+	second, err := a.snapshot(signedIn(t))
+	if err != nil {
+		t.Fatalf("second snapshot: %v", err)
+	}
+	if second != first {
+		t.Error("a fresh snapshot was replaced rather than reused")
+	}
+	if f.rosterGets.Load() != 1 || f.profileCalls() != len(twoMembers) {
+		t.Errorf("a view inside the interval fetched again: %d roster, %d profile calls",
+			f.rosterGets.Load(), f.profileCalls())
+	}
+}
+
+// TestStaleSnapshotIsServedWhileRefreshing is the property that keeps the
+// front page fast: a view after the interval gets the OLD snapshot at once,
+// and the new one arrives behind it.
+func TestStaleSnapshotIsServedWhileRefreshing(t *testing.T) {
+	f := &fakeClient{roster: twoMembers, byName: profiled}
+	a := snapshotApp(f, time.Hour)
+
+	old, err := a.snapshot(signedIn(t))
+	if err != nil {
+		t.Fatalf("initial snapshot: %v", err)
+	}
+	// Age it past the interval by hand.
+	a.mu.Lock()
+	a.snap.fetched = time.Now().Add(-2 * time.Hour)
+	a.mu.Unlock()
+
+	got, err := a.snapshot(signedIn(t))
+	if err != nil {
+		t.Fatalf("stale snapshot: %v", err)
+	}
+	if got != old {
+		t.Error("a stale view waited for the refresh instead of being served the last snapshot")
+	}
+
+	// The refresh lands shortly after, on its own.
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		a.mu.Lock()
+		replaced := a.snap != old
+		a.mu.Unlock()
+		if replaced {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the background refresh never replaced the stale snapshot")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if f.rosterGets.Load() != 2 {
+		t.Errorf("roster fetched %d times, want 2 (load + one refresh)", f.rosterGets.Load())
+	}
+}
+
+// TestFailedRefreshKeepsTheSnapshot: a bad minute at Blizzard must not empty
+// the front page. The stale snapshot stands until a refresh succeeds.
+func TestFailedRefreshKeepsTheSnapshot(t *testing.T) {
+	f := &fakeClient{roster: twoMembers, byName: profiled}
+	a := snapshotApp(f, time.Hour)
+
+	old, err := a.snapshot(signedIn(t))
+	if err != nil {
+		t.Fatalf("initial snapshot: %v", err)
+	}
+	f.rosterErr = errors.New("blizzard is down")
+	a.mu.Lock()
+	a.snap.fetched = time.Now().Add(-2 * time.Hour)
+	a.mu.Unlock()
+
+	if _, err := a.snapshot(signedIn(t)); err != nil {
+		t.Fatalf("a stale view errored instead of serving the last snapshot: %v", err)
+	}
+
+	// Wait for the refresh goroutine to give up.
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		a.mu.Lock()
+		busy := a.refreshing
+		a.mu.Unlock()
+		if !busy {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("refresh never finished")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	a.mu.Lock()
+	kept := a.snap == old
+	a.mu.Unlock()
+	if !kept {
+		t.Error("a failed refresh replaced the snapshot")
+	}
+}
+
+// TestFirstViewsShareOneLoad: with nothing cached yet, concurrent views must
+// not each start their own two-hundred-call fan-out.
+func TestFirstViewsShareOneLoad(t *testing.T) {
+	f := &fakeClient{roster: twoMembers, byName: profiled}
+	a := snapshotApp(f, time.Hour)
+
+	var wg sync.WaitGroup
+	for range 8 {
+		wg.Go(func() {
+			if _, err := a.snapshot(signedIn(t)); err != nil {
+				t.Errorf("snapshot: %v", err)
+			}
+		})
+	}
+	wg.Wait()
+
+	if f.rosterGets.Load() != 1 {
+		t.Errorf("eight first views fetched the roster %d times, want 1", f.rosterGets.Load())
+	}
+}
+
+// TestNoSnapshotAndNoRosterIsUnavailable: with nothing kept and Blizzard down,
+// the page says so rather than showing an empty guild.
+func TestNoSnapshotAndNoRosterIsUnavailable(t *testing.T) {
+	f := &fakeClient{rosterErr: errors.New("down")}
+	a := snapshotApp(f, time.Hour)
+
+	if _, err := a.snapshot(signedIn(t)); err == nil {
+		t.Error("expected an error with no snapshot and no roster")
+	}
+}
+
+// --- Season standing on the card --------------------------------------------
+
+// TestCardsShowSeasonStanding: the Mythic+ rating and raid progress reach the
+// guild card, from the snapshot, the same way the profile fields do.
+func TestCardsShowSeasonStanding(t *testing.T) {
+	a := snapshotApp(&fakeClient{}, time.Hour)
+	details := byKey(profiled)
+	nek := details["area-52/nekromoo"]
+	nek.MythicPlusRating = 2431
+	nek.Raids = []blizzard.RaidProgress{{
+		Name: "Liberation of Undermine",
+		Modes: []blizzard.RaidMode{
+			{Difficulty: "HEROIC", Completed: 8, Total: 8},
+			{Difficulty: "MYTHIC", Completed: 3, Total: 8},
+		},
+	}}
+	details["area-52/nekromoo"] = nek
+
+	groups := a.group(twoMembers, details)
+	body := html.UnescapeString(render(t, view{Groups: groups, Total: 2, Home: routePrefix}))
+
+	for _, want := range []string{"Mythic+ rating", "2431", "Liberation of Undermine", "8/8 H · 3/8 M"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the guild card is missing %q", want)
+		}
+	}
+	// Lazzlowe has no standing: exactly one rating row on the page.
+	if n := strings.Count(body, "Mythic+ rating"); n != 1 {
+		t.Errorf("found %d rating rows, want 1; an unrated member must not get a zero", n)
+	}
+}
+
+// TestSnapshotCarriesSeasonStanding proves the load path fetches it, not only
+// that the template can show it.
+func TestSnapshotCarriesSeasonStanding(t *testing.T) {
+	f := &fakeClient{roster: twoMembers, byName: profiled, ratingFor: map[string]int{"nekromoo": 2431}}
+	a := snapshotApp(f, time.Hour)
+
+	snap, err := a.snapshot(signedIn(t))
+	if err != nil {
+		t.Fatalf("snapshot: %v", err)
+	}
+	if got := snap.details["area-52/nekromoo"].MythicPlusRating; got != 2431 {
+		t.Errorf("Nekromoo's rating = %d, want 2431", got)
+	}
+	if got := snap.details["elune/lazzlowe"].MythicPlusRating; got != 0 {
+		t.Errorf("Lazzlowe's rating = %d, want 0 (unrated)", got)
+	}
+}
+
+// --- Charts and leaderboards ------------------------------------------------
+
+// TestBarsScaleToTheLongest: a bar chart of counts compares rows to each other,
+// so the biggest row fills the track and the rest are read against it.
+func TestBarsScaleToTheLongest(t *testing.T) {
+	a := appWith([]string{"Guild Master", "Officer"})
+	members := []blizzard.GuildMember{
+		{Name: "A", Rank: 0, Level: 90, Class: "Mage"},
+		{Name: "B", Rank: 1, Level: 90, Class: "Mage"},
+		{Name: "C", Rank: 1, Level: 90, Class: "Death Knight"},
+		{Name: "D", Rank: 1, Level: 64, Class: "Death Knight"},
+		{Name: "E", Rank: 1, Level: 90, Class: "Mage"},
+	}
+	sum := a.summarise(members, a.group(members, nil), nil)
+
+	if sum.Classes[0].Label != "Mage" || sum.Classes[0].Pct != 100 || sum.Classes[0].Class != "mage" {
+		t.Errorf("first class bar = %+v, want Mage at 100%% with slug mage", sum.Classes[0])
+	}
+	if sum.Classes[1].Class != "death-knight" {
+		t.Errorf("class slug = %q, want death-knight", sum.Classes[1].Class)
+	}
+	// 4 of 5 at the cap: 80%.
+	if sum.CapPct != 80 {
+		t.Errorf("CapPct = %d, want 80", sum.CapPct)
+	}
+}
+
+// TestBoardsRankAndCut covers each board's order and that a member with
+// nothing to rank on is absent rather than placed last. The cut itself is
+// TestBoardsCutAtTen.
+func TestBoardsRankAndCut(t *testing.T) {
+	a := snapshotApp(&fakeClient{}, time.Hour)
+
+	var members []blizzard.GuildMember
+	details := map[string]memberDetail{}
+	add := func(name string, ilvl, rating, m, h, n int) {
+		mem := blizzard.GuildMember{Name: name, RealmSlug: "elune", Rank: 1, Level: 90, Class: "Rogue"}
+		members = append(members, mem)
+		d := memberDetail{Character: blizzard.Character{Name: name, RealmSlug: "elune", Class: "Rogue", AverageItemLevel: ilvl}}
+		d.MythicPlusRating = rating
+		if m+h+n > 0 {
+			d.Raids = []blizzard.RaidProgress{{Name: "Raid", Modes: []blizzard.RaidMode{
+				{Difficulty: "NORMAL", Completed: n, Total: 8},
+				{Difficulty: "HEROIC", Completed: h, Total: 8},
+				{Difficulty: "MYTHIC", Completed: m, Total: 8},
+			}}}
+		}
+		details[memberKey(mem)] = d
+	}
+	add("Alpha", 300, 2000, 0, 8, 8)   // most heroic
+	add("Bravo", 320, 0, 2, 8, 8)      // two mythic kills beat eight heroic
+	add("Charlie", 310, 2500, 0, 0, 8) // normal only
+	add("Delta", 305, 2400, 1, 3, 8)
+	add("Echo", 290, 2100, 0, 0, 0) // never raided
+	add("Foxtrot", 315, 0, 0, 0, 0)
+	add("Golf", 0, 0, 0, 0, 0)                                                                  // nothing fetched worth ranking
+	members = append(members, blizzard.GuildMember{Name: "Hotel", RealmSlug: "elune", Rank: 1}) // no detail at all
+
+	sum := a.summarise(members, a.group(members, details), details)
+	if len(sum.Boards) != 3 {
+		t.Fatalf("got %d boards, want 3: %+v", len(sum.Boards), sum.Boards)
+	}
+
+	names := func(b boardView) []string {
+		var out []string
+		for _, e := range b.Entries {
+			out = append(out, e.Name)
+		}
+		return out
+	}
+
+	ilvl := sum.Boards[0]
+	if ilvl.Title != "Top item level" || strings.Join(names(ilvl), ",") != "Bravo,Foxtrot,Charlie,Delta,Alpha,Echo" {
+		t.Errorf("item level board = %v; Golf has no item level and is absent", names(ilvl))
+	}
+	if ilvl.Entries[0].Value != "320" || ilvl.Entries[0].Rank != 1 || ilvl.Entries[0].Class != "rogue" {
+		t.Errorf("first entry = %+v", ilvl.Entries[0])
+	}
+
+	rating := sum.Boards[1]
+	if strings.Join(names(rating), ",") != "Charlie,Delta,Echo,Alpha" {
+		t.Errorf("rating board = %v; the unrated must be absent, not last", names(rating))
+	}
+
+	bosses := sum.Boards[2]
+	if strings.Join(names(bosses), ",") != "Bravo,Delta,Alpha,Charlie" {
+		t.Errorf("bosses board = %v; mythic outranks heroic outranks normal", names(bosses))
+	}
+	if bosses.Entries[0].Value != "2M · 8H" || bosses.Entries[3].Value != "8N" {
+		t.Errorf("boss labels = %q and %q, want 2M · 8H and 8N", bosses.Entries[0].Value, bosses.Entries[3].Value)
+	}
+}
+
+// TestNoDetailNoBoards: a snapshot with no member detail yet gives no boards,
+// and the page shows the summary without an empty leaderboard column.
+func TestNoDetailNoBoards(t *testing.T) {
+	a := appWith([]string{"Guild Master"})
+	members := []blizzard.GuildMember{{Name: "A", Rank: 0, Level: 90, Class: "Mage"}}
+	sum := a.summarise(members, a.group(members, nil), nil)
+	if len(sum.Boards) != 0 {
+		t.Errorf("boards = %+v, want none", sum.Boards)
+	}
+	body := render(t, view{Groups: a.group(members, nil), Summary: sum, Total: 1, Home: routePrefix})
+	if strings.Contains(body, "leaderboards") {
+		t.Error("an empty leaderboard column was rendered")
+	}
+}
+
+// TestOverviewRendersChartsWithoutInlineStyles: the CSP allows no style
+// attributes, so every chart must be attributes and classes. This holds the
+// rendered markup to that, and checks the pieces are there at all.
+func TestOverviewRendersChartsWithoutInlineStyles(t *testing.T) {
+	f := &fakeClient{}
+	a := snapshotApp(f, time.Hour)
+	details := byKey(profiled)
+	nek := details["area-52/nekromoo"]
+	nek.MythicPlusRating = 2431
+	details["area-52/nekromoo"] = nek
+
+	groups := a.group(twoMembers, details)
+	sum := a.summarise(twoMembers, groups, details)
+	// Unescaped: html/template writes "+" as &#43; in text, and the check is
+	// on what a member reads, not on the encoding.
+	body := html.UnescapeString(render(t, view{Groups: groups, Summary: sum, Total: 2, Home: routePrefix}))
+
+	if strings.Contains(body, "style=") {
+		t.Error("the overview uses an inline style attribute, which the CSP blocks")
+	}
+	for _, want := range []string{
+		`class="stat-value"`,
+		`stroke-dasharray="100 100"`, // both at the cap
+		`<rect class="bar-fill cls-death-knight" width="100%"`,
+		`class="leaderboards"`,
+		"Top item level", "Top Mythic+ rating",
+		`href="?c=area-52%2fnekromoo"`,
+		`class="dashboard-main dashboard-main--wide"`,
+		// Leaderboard names are written in their class colour.
+		`<a class="class-name cls-death-knight" href="?c=area-52%2fnekromoo">`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the overview is missing %s", want)
+		}
+	}
+	// Nobody raided: that board is absent rather than empty.
+	if strings.Contains(body, "Most raid bosses down") {
+		t.Error("an empty bosses board was rendered")
+	}
+}
+
+// TestBoardsCutAtTen: twelve qualify, ten are shown, and they are the best ten.
+func TestBoardsCutAtTen(t *testing.T) {
+	a := snapshotApp(&fakeClient{}, time.Hour)
+
+	var members []blizzard.GuildMember
+	details := map[string]memberDetail{}
+	for i := 1; i <= 12; i++ {
+		m := blizzard.GuildMember{Name: "Member" + strconv.Itoa(i), RealmSlug: "elune", Rank: 1, Level: 90}
+		members = append(members, m)
+		details[memberKey(m)] = memberDetail{Character: blizzard.Character{
+			Name: m.Name, RealmSlug: "elune", AverageItemLevel: 300 + i,
+		}}
+	}
+
+	sum := a.summarise(members, a.group(members, details), details)
+	board := sum.Boards[0]
+	if len(board.Entries) != boardSize || boardSize != 10 {
+		t.Fatalf("board shows %d places, want %d", len(board.Entries), boardSize)
+	}
+	if board.Entries[0].Name != "Member12" || board.Entries[9].Name != "Member3" {
+		t.Errorf("places 1 and 10 are %s and %s, want Member12 and Member3", board.Entries[0].Name, board.Entries[9].Name)
+	}
+	if board.Entries[9].Rank != 10 {
+		t.Errorf("tenth place is numbered %d", board.Entries[9].Rank)
+	}
+}
+
+// TestAuthorityMarks: the guild master wears a crown and an officer a shield,
+// in the rail, on the card, and on a leaderboard; everyone else wears nothing,
+// because the mark means something only if most names lack it.
+func TestAuthorityMarks(t *testing.T) {
+	a := snapshotApp(&fakeClient{}, time.Hour)
+	members := []blizzard.GuildMember{
+		{Name: "Cwds", Rank: 0, Level: 90, Class: "Monk", RealmSlug: "elune"},
+		{Name: "Arcanost", Rank: 1, Level: 90, Class: "Mage", RealmSlug: "sargeras"},
+		{Name: "Azelora", Rank: 2, Level: 90, Class: "Priest", RealmSlug: "stormrage"},
+	}
+	details := map[string]memberDetail{}
+	for i, m := range members {
+		details[memberKey(m)] = memberDetail{Character: blizzard.Character{
+			Name: m.Name, RealmSlug: m.RealmSlug, Class: m.Class, AverageItemLevel: 300 + i,
+		}}
+	}
+	groups := a.group(members, details)
+	sum := a.summarise(members, groups, details)
+	body := render(t, view{Groups: groups, Summary: sum, Total: 3, Home: routePrefix})
+
+	// The rail, the card and the board: two crowns' worth of places for the
+	// guild master's name, two shields' worth for the officer -- plus the
+	// item-level board, where all three are placed.
+	if n := strings.Count(body, `aria-label="Guild Master"`); n != 3 {
+		t.Errorf("found %d crowns, want 3 (rail row, card, board)", n)
+	}
+	if n := strings.Count(body, `aria-label="Officer"`); n != 3 {
+		t.Errorf("found %d shields, want 3 (rail row, card, board)", n)
+	}
+	// The rank 2 member's name has no mark before it anywhere.
+	if strings.Contains(body, `rank-mark`+"\"></svg>Azelora") || strings.Contains(body, `</svg>Azelora`) {
+		t.Error("a rank 2 member was given an authority mark")
+	}
+	// The crown sits inside the coloured name, so the mark and the class
+	// colour travel together.
+	if !strings.Contains(body, `<span class="row-name class-name cls-monk"><svg class="rank-mark rank-mark--gm"`) {
+		t.Error("the crown is not inside the guild master's name in the rail")
+	}
+}
+
+// --- The roster search --------------------------------------------------------
+
+// searchApp is an App with a roster loaded and a layout that just writes the
+// body, so show() can be driven end to end.
+func searchApp(t *testing.T, members []blizzard.GuildMember) *App {
+	t.Helper()
+	f := &fakeClient{roster: members, byName: map[string]blizzard.Character{}}
+	a := snapshotApp(f, time.Hour)
+	a.tmpl, _ = parseTemplates()
+	a.deps.RenderInLayout = func(w http.ResponseWriter, _ *http.Request, status int, _ string, content template.HTML) {
+		w.WriteHeader(status)
+		_, _ = w.Write([]byte(content))
+	}
+	return a
+}
+
+func search(t *testing.T, a *App, q string) *httptest.ResponseRecorder {
+	t.Helper()
+	r := httptest.NewRequest(http.MethodGet, "/app/guild?q="+url.QueryEscape(q), nil)
+	r = r.WithContext(platform.ContextWithSession(r.Context(), auth.Session{AccessToken: "t"}))
+	rec := httptest.NewRecorder()
+	a.show(rec, r)
+	return rec
+}
+
+var searchable = []blizzard.GuildMember{
+	{Name: "Cwds", Rank: 0, Level: 90, Class: "Monk", RealmSlug: "elune", RealmName: "Elune"},
+	{Name: "Cwds", Rank: 3, Level: 80, Class: "Rogue", RealmSlug: "illidan", RealmName: "Illidan"},
+	{Name: "Lazzlowe", Rank: 1, Level: 90, Class: "Paladin", RealmSlug: "elune", RealmName: "Elune"},
+	{Name: "Lazzloe", Rank: 2, Level: 71, Class: "Warlock", RealmSlug: "area-52", RealmName: "Area 52"},
+}
+
+// TestSearchRedirectsToTheOneMember: a name that means one member becomes that
+// member's own URL, exactly as a click would have produced.
+func TestSearchRedirectsToTheOneMember(t *testing.T) {
+	a := searchApp(t, searchable)
+
+	for q, want := range map[string]string{
+		"Lazzlowe":      "/app/guild?c=elune%2Flazzlowe",
+		"lazzlowe":      "/app/guild?c=elune%2Flazzlowe", // case does not matter
+		"lazzlow":       "/app/guild?c=elune%2Flazzlowe", // a unique prefix is enough
+		"cwds illidan":  "/app/guild?c=illidan%2Fcwds",   // a realm tells namesakes apart
+		"Cwds (Elune)":  "/app/guild?c=elune%2Fcwds",
+		"cwds/elune":    "/app/guild?c=elune%2Fcwds",
+		"  Lazzlowe   ": "/app/guild?c=elune%2Flazzlowe",
+	} {
+		rec := search(t, a, q)
+		if rec.Code != http.StatusFound || rec.Header().Get("Location") != want {
+			t.Errorf("search %q = %d %q, want 302 %q", q, rec.Code, rec.Header().Get("Location"), want)
+		}
+	}
+}
+
+// TestSearchOffersAChoiceWhenAmbiguous: namesakes, or a prefix several names
+// share, render a list to pick from rather than guessing.
+func TestSearchOffersAChoiceWhenAmbiguous(t *testing.T) {
+	a := searchApp(t, searchable)
+
+	for q, wantNames := range map[string][]string{
+		"Cwds": {"elune%2fcwds", "illidan%2fcwds"},        // two Cwds
+		"lazz": {"elune%2flazzlowe", "area-52%2flazzloe"}, // two Lazz-somethings
+	} {
+		rec := search(t, a, q)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("search %q = %d, want 200 with a choice", q, rec.Code)
+		}
+		body := rec.Body.String()
+		if !strings.Contains(body, "Several characters match") {
+			t.Errorf("search %q did not offer a choice", q)
+		}
+		for _, key := range wantNames {
+			if !strings.Contains(body, `href="?c=`+key+`"`) {
+				t.Errorf("search %q: the choice is missing %s", q, key)
+			}
+		}
+		// The box keeps what was typed.
+		if !strings.Contains(body, `value="`+q+`"`) {
+			t.Errorf("search %q: the query was not echoed into the box", q)
+		}
+	}
+}
+
+// TestSearchSaysWhenNobodyMatches: the same notice a stale link gets.
+func TestSearchSaysWhenNobodyMatches(t *testing.T) {
+	rec := search(t, searchApp(t, searchable), "Nobody")
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "No character called <strong>Nobody</strong>") {
+		t.Errorf("search for nobody = %d, body lacks the notice", rec.Code)
+	}
+}
+
+// TestSearchExactBeatsPrefix: "Lazzloe" is also a prefix of nothing else, but
+// were a name both an exact match and a prefix of another, exact wins --
+// searching "Cwds" must not also drag in a hypothetical "Cwdsalt".
+func TestSearchExactBeatsPrefix(t *testing.T) {
+	members := append([]blizzard.GuildMember{}, searchable...)
+	members = append(members, blizzard.GuildMember{Name: "Lazzlowealt", Rank: 5, Level: 60, Class: "Mage", RealmSlug: "elune"})
+	rec := search(t, searchApp(t, members), "Lazzlowe")
+	if rec.Code != http.StatusFound {
+		t.Errorf("an exact match was outweighed by a longer name: %d", rec.Code)
+	}
+}
+
+// TestRosterRendersTheSearchBox: the form, and a datalist with every name.
+func TestRosterRendersTheSearchBox(t *testing.T) {
+	a := appWith([]string{"Guild Master", "Officer"})
+	body := render(t, view{Groups: a.group(searchable, nil), Total: 4, Home: routePrefix})
+
+	for _, want := range []string{
+		`<form class="roster-search" method="get" action="/app/guild" role="search">`,
+		`<input id="roster-q" name="q" list="roster-names"`,
+		`<datalist id="roster-names">`,
+		`<option value="Lazzlowe">90 Paladin &middot; Elune</option>`,
+		// Namesakes carry their realm, so a pick is never ambiguous.
+		`<option value="Cwds (Elune)">90 Monk &middot; Elune</option>`,
+		`<option value="Cwds (Illidan)">80 Rogue &middot; Illidan</option>`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the rail is missing %s", want)
+		}
+	}
+	if n := strings.Count(body, "<option value="); n != len(searchable) {
+		t.Errorf("datalist has %d options, want one per member (%d)", n, len(searchable))
+	}
+}
+
+// TestPickedSuggestionResolvesToOneMember: what the datalist offers for a
+// namesake is exactly what the server needs to tell them apart, so a pick
+// from the suggestions never lands on the choice page.
+func TestPickedSuggestionResolvesToOneMember(t *testing.T) {
+	a := searchApp(t, searchable)
+	rec := search(t, a, "Cwds (Illidan)")
+	if rec.Code != http.StatusFound || rec.Header().Get("Location") != "/app/guild?c=illidan%2Fcwds" {
+		t.Errorf("picking the Illidan Cwds = %d %q, want a redirect to illidan/cwds",
+			rec.Code, rec.Header().Get("Location"))
+	}
+}
+
+// TestClassBarsCarryRoles: under each class, how many tank, heal and DPS by
+// their active spec -- only roles anyone fills, only members with a spec.
+func TestClassBarsCarryRoles(t *testing.T) {
+	a := snapshotApp(&fakeClient{}, time.Hour)
+	members := []blizzard.GuildMember{
+		{Name: "Tankpal", Rank: 1, Level: 90, Class: "Paladin", RealmSlug: "elune"},
+		{Name: "Holypal", Rank: 1, Level: 90, Class: "Paladin", RealmSlug: "elune"},
+		{Name: "Retpal", Rank: 1, Level: 90, Class: "Paladin", RealmSlug: "elune"},
+		{Name: "Retpaltwo", Rank: 1, Level: 90, Class: "Paladin", RealmSlug: "elune"},
+		{Name: "Mystery", Rank: 1, Level: 90, Class: "Paladin", RealmSlug: "elune"}, // no profile
+		{Name: "Icemage", Rank: 1, Level: 90, Class: "Mage", RealmSlug: "elune"},
+	}
+	details := map[string]memberDetail{}
+	spec := map[string]string{"Tankpal": "Protection", "Holypal": "Holy", "Retpal": "Retribution", "Retpaltwo": "Retribution", "Icemage": "Frost"}
+	for _, m := range members {
+		if sp, ok := spec[m.Name]; ok {
+			details[memberKey(m)] = memberDetail{Character: blizzard.Character{Name: m.Name, RealmSlug: m.RealmSlug, Class: m.Class, ActiveSpec: sp}}
+		}
+	}
+
+	sum := a.summarise(members, a.group(members, details), details)
+	pal := sum.Classes[0]
+	if pal.Label != "Paladin" || pal.Count != 5 {
+		t.Fatalf("first class = %+v, want Paladin with 5", pal)
+	}
+	want := []roleCount{{blizzard.RoleTank, 1}, {blizzard.RoleHealer, 1}, {blizzard.RoleDPS, 2}}
+	if len(pal.Roles) != 3 || pal.Roles[0] != want[0] || pal.Roles[1] != want[1] || pal.Roles[2] != want[2] {
+		t.Errorf("Paladin roles = %+v, want %+v (Mystery, with no spec, in no role)", pal.Roles, want)
+	}
+	// One Frost Mage: DPS only, tank and healer omitted rather than shown as 0.
+	mage := sum.Classes[1]
+	if len(mage.Roles) != 1 || mage.Roles[0] != (roleCount{blizzard.RoleDPS, 1}) {
+		t.Errorf("Mage roles = %+v, want DPS 1 alone", mage.Roles)
+	}
+
+	body := html.UnescapeString(render(t, view{Groups: a.group(members, details), Summary: sum, Total: 6, Home: routePrefix}))
+	for _, want := range []string{
+		`<span class="bar-role"><span class="bar-role-name">Tank</span> 1</span>`,
+		`<span class="bar-role-name">Healer</span> 1`,
+		`<span class="bar-role-name">DPS</span> 2`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the class chart is missing %s", want)
+		}
 	}
 }

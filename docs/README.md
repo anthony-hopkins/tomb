@@ -21,9 +21,11 @@ What runs on your machine is the merge gate, and nothing that serves:
 ```sh
 make check      # go build, go vet, go test ./..., docker build
 make test       # go test ./...
+make lint       # golangci-lint, the same set CI runs (.golangci.yml)
 ```
 
-All four `make check` steps must pass before merge.
+All four `make check` steps must pass before merge. CI additionally runs gofmt
+and golangci-lint and fails on any finding; `make lint` is the local equivalent.
 
 ## How a change reaches a running site
 
@@ -69,7 +71,8 @@ cmd/tomb/            Composition root: config, database, deps, app list, serve
 internal/platform/   The thin core — routing, sessions, guild gate, layout, health
 internal/auth/       Battle.net OAuth2 and session management
 internal/blizzard/   Blizzard API client (behind one narrow interface)
-internal/apps/       One directory per app: dashboard, comingsoon
+internal/apps/       One directory per app: guild (the home page), dashboard, comingsoon
+internal/armory/     The Armory panel both guild and dashboard render: one character, their render and gear
 deploy/              Production Compose project, Caddyfile, VM startup and deploy scripts
 tofu/                OpenTofu: the VM, network, disks and secrets
 docs/                Adding an app, the deployment pipeline, project art
@@ -91,12 +94,30 @@ re-paid per view. The fan-out is bounded at 8 concurrent requests, well inside
 Blizzard's 36,000/hour and 100/second limits, and a single character's failure
 degrades to a notice rather than an error page.
 
-The Armory panel adds exactly two more — the render and the equipment — and only
-for the one character on display. Fetching either per character would double a
+Each card also carries the character's season standing — Mythic+ rating and raid
+progress — from two more endpoints per character, so a dashboard view is `1 + 3N`
+in total, still bounded at 8 in flight. The Armory panel adds the render and the
+equipment for the one character on display. Fetching either per character would double a
 cost that is already re-paid on every view, which is why selecting a different
 character is a fresh request rather than something the page holds in reserve.
 Both degrade independently: losing the render still leaves the gear, losing the
-gear still leaves the character.
+gear still leaves the character. They are fetched in parallel, so the panel
+costs one round trip plus the icon fan-out rather than two.
+
+**The guild page is served from a snapshot, refreshed in the background.** Each
+member's card shows what My Characters shows -- spec, item level, last played --
+plus Mythic+ rating and raid progress -- and those live on the per-character
+profile and two further endpoints, three calls per member. For a roster of two
+hundred that cannot be paid per view, so the roster and every
+profile are taken together, kept, and refreshed once they are older than
+`TOMB_GUILD_ROSTER_TTL` (an hour by default). A view is handed the last snapshot
+at once and the refresh runs after it; only the first view after a start waits,
+and concurrent first views share one load (`singleflight`). The fan-out is
+bounded at 8, off the request path. The summary beside the rail is counted from
+the snapshot. Opening a member is live: their profile, render and equipment are
+fetched then, and only names on the roster can be opened -- `?c=` is resolved
+against the snapshot, never passed to Blizzard, so the page cannot be used as a
+proxy for the character API.
 
 **A session lasts exactly as long as the Blizzard token.** Battle.net issues no
 refresh token and its access tokens last about 24 hours. A longer site session

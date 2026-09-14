@@ -39,6 +39,12 @@ Signing in lands you here: the whole TOMB roster down the left, guild master at
 the top and trainees at the bottom, alphabetical within each rank. It is the
 page the **TOMB** link in the corner always goes back to.
 
+There is a search box above the list. Start typing a name and the browser
+suggests matches from the roster; pick one and you are on that character's
+Armory view. Typing a whole name and pressing enter does the same. Two
+characters with the same name on different realms show as `Cwds (Elune)` and
+`Cwds (Illidan)`, so the pick is never in doubt.
+
 The rows work exactly like the ones on My Characters:
 
 - **Hover a name** — or tab to it — and that member's card opens.
@@ -46,13 +52,22 @@ The rows work exactly like the ones on My Characters:
   Blizzard's render of them in their current gear, their spec, level and item
   level, and every equipped slot with its tooltip, gems and set pieces.
 
+The card is the same one your own characters get — class, specialisation,
+level, average item level, when they last played, their Mythic+ rating and how
+far they are into each current raid — so you can size up a guildmate without
+opening them.
+
 It is the same panel your own characters get, because it is literally the same
 page component — so anything that improves one improves the other.
 
 Until you click someone, the panel shows the guild at a glance: how many
 characters are on the roster, how many are at max level, and the breakdown by
-rank and by class. Those numbers are counted from the roster itself, so the
-landing page costs one request no matter how large the guild gets.
+class as a bar chart — with, under each class, how many of them are tanks,
+healers and DPS by their current specialisation. Beside it are three leaderboards — top item
+level, top Mythic+ rating, and most raid bosses down (mythic kills first, then
+heroic, then normal) — each naming the top ten, with every name a link to that
+character's Armory view. All of it is counted from the roster the site already
+holds, so it costs nothing extra to show.
 
 A few things worth knowing:
 
@@ -61,9 +76,14 @@ A few things worth knowing:
 - **Ranks show as numbers until they are named.** Guild ranks have no names in
   Blizzard's data, only positions, so the site has to be told them. Until it is,
   the headings read "Rank 1", "Rank 2" and the page says why.
-- **It is live, like everything else.** The roster is fetched from Blizzard each
-  time the page is opened. If Blizzard cannot be reached, the last roster that
-  did arrive is shown rather than an empty guild.
+- **The roster refreshes itself about once an hour.** Each member's card needs
+  their own profile from Blizzard, and with a couple of hundred characters on
+  the roster that is too many calls to make every time someone opens the page.
+  So the whole roster is refreshed in the background and you always see the
+  last one, instantly. A member's Armory view, when you click them, is live.
+- **A card missing its item level or last played** means Blizzard would not
+  return that character's profile at the last refresh — usually a recent
+  rename or transfer. The roster row itself is still right.
 
 ## My Characters
 
@@ -75,8 +95,13 @@ first.
 
 The main panel is the Armory-style view: your character as Blizzard renders it,
 in the gear it is wearing right now, alongside its realm and guild, class and
-specialisation, level and item level, and every equipped slot with its own item
-level and quality colour.
+specialisation, level and item level, this season's Mythic+ rating and raid
+progress ("8/8 H · 3/8 M"), and every equipped slot with its own item level and
+quality colour.
+
+The Mythic+ rating is the one the game shows, straight from Blizzard. It is
+close to a Raider.IO score but not the same number — Raider.IO computes its
+own — so do not be surprised if the two differ by a little.
 
 It opens on whatever you played last, so the common case takes no clicks at all.
 
