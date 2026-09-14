@@ -56,8 +56,11 @@ page component — so anything that improves one improves the other.
 
 Until you click someone, the panel shows the guild at a glance: how many
 characters are on the roster, how many are at max level, and the breakdown by
-rank and by class. Those numbers are counted from the roster itself, so the
-landing page costs one request no matter how large the guild gets.
+rank and by class as bar charts. Beside it are three leaderboards — top item
+level, top Mythic+ rating, and most raid bosses down (mythic kills first, then
+heroic, then normal) — each naming the top five, with every name a link to that
+character's Armory view. All of it is counted from the roster the site already
+holds, so it costs nothing extra to show.
 
 A few things worth knowing:
 

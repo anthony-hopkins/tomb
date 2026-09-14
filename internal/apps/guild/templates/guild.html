@@ -93,7 +93,10 @@
   </aside>
   {{end}}
 
-  <div class="dashboard-main">
+  {{/* --wide: the overview is two columns -- the summary and the leaderboards
+       -- and needs more than the reading measure the main column keeps for
+       prose. A member's Armory panel replaces both and is fine either way. */}}
+  <div class="dashboard-main{{if .Summary}} dashboard-main--wide{{end}}">
     {{with .NotFound}}
     <p class="notice" role="status">
       No character called <strong>{{.}}</strong> is on the roster. They may have
@@ -118,39 +121,100 @@
     {{end}}
 
     {{with .Summary}}
+    <div class="guild-overview">
     <section class="panel guild-summary" aria-label="Guild summary">
       <h2>{{.Name}}</h2>
       <p class="realm">{{.Realm}}</p>
 
-      <dl class="guild-stats">
-        <dt>Characters</dt>
-        <dd>{{.Total}}</dd>
+      {{/* Headline numbers as stat tiles, and the at-cap share as a ring
+           meter. Every chart on this page is CSS and SVG attributes: the CSP
+           allows no inline styles and the site ships no chart script, so bar
+           lengths are rect widths, the ring is a dasharray over pathLength
+           100, and the growth on load is a CSS animation. */}}
+      <div class="stat-row">
+        <div class="stat">
+          <span class="stat-label">Characters</span>
+          <span class="stat-value">{{.Total}}</span>
+        </div>
         {{if .CapLevel}}
-        <dt>At level {{.CapLevel}}</dt>
-        <dd>{{.AtCap}}</dd>
+        <div class="stat stat-ring">
+          <svg class="ring" viewBox="0 0 36 36" aria-hidden="true">
+            <circle class="ring-track" cx="18" cy="18" r="15.5" pathLength="100"/>
+            <circle class="ring-fill" cx="18" cy="18" r="15.5" pathLength="100"
+                    stroke-dasharray="{{.CapPct}} 100"/>
+          </svg>
+          <div>
+            <span class="stat-label">At level {{.CapLevel}}</span>
+            <span class="stat-value">{{.AtCap}} <small>{{.CapPct}}%</small></span>
+          </div>
+        </div>
         {{end}}
-        <dt>Ranks</dt>
-        <dd>{{len .Ranks}}</dd>
-      </dl>
+        <div class="stat">
+          <span class="stat-label">Ranks</span>
+          <span class="stat-value">{{len .Ranks}}</span>
+        </div>
+      </div>
 
       {{if .Ranks}}
       <h3 class="summary-heading">By rank</h3>
-      <ul class="count-list">
+      {{/* One series, one hue. The label is the identity and the number sits
+           at the tip; the bar is there to be compared against its neighbours,
+           so its length is relative to the longest row, not to the total. */}}
+      <ul class="bars" aria-label="Characters by rank">
         {{range .Ranks}}
-        <li><span class="count-label">{{.Label}}</span><span class="count-n">{{.Count}}</span></li>
+        <li class="bar-row">
+          <span class="bar-label">{{.Label}}</span>
+          <svg class="bar" height="10" aria-hidden="true">
+            <title>{{.Label}}: {{.Count}}</title>
+            <rect class="bar-fill" width="{{.Pct}}%" height="10" rx="4"/>
+          </svg>
+          <span class="bar-n">{{.Count}}</span>
+        </li>
         {{end}}
       </ul>
       {{end}}
 
       {{if .Classes}}
       <h3 class="summary-heading">By class</h3>
-      <ul class="count-list">
+      {{/* Thirteen classes is too many for colour to carry identity alone, so
+           this is a labelled table with bars: the name identifies the row, and
+           the bar wears the class colour every player already reads -- a
+           reinforcement, never the only channel. */}}
+      <ul class="bars" aria-label="Characters by class">
         {{range .Classes}}
-        <li><span class="count-label">{{.Label}}</span><span class="count-n">{{.Count}}</span></li>
+        <li class="bar-row">
+          <span class="bar-label">{{.Label}}</span>
+          <svg class="bar" height="10" aria-hidden="true">
+            <title>{{.Label}}: {{.Count}}</title>
+            <rect class="bar-fill cls-{{.Class}}" width="{{.Pct}}%" height="10" rx="4"/>
+          </svg>
+          <span class="bar-n">{{.Count}}</span>
+        </li>
         {{end}}
       </ul>
       {{end}}
     </section>
+
+    {{if .Boards}}
+    <aside class="leaderboards" aria-label="Leaderboards">
+      {{range .Boards}}
+      <section class="panel board">
+        <h3 class="summary-heading">{{.Title}}</h3>
+        <ol class="board-list">
+          {{range .Entries}}
+          <li>
+            <span class="board-rank">{{.Rank}}</span>
+            <span class="swatch cls-{{.Class}}" aria-hidden="true"></span>
+            <a href="?c={{.Key}}">{{.Name}}</a>
+            <span class="board-n">{{.Value}}</span>
+          </li>
+          {{end}}
+        </ol>
+      </section>
+      {{end}}
+    </aside>
+    {{end}}
+    </div>
     {{end}}
 
     {{if .Unavailable}}
