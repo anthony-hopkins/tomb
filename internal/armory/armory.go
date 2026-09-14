@@ -60,6 +60,10 @@ type Panel struct {
 	LastLogin        string
 	Guild            string
 
+	// ClassSlug is Class as a CSS class fragment -- "death-knight" -- so the
+	// name can be written in the class's colour. See ClassSlug.
+	ClassSlug string
+
 	// Badge is the one line above the name: "Most recently played" on your own
 	// dashboard, the member's rank on the guild roster. The caller supplies it
 	// because it is the one thing that genuinely differs between the two pages.
@@ -111,6 +115,17 @@ type Item struct {
 	SetKey string
 }
 
+// ClassSlug turns a class name into the CSS class fragment the stylesheet
+// keys its class colours on: "Death Knight" becomes "death-knight", so that
+// "cls-death-knight" paints a mark or a name in the class's colour.
+//
+// Every name on the site is written in its class's colour, the way the game
+// does it, so this lives with the other shared presentation rather than being
+// three private copies of a lowercase-and-hyphenate.
+func ClassSlug(class string) string {
+	return strings.ReplaceAll(strings.ToLower(class), " ", "-")
+}
+
 // LastPlayed formats a last-login time the way every card on the site shows
 // it. One place, because three did, and a date that reads differently between
 // the rail and the panel looks like two different characters.
@@ -134,6 +149,7 @@ func (b *Builder) Of(ctx context.Context, token string, c blizzard.Character, ba
 		Name:             c.Name,
 		RealmName:        c.RealmLabel(),
 		Class:            c.Class,
+		ClassSlug:        ClassSlug(c.Class),
 		ActiveSpec:       c.ActiveSpec,
 		Level:            c.Level,
 		AverageItemLevel: c.AverageItemLevel,

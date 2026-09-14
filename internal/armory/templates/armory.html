@@ -21,7 +21,7 @@
 
   <div class="armory-detail">
     {{with .Badge}}<p class="badge">{{.}}</p>{{end}}
-    <h2>{{.Name}}</h2>
+    <h2 class="class-name cls-{{.ClassSlug}}">{{.Name}}</h2>
     <p class="realm">
       {{.RealmName}}{{if .Guild}} &middot; &lt;{{.Guild}}&gt;{{end}}
     </p>

@@ -662,6 +662,9 @@ func TestCardsMatchMyCharacters(t *testing.T) {
 		"Average item level", "311", "298",
 		"Last played", "14 Sep 2026, 07:05 UTC",
 		"Area 52 · <TOMB>", // the realm line reads exactly as it does on My Characters
+		// The name wears its class colour, in the rail and on the card.
+		`class="row-name class-name cls-death-knight"`,
+		`<a class="class-name cls-paladin" href="?c=elune%2flazzlowe">`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("the guild card is missing %q", want)
@@ -1029,6 +1032,8 @@ func TestOverviewRendersChartsWithoutInlineStyles(t *testing.T) {
 		"Top item level", "Top Mythic+ rating",
 		`href="?c=area-52%2fnekromoo"`,
 		`class="dashboard-main dashboard-main--wide"`,
+		// Leaderboard names are written in their class colour.
+		`<a class="class-name cls-death-knight" href="?c=area-52%2fnekromoo">`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("the overview is missing %s", want)
@@ -1064,5 +1069,45 @@ func TestBoardsCutAtTen(t *testing.T) {
 	}
 	if board.Entries[9].Rank != 10 {
 		t.Errorf("tenth place is numbered %d", board.Entries[9].Rank)
+	}
+}
+
+// TestAuthorityMarks: the guild master wears a crown and an officer a shield,
+// in the rail, on the card, and on a leaderboard; everyone else wears nothing,
+// because the mark means something only if most names lack it.
+func TestAuthorityMarks(t *testing.T) {
+	a := snapshotApp(&fakeClient{}, time.Hour)
+	members := []blizzard.GuildMember{
+		{Name: "Cwds", Rank: 0, Level: 90, Class: "Monk", RealmSlug: "elune"},
+		{Name: "Arcanost", Rank: 1, Level: 90, Class: "Mage", RealmSlug: "sargeras"},
+		{Name: "Azelora", Rank: 2, Level: 90, Class: "Priest", RealmSlug: "stormrage"},
+	}
+	details := map[string]memberDetail{}
+	for i, m := range members {
+		details[memberKey(m)] = memberDetail{Character: blizzard.Character{
+			Name: m.Name, RealmSlug: m.RealmSlug, Class: m.Class, AverageItemLevel: 300 + i,
+		}}
+	}
+	groups := a.group(members, details)
+	sum := a.summarise(members, groups, details)
+	body := render(t, view{Groups: groups, Summary: sum, Total: 3, Home: routePrefix})
+
+	// The rail, the card and the board: two crowns' worth of places for the
+	// guild master's name, two shields' worth for the officer -- plus the
+	// item-level board, where all three are placed.
+	if n := strings.Count(body, `aria-label="Guild Master"`); n != 3 {
+		t.Errorf("found %d crowns, want 3 (rail row, card, board)", n)
+	}
+	if n := strings.Count(body, `aria-label="Officer"`); n != 3 {
+		t.Errorf("found %d shields, want 3 (rail row, card, board)", n)
+	}
+	// The rank 2 member's name has no mark before it anywhere.
+	if strings.Contains(body, `rank-mark`+"\"></svg>Azelora") || strings.Contains(body, `</svg>Azelora`) {
+		t.Error("a rank 2 member was given an authority mark")
+	}
+	// The crown sits inside the coloured name, so the mark and the class
+	// colour travel together.
+	if !strings.Contains(body, `<span class="row-name class-name cls-monk"><svg class="rank-mark rank-mark--gm"`) {
+		t.Error("the crown is not inside the guild master's name in the rail")
 	}
 }
