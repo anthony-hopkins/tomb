@@ -139,9 +139,6 @@ and the database is set up to refuse it even if somebody tried.
 None of this is built yet — it is what the site is being pointed at. There is a
 **Coming Soon** page in the top navigation with the same list.
 
-**Guild calendar.** Raid nights, key pushes and transmog runs in one place, with
-sign-ups that survive being scrolled past in Discord.
-
 **Ask TOMB Bot** *(AI)*. An agent that knows *this* guild. Ask what is running
 this week, who normally tanks, what the loot rules are, or for advice on a spec
 you have not touched in a year — answered from the guild's own data rather than
