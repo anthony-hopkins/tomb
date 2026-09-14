@@ -9,6 +9,7 @@ package dashboard_test
 
 import (
 	"context"
+	"html"
 	"io"
 	"log/slog"
 	"net/http"
@@ -160,27 +161,79 @@ func TestShowsMostRecentCharacter(t *testing.T) {
 		t.Error("the most recently played character should lead the roster (FR-006)")
 	}
 
-	// The first card must be the current one, and must say so. Splitting on the
-	// card class is what lets this assert about a specific card rather than the
-	// page as a whole, where both names appear either way.
-	cards := strings.Split(body, `class="character-card`)
-	if len(cards) < 3 {
-		t.Fatalf("expected two character cards, found %d", len(cards)-1)
+	// The first ROW must be the current one and must say so. is-current sits on
+	// the row rather than the card so the list still shows which character is
+	// the most recent while every card is closed. Splitting on the row class is
+	// what lets this assert about one row rather than the page as a whole,
+	// where both names appear either way.
+	rows := strings.Split(body, `class="character-row`)
+	if len(rows) < 3 {
+		t.Fatalf("expected two character rows, found %d", len(rows)-1)
 	}
-	if !strings.Contains(cards[1], "Newest") {
-		t.Error("the first card is not the most recently played character")
+	if !strings.Contains(rows[1], "Newest") {
+		t.Error("the first row is not the most recently played character")
 	}
-	if !strings.Contains(cards[1], "is-current") {
-		t.Error("the most recently played card is not marked as current")
+	if !strings.Contains(rows[1], "is-current") {
+		t.Error("the most recently played row is not marked as current")
 	}
-	if strings.Contains(cards[2], "is-current") {
+	if strings.Contains(rows[2], "is-current") {
 		t.Error("a stale character is marked as the current one")
+	}
+
+	// Every row must be reachable without a mouse. The card is disclosed by
+	// :hover and :focus-within, and focus-within needs something focusable.
+	for i, row := range rows[1:] {
+		if !strings.Contains(row, "tabindex") {
+			t.Errorf("row %d is not focusable, so its card is keyboard-unreachable", i+1)
+		}
 	}
 
 	for _, want := range []string{"Area 52", "Warrior", "62", "410"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("dashboard is missing required field value %q (FR-007)", want)
 		}
+	}
+}
+
+// TestRoadmapIsListed covers the placeholder section at the foot of the
+// dashboard. It is copy rather than behaviour, but it is copy that makes
+// promises, so a silently empty list is worth catching.
+func TestRoadmapIsListed(t *testing.T) {
+	fake := &fakeBlizzard{
+		refs: refs("Main"),
+		profileFor: func(ref blizzard.CharacterRef) (blizzard.Character, error) {
+			return character(ref.Name, time.Now(), 80, 600, "TOMB"), nil
+		},
+	}
+
+	raw := get(t, stack(t, fake, true), "/app/dashboard").Body.String()
+
+	// Unescaped, so this asserts what a member reads rather than how
+	// html/template chose to encode it -- the apostrophe in "Guildmates'"
+	// arrives as &#39;, which is correct and not what the test is about.
+	body := html.UnescapeString(raw)
+
+	for _, want := range []string{
+		"Guildmates' characters",
+		"Guild calendar",
+		"Ask TOMB Bot",
+		"Combat log analysis",
+		"Gear analysis",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the roadmap is missing %q", want)
+		}
+	}
+
+	// The AI entries are tagged; the other two are not. Getting this backwards
+	// would advertise a calendar as AI-driven, which is a claim rather than a
+	// styling detail.
+	if n := strings.Count(raw, `class="tag-ai"`); n != 3 {
+		t.Errorf("found %d AI tags, want 3 (Ask TOMB Bot, combat log, gear)", n)
+	}
+
+	if !strings.Contains(body, "None of this is built yet") {
+		t.Error("the roadmap does not say it is unbuilt; that is the one thing it must say")
 	}
 }
 
