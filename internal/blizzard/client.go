@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -29,6 +30,11 @@ type HTTPClient struct {
 	Locale string
 
 	HTTP *http.Client
+
+	// iconCache maps an item media id to its icon URL. Immutable data, so no
+	// expiry: the only way an entry becomes wrong is if Blizzard reissues an
+	// icon under the same id, which they do not.
+	iconCache sync.Map
 }
 
 // NewHTTPClient builds a client with sane timeouts.
@@ -230,6 +236,13 @@ func (c *HTTPClient) CharacterMedia(ctx context.Context, token string, ref Chara
 func (c *HTTPClient) CharacterEquipment(ctx context.Context, token string, ref CharacterRef) ([]EquippedItem, error) {
 	const endpoint = "character-equipment"
 
+	// display_string is Blizzard's own formatted, localised line. Wherever one
+	// exists it is taken as-is: rebuilding "+3,002 Stamina" from a number and a
+	// stat name means reimplementing their formatting and their localisation.
+	type displayString struct {
+		DisplayString string `json:"display_string"`
+	}
+
 	var payload struct {
 		EquippedItems []struct {
 			Name string `json:"name"`
@@ -243,6 +256,41 @@ func (c *HTTPClient) CharacterEquipment(ctx context.Context, token string, ref C
 			Level struct {
 				Value int `json:"value"`
 			} `json:"level"`
+			ItemSubclass struct {
+				Name string `json:"name"`
+			} `json:"item_subclass"`
+			Binding displayString                   `json:"binding"`
+			Armor   struct{ Display displayString } `json:"armor"`
+			Stats   []struct {
+				Display displayString `json:"display"`
+			} `json:"stats"`
+			Enchantments []displayString `json:"enchantments"`
+			Sockets      []struct {
+				DisplayString string `json:"display_string"`
+				Item          *struct {
+					Name string `json:"name"`
+				} `json:"item"`
+			} `json:"sockets"`
+			Transmog     displayString `json:"transmog"`
+			Durability   displayString `json:"durability"`
+			Requirements struct {
+				Level displayString `json:"level"`
+			} `json:"requirements"`
+			Set *struct {
+				DisplayString string `json:"display_string"`
+				Items         []struct {
+					Item struct {
+						Name string `json:"name"`
+					} `json:"item"`
+					IsEquipped bool `json:"is_equipped"`
+				} `json:"items"`
+				Effects []struct {
+					DisplayString string `json:"display_string"`
+				} `json:"effects"`
+			} `json:"set"`
+			Media struct {
+				ID int `json:"id"`
+			} `json:"media"`
 		} `json:"equipped_items"`
 	}
 
@@ -260,16 +308,112 @@ func (c *HTTPClient) CharacterEquipment(ctx context.Context, token string, ref C
 
 	items := make([]EquippedItem, 0, len(payload.EquippedItems))
 	for _, it := range payload.EquippedItems {
-		items = append(items, EquippedItem{
-			SlotType: it.Slot.Type,
-			SlotName: it.Slot.Name,
-			Name:     it.Name,
-			Quality:  it.Quality.Type,
-			Level:    it.Level.Value,
-		})
+		item := EquippedItem{
+			SlotType:    it.Slot.Type,
+			SlotName:    it.Slot.Name,
+			Name:        it.Name,
+			Quality:     it.Quality.Type,
+			Level:       it.Level.Value,
+			Subclass:    it.ItemSubclass.Name,
+			Binding:     it.Binding.DisplayString,
+			Armor:       it.Armor.Display.DisplayString,
+			Transmog:    it.Transmog.DisplayString,
+			Durability:  it.Durability.DisplayString,
+			Requirement: it.Requirements.Level.DisplayString,
+			MediaID:     it.Media.ID,
+		}
+
+		for _, st := range it.Stats {
+			if st.Display.DisplayString != "" {
+				item.Stats = append(item.Stats, st.Display.DisplayString)
+			}
+		}
+		for _, en := range it.Enchantments {
+			if en.DisplayString != "" {
+				item.Enchantments = append(item.Enchantments, en.DisplayString)
+			}
+		}
+		for _, so := range it.Sockets {
+			item.Sockets = append(item.Sockets, Socket{
+				Display: so.DisplayString,
+				Empty:   so.Item == nil,
+			})
+		}
+
+		if it.Set != nil {
+			set := &ItemSet{Display: it.Set.DisplayString}
+			for _, p := range it.Set.Items {
+				set.Pieces = append(set.Pieces, SetPiece{
+					Name:     p.Item.Name,
+					Equipped: p.IsEquipped,
+				})
+			}
+			for _, e := range it.Set.Effects {
+				if e.DisplayString != "" {
+					set.Effects = append(set.Effects, e.DisplayString)
+				}
+			}
+			item.Set = set
+		}
+
+		items = append(items, item)
 	}
 	SortEquipment(items)
 	return items, nil
+}
+
+// ItemIcon resolves an item's media id to its icon URL, caching the result for
+// the life of the process.
+//
+// The cache is the whole point. Sixteen equipped items is sixteen calls, paid on
+// every view with no caching of character data (FR-016) -- but an icon is not
+// character data. Item 207182's icon is the same today as it was last patch and
+// will be the same tomorrow, so it is fetched once and kept. FR-016 exists so
+// nobody is shown stale GEAR; it has nothing to say about a picture of a helmet.
+func (c *HTTPClient) ItemIcon(ctx context.Context, token string, mediaID int) (string, error) {
+	const endpoint = "item-media"
+
+	if mediaID == 0 {
+		return "", nil
+	}
+	if cached, ok := c.iconCache.Load(mediaID); ok {
+		return cached.(string), nil
+	}
+
+	var payload struct {
+		Assets []struct {
+			Key   string `json:"key"`
+			Value string `json:"value"`
+		} `json:"assets"`
+	}
+
+	// Item media lives in the STATIC namespace, not the profile one: it is game
+	// data about an item, not data about a character.
+	q := url.Values{
+		"namespace": {"static-" + c.Region},
+		"locale":    {c.Locale},
+	}
+	path := fmt.Sprintf("/data/wow/media/item/%d", mediaID)
+	if err := c.get(ctx, endpoint, c.APIHost+path, q, token, &payload); err != nil {
+		return "", err
+	}
+
+	var icon string
+	for _, a := range payload.Assets {
+		if a.Key == "icon" {
+			icon = a.Value
+			break
+		}
+	}
+
+	// An icon the page cannot load is worse than no icon: it renders as a
+	// broken image and a CSP violation nobody sees. Drop it here instead.
+	if icon != "" && !AllowedIconURL(icon) {
+		return "", fmt.Errorf("item %d icon is served from an origin the page cannot load: %s", mediaID, icon)
+	}
+
+	c.iconCache.Store(mediaID, icon)
+	return icon, nil
 }
 
 // get performs one authenticated GET and decodes JSON into out, classifying

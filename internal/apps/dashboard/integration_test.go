@@ -32,6 +32,8 @@ type fakeBlizzard struct {
 	mediaCalls atomic.Int32
 	gearFor    func(ref blizzard.CharacterRef) ([]blizzard.EquippedItem, error)
 	gearCalls  atomic.Int32
+	iconFor    func(mediaID int) (string, error)
+	iconCalls  atomic.Int32
 
 	refs       []blizzard.CharacterRef
 	profileFor func(ref blizzard.CharacterRef) (blizzard.Character, error)
@@ -69,6 +71,16 @@ func (f *fakeBlizzard) CharacterEquipment(_ context.Context, _ string, ref blizz
 		return nil, nil
 	}
 	return f.gearFor(ref)
+}
+
+// iconFor drives icon resolution; iconCalls counts them, which is how the
+// caching claim gets tested rather than asserted.
+func (f *fakeBlizzard) ItemIcon(_ context.Context, _ string, mediaID int) (string, error) {
+	f.iconCalls.Add(1)
+	if f.iconFor == nil {
+		return "", nil
+	}
+	return f.iconFor(mediaID)
 }
 
 var _ blizzard.Client = (*fakeBlizzard)(nil)
@@ -499,6 +511,111 @@ func TestArmorySurvivesMissingGear(t *testing.T) {
 	}
 	if !strings.Contains(armoryPanel(t, rec.Body.String()), "Newest") {
 		t.Error("the character's details vanished along with its gear")
+	}
+}
+
+// TestItemTooltipCarriesTheDetail covers the tooltip contents: the display
+// strings Blizzard already returns, rendered rather than discarded.
+func TestItemTooltipCarriesTheDetail(t *testing.T) {
+	fake := twoChars()
+	fake.gearFor = func(blizzard.CharacterRef) ([]blizzard.EquippedItem, error) {
+		return []blizzard.EquippedItem{{
+			SlotType: "HEAD", SlotName: "Head", Name: "Baleful Casque",
+			Quality: "EPIC", Level: 311, Subclass: "Plate", MediaID: 42,
+			Binding:     "Binds when picked up",
+			Stats:       []string{"+152 Strength", "+3,002 Stamina"},
+			Sockets:     []blizzard.Socket{{Display: "Sockets: Ruby", Empty: false}},
+			Transmog:    "Transmogrified to: Shadowghast Helm",
+			Durability:  "Durability 100 / 100",
+			Requirement: "Requires Level 90",
+			Set: &blizzard.ItemSet{
+				Display: "Grave-Knight's Crucible (3/5)",
+				Pieces: []blizzard.SetPiece{
+					{Name: "Baleful Casque", Equipped: true},
+					{Name: "Baleful Gibbets", Equipped: false},
+				},
+				Effects: []string{"(4) Set: something considerable happens"},
+			},
+		}}, nil
+	}
+	fake.iconFor = func(int) (string, error) {
+		return "https://render.worldofwarcraft.com/us/icons/56/inv_helm.jpg", nil
+	}
+
+	raw := armoryPanel(t, get(t, stack(t, fake, true), "/app/dashboard").Body.String())
+
+	// Unescaped, so these assert what a member reads. html/template encodes
+	// "+" as &#43; and "'" as &#39;, both correctly, and neither is what this
+	// test is about.
+	panel := html.UnescapeString(raw)
+
+	for _, want := range []string{
+		"+152 Strength", "+3,002 Stamina",
+		"Transmogrified to: Shadowghast Helm",
+		"Binds when picked up", "Sockets: Ruby",
+		"Grave-Knight's Crucible (3/5)",
+		"(4) Set: something considerable happens",
+		"Durability 100 / 100", "Requires Level 90",
+		"inv_helm.jpg",
+	} {
+		if !strings.Contains(panel, want) {
+			t.Errorf("the tooltip is missing %q", want)
+		}
+	}
+
+	// A set piece the character is NOT wearing is shown greyed, not hidden --
+	// the game shows the whole set so you can see what is left to collect.
+	if !strings.Contains(raw, "is-missing") {
+		t.Error("an unequipped set piece is not marked as missing")
+	}
+}
+
+// TestIconsAreFetchedOncePerItem is the claim that makes icons affordable: an
+// item's icon never changes, so it is cached and the per-view cost disappears
+// after the first look.
+func TestIconsAreFetchedOncePerItem(t *testing.T) {
+	fake := twoChars()
+	fake.gearFor = func(blizzard.CharacterRef) ([]blizzard.EquippedItem, error) {
+		return []blizzard.EquippedItem{
+			{SlotType: "HEAD", SlotName: "Head", Name: "Helm", MediaID: 1},
+			{SlotType: "CHEST", SlotName: "Chest", Name: "Chest", MediaID: 2},
+			{SlotType: "HANDS", SlotName: "Hands", Name: "Gloves", MediaID: 0},
+		}, nil
+	}
+	fake.iconFor = func(id int) (string, error) {
+		return "https://render.worldofwarcraft.com/us/icons/56/i.jpg", nil
+	}
+
+	get(t, stack(t, fake, true), "/app/dashboard")
+
+	// Two items carry a media id; the third does not and must not be asked for.
+	if n := fake.iconCalls.Load(); n != 2 {
+		t.Errorf("made %d icon calls, want 2 (the item without a media id is skipped)", n)
+	}
+}
+
+// TestGearSurvivesAMissingIcon: an item without a picture is still an item.
+func TestGearSurvivesAMissingIcon(t *testing.T) {
+	fake := twoChars()
+	fake.gearFor = func(blizzard.CharacterRef) ([]blizzard.EquippedItem, error) {
+		return []blizzard.EquippedItem{
+			{SlotType: "HEAD", SlotName: "Head", Name: "Unpictured Helm", MediaID: 7, Level: 300},
+		}, nil
+	}
+	fake.iconFor = func(int) (string, error) {
+		return "", &blizzard.APIError{Endpoint: "item-media", Outcome: blizzard.OutcomeUnavailable}
+	}
+
+	rec := get(t, stack(t, fake, true), "/app/dashboard")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET with no icon available = %d, want 200", rec.Code)
+	}
+	panel := armoryPanel(t, rec.Body.String())
+	if !strings.Contains(panel, "Unpictured Helm") {
+		t.Error("the item vanished along with its icon")
+	}
+	if !strings.Contains(panel, "gear-icon-blank") {
+		t.Error("no placeholder where the icon should be, so the row will not line up")
 	}
 }
 

@@ -84,6 +84,12 @@ func buildContentSecurityPolicy(formActions []string) string {
 
 	return "default-src 'none'; " +
 		"style-src 'self'; " +
+		// 'self' only: one file we serve, no inline, no CDN, no eval. The site
+		// had no script-src at all until the item tooltips needed placing in
+		// the viewport and set pieces highlighting -- a specific interaction
+		// that genuinely required it, which is the bar Technology Constraints
+		// sets. Everything the page DOES still works without it.
+		"script-src 'self'; " +
 		"img-src 'self' https://render.worldofwarcraft.com; " +
 		"form-action " + strings.Join(sources, " ") + "; " +
 		"base-uri 'none'; " +
