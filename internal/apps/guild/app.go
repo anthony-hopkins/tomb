@@ -165,6 +165,12 @@ type memberView struct {
 	// ClassSlug paints the name in the class's colour; see armory.ClassSlug.
 	ClassSlug string
 
+	// SearchValue is what the search box's suggestion for this member reads:
+	// the name alone, or "Name (Realm)" when another member shares the name,
+	// so that picking a suggestion always means exactly one character. The
+	// server accepts either form.
+	SearchValue string
+
 	// Rank is the label of the rank this character holds, repeated onto the
 	// member so the card can name it. The heading above the group says it too,
 	// but a card that opens over other groups should not make you look up to
@@ -563,6 +569,23 @@ func (a *App) group(members []blizzard.GuildMember, details map[string]memberDet
 		// After the detail, which may have supplied the class the roster lacked.
 		mv.ClassSlug = armory.ClassSlug(mv.Class)
 		g.Members = append(g.Members, mv)
+	}
+
+	// Namesakes get their realm in the search suggestion, so a pick is never
+	// ambiguous. Everyone else is just their name: the common case should
+	// read as a name, not as a name with paperwork attached.
+	shared := map[string]int{}
+	for _, m := range members {
+		shared[strings.ToLower(m.Name)]++
+	}
+	for gi := range groups {
+		for mi := range groups[gi].Members {
+			mv := &groups[gi].Members[mi]
+			mv.SearchValue = mv.Name
+			if shared[strings.ToLower(mv.Name)] > 1 {
+				mv.SearchValue = mv.Name + " (" + mv.Realm + ")"
+			}
+		}
 	}
 	return groups
 }

@@ -1226,6 +1226,9 @@ func TestRosterRendersTheSearchBox(t *testing.T) {
 		`<input id="roster-q" name="q" list="roster-names"`,
 		`<datalist id="roster-names">`,
 		`<option value="Lazzlowe">90 Paladin &middot; Elune</option>`,
+		// Namesakes carry their realm, so a pick is never ambiguous.
+		`<option value="Cwds (Elune)">90 Monk &middot; Elune</option>`,
+		`<option value="Cwds (Illidan)">80 Rogue &middot; Illidan</option>`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("the rail is missing %s", want)
@@ -1233,5 +1236,17 @@ func TestRosterRendersTheSearchBox(t *testing.T) {
 	}
 	if n := strings.Count(body, "<option value="); n != len(searchable) {
 		t.Errorf("datalist has %d options, want one per member (%d)", n, len(searchable))
+	}
+}
+
+// TestPickedSuggestionResolvesToOneMember: what the datalist offers for a
+// namesake is exactly what the server needs to tell them apart, so a pick
+// from the suggestions never lands on the choice page.
+func TestPickedSuggestionResolvesToOneMember(t *testing.T) {
+	a := searchApp(t, searchable)
+	rec := search(t, a, "Cwds (Illidan)")
+	if rec.Code != http.StatusFound || rec.Header().Get("Location") != "/app/guild?c=illidan%2Fcwds" {
+		t.Errorf("picking the Illidan Cwds = %d %q, want a redirect to illidan/cwds",
+			rec.Code, rec.Header().Get("Location"))
 	}
 }

@@ -30,7 +30,7 @@
       <input id="roster-q" name="q" list="roster-names" value="{{$.Query}}"
              placeholder="Find a character…" autocomplete="off" spellcheck="false">
       <datalist id="roster-names">
-        {{range .Groups}}{{range .Members}}<option value="{{.Name}}">{{.Level}} {{.Class}} &middot; {{.Realm}}</option>
+        {{range .Groups}}{{range .Members}}<option value="{{.SearchValue}}">{{.Level}} {{.Class}} &middot; {{.Realm}}</option>
         {{end}}{{end}}
       </datalist>
       <button type="submit" aria-label="Go">&rarr;</button>
