@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -918,8 +919,9 @@ func TestBarsScaleToTheLongest(t *testing.T) {
 	}
 }
 
-// TestBoardsRankAndCut covers each board's order, its cut at five, and that a
-// member with nothing to rank on is absent rather than placed last.
+// TestBoardsRankAndCut covers each board's order and that a member with
+// nothing to rank on is absent rather than placed last. The cut itself is
+// TestBoardsCutAtTen.
 func TestBoardsRankAndCut(t *testing.T) {
 	a := snapshotApp(&fakeClient{}, time.Hour)
 
@@ -962,8 +964,8 @@ func TestBoardsRankAndCut(t *testing.T) {
 	}
 
 	ilvl := sum.Boards[0]
-	if ilvl.Title != "Top item level" || strings.Join(names(ilvl), ",") != "Bravo,Foxtrot,Charlie,Delta,Alpha" {
-		t.Errorf("item level board = %v", names(ilvl))
+	if ilvl.Title != "Top item level" || strings.Join(names(ilvl), ",") != "Bravo,Foxtrot,Charlie,Delta,Alpha,Echo" {
+		t.Errorf("item level board = %v; Golf has no item level and is absent", names(ilvl))
 	}
 	if ilvl.Entries[0].Value != "320" || ilvl.Entries[0].Rank != 1 || ilvl.Entries[0].Class != "rogue" {
 		t.Errorf("first entry = %+v", ilvl.Entries[0])
@@ -1035,5 +1037,32 @@ func TestOverviewRendersChartsWithoutInlineStyles(t *testing.T) {
 	// Nobody raided: that board is absent rather than empty.
 	if strings.Contains(body, "Most raid bosses down") {
 		t.Error("an empty bosses board was rendered")
+	}
+}
+
+// TestBoardsCutAtTen: twelve qualify, ten are shown, and they are the best ten.
+func TestBoardsCutAtTen(t *testing.T) {
+	a := snapshotApp(&fakeClient{}, time.Hour)
+
+	var members []blizzard.GuildMember
+	details := map[string]memberDetail{}
+	for i := 1; i <= 12; i++ {
+		m := blizzard.GuildMember{Name: "Member" + strconv.Itoa(i), RealmSlug: "elune", Rank: 1, Level: 90}
+		members = append(members, m)
+		details[memberKey(m)] = memberDetail{Character: blizzard.Character{
+			Name: m.Name, RealmSlug: "elune", AverageItemLevel: 300 + i,
+		}}
+	}
+
+	sum := a.summarise(members, a.group(members, details), details)
+	board := sum.Boards[0]
+	if len(board.Entries) != boardSize || boardSize != 10 {
+		t.Fatalf("board shows %d places, want %d", len(board.Entries), boardSize)
+	}
+	if board.Entries[0].Name != "Member12" || board.Entries[9].Name != "Member3" {
+		t.Errorf("places 1 and 10 are %s and %s, want Member12 and Member3", board.Entries[0].Name, board.Entries[9].Name)
+	}
+	if board.Entries[9].Rank != 10 {
+		t.Errorf("tenth place is numbered %d", board.Entries[9].Rank)
 	}
 }

@@ -247,10 +247,11 @@ type boardEntry struct {
 	Value string // already formatted: "311", "2431", "3M · 8H"
 }
 
-// boardSize is how many places each leaderboard shows. Five keeps three boards
-// inside one screen beside the summary, which is the point of having them
-// there rather than on a page of their own.
-const boardSize = 5
+// boardSize is how many places each leaderboard shows. Ten, because five was
+// asked for and then found too short: a top ten is the list people expect,
+// and the rows are compact enough that three of them still sit beside the
+// summary.
+const boardSize = 10
 
 type view struct {
 	Groups []rankGroup
