@@ -41,8 +41,11 @@ func New(deps platform.Deps) (*App, error) {
 // Meta describes the app to the core (contracts/app-registration.md).
 func (a *App) Meta() platform.AppMeta {
 	return platform.AppMeta{
-		Slug:          "guild",
-		NavLabel:      "Guild",
+		Slug: "guild",
+		// No nav entry. This is what the TOMB brand link leads to, so listing
+		// it beside that link would be the same destination twice.
+		NavLabel:      "",
+		Home:          true,
 		RoutePrefix:   "/app/guild",
 		RequiresGuild: true,
 	}

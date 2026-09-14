@@ -130,8 +130,10 @@ func run() error {
 	// The single registration point. Adding an app means adding one line here
 	// and nothing else (Principle II, contracts/app-registration.md).
 	//
-	// Order is nav order, and the first app is also where a signed-in member
-	// lands: Guild, then My Characters, then Coming Soon.
+	// Order here is not nav order -- Mount sorts navigation by label -- and it
+	// is not home either: home is the app that declares AppMeta.Home, which is
+	// the guild overview, reached through the TOMB brand link rather than a nav
+	// entry of its own.
 	apps := []platform.App{
 		guildOverview,
 		characterDashboard,
