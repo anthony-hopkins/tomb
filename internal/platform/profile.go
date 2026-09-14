@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"slices"
+	"strings"
 
 	"golang.org/x/sync/errgroup"
 
@@ -159,4 +160,44 @@ func (f *ProfileFetcher) logDenial(refs []blizzard.CharacterRef, p Profile) {
 		"characters_dropped", len(refs)-len(p.Characters),
 		"guilds_seen", seen,
 	)
+
+	f.logRealmNearMiss(p)
+}
+
+// logRealmNearMiss calls out the one denial that looks exactly like not being
+// in the guild and is not: the right guild name on a different realm.
+//
+// A guild's realm is the realm it was founded on, which on a connected-realm
+// cluster need not be the realm its members play on. TOMB is registered on
+// Elune while its members' characters live on Area 52, so the obvious
+// configuration -- the realm you play on -- silently refuses every member, and
+// looks identical to nobody being in the guild.
+//
+// Worth a line of its own rather than leaving it to be noticed in guilds_seen.
+// The entire failure is that the two values look interchangeable right up until
+// somebody works out that they are not.
+func (f *ProfileFetcher) logRealmNearMiss(p Profile) {
+	wantName := strings.TrimSpace(f.Guild.Name)
+	wantRealm := strings.TrimSpace(f.Guild.RealmSlug)
+
+	for i := range p.Characters {
+		g := p.Characters[i].Guild
+		if g == nil {
+			continue
+		}
+		if !strings.EqualFold(strings.TrimSpace(g.Name), wantName) {
+			continue
+		}
+		if strings.EqualFold(strings.TrimSpace(g.RealmSlug), wantRealm) {
+			continue
+		}
+
+		f.Logger.Warn("guild name matched but realm did not",
+			"configured", f.Guild.Name+"@"+f.Guild.RealmSlug,
+			"found", g.Name+"@"+g.RealmSlug,
+			"hint", "a guild's realm is where it was founded, which on connected realms "+
+				"differs from where its members play; set the guild realm to the one in 'found'",
+		)
+		return
+	}
 }

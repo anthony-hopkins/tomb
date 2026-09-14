@@ -241,7 +241,7 @@ The full set the workflows read:
 | `GCP_DEPLOYER_SA` | bootstrap output | all |
 | `GCP_STATE_BUCKET` | bootstrap output | all |
 | `GCP_REGION` | `us-central1` (optional) | deploy |
-| `TOMB_GUILD_REALM` | your realm slug, e.g. `area-52` | all |
+| `TOMB_GUILD_REALM` | the slug of the realm the guild was **founded** on, e.g. `elune` — see the note below | all |
 | `BNET_CLIENT_ID` | Battle.net client id | all |
 | `TOMB_DOMAIN` | your domain, or empty for the `sslip.io` fallback | all |
 | `ACME_EMAIL` | optional Let's Encrypt contact address | all |
@@ -251,6 +251,21 @@ These are **variables, not secrets**. None is sensitive: they are identifiers,
 and the trust is enforced on Google's side. The only actual secret is the
 Battle.net client secret, which lives in Secret Manager and never touches
 GitHub.
+
+> **`TOMB_GUILD_REALM` is the guild's realm, not yours.** On a connected-realm
+> cluster a guild keeps the realm it was created on while its members play on
+> any realm in the group — TOMB is registered on `elune`, its members are on
+> Area 52 — and Blizzard reports the guild's own realm on each character
+> profile. Setting this to the realm you play on refuses every member, and looks
+> exactly like nobody being in the guild.
+>
+> If sign-in works but everyone lands on "TOMB members only", check the app log
+> for `guild name matched but realm did not`. It prints the value to use:
+>
+> ```
+> {"msg":"guild name matched but realm did not",
+>  "configured":"TOMB@area-52","found":"TOMB@elune"}
+> ```
 
 ### 4. The production gate
 
