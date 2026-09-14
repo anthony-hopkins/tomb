@@ -30,6 +30,8 @@ import (
 type fakeBlizzard struct {
 	mediaFor   func(ref blizzard.CharacterRef) (blizzard.Media, error)
 	mediaCalls atomic.Int32
+	gearFor    func(ref blizzard.CharacterRef) ([]blizzard.EquippedItem, error)
+	gearCalls  atomic.Int32
 
 	refs       []blizzard.CharacterRef
 	profileFor func(ref blizzard.CharacterRef) (blizzard.Character, error)
@@ -57,6 +59,16 @@ func (f *fakeBlizzard) CharacterMedia(_ context.Context, _ string, ref blizzard.
 		return blizzard.Media{}, nil
 	}
 	return f.mediaFor(ref)
+}
+
+// gearFor lets a test drive the equipment lookup; nil means "no gear", which
+// is what a character Blizzard cannot serve equipment for returns.
+func (f *fakeBlizzard) CharacterEquipment(_ context.Context, _ string, ref blizzard.CharacterRef) ([]blizzard.EquippedItem, error) {
+	f.gearCalls.Add(1)
+	if f.gearFor == nil {
+		return nil, nil
+	}
+	return f.gearFor(ref)
 }
 
 var _ blizzard.Client = (*fakeBlizzard)(nil)
@@ -405,6 +417,88 @@ func TestArmorySurvivesAMissingRender(t *testing.T) {
 	}
 	if !strings.Contains(panel, "no render for this character") {
 		t.Error("the panel does not say why the image is absent")
+	}
+}
+
+// TestArmoryShowsEquippedGear covers the gear list: present, in the game's slot
+// order, coloured by quality.
+func TestArmoryShowsEquippedGear(t *testing.T) {
+	fake := twoChars()
+	// Deliberately out of order, to prove the view sorts rather than trusting
+	// whatever order Blizzard happened to return.
+	fake.gearFor = func(blizzard.CharacterRef) ([]blizzard.EquippedItem, error) {
+		items := []blizzard.EquippedItem{
+			{SlotType: "MAIN_HAND", SlotName: "Main Hand", Name: "Big Axe", Quality: "LEGENDARY", Level: 720},
+			{SlotType: "HEAD", SlotName: "Head", Name: "Sturdy Helm", Quality: "EPIC", Level: 710},
+			{SlotType: "CHEST", SlotName: "Chest", Name: "Plate Chest", Quality: "RARE", Level: 700},
+		}
+		blizzard.SortEquipment(items)
+		return items, nil
+	}
+
+	panel := armoryPanel(t, get(t, stack(t, fake, true), "/app/dashboard").Body.String())
+
+	for _, want := range []string{"Sturdy Helm", "Plate Chest", "Big Axe", "720", "710", "700"} {
+		if !strings.Contains(panel, want) {
+			t.Errorf("the gear list is missing %q", want)
+		}
+	}
+
+	// Head before Chest before Main Hand: the order the game lays gear out in.
+	head, chest, hand := strings.Index(panel, "Sturdy Helm"),
+		strings.Index(panel, "Plate Chest"), strings.Index(panel, "Big Axe")
+	if !(head < chest && chest < hand) {
+		t.Error("gear is not in the game's slot order")
+	}
+
+	for _, class := range []string{"q-epic", "q-rare", "q-legendary"} {
+		if !strings.Contains(panel, class) {
+			t.Errorf("no %s colour class; gear is read by quality colour", class)
+		}
+	}
+
+	// One equipment call, for the character on display, never the roster.
+	if n := fake.gearCalls.Load(); n != 1 {
+		t.Errorf("made %d equipment calls, want exactly 1", n)
+	}
+}
+
+// TestUnknownQualityIsNotTurnedIntoAClass: the quality string comes from
+// Blizzard and ends up on the page, so it is mapped through a known set rather
+// than interpolated. An unrecognised value renders uncoloured instead of
+// inventing a class name out of remote input.
+func TestUnknownQualityIsNotTurnedIntoAClass(t *testing.T) {
+	fake := twoChars()
+	fake.gearFor = func(blizzard.CharacterRef) ([]blizzard.EquippedItem, error) {
+		return []blizzard.EquippedItem{
+			{SlotType: "HEAD", SlotName: "Head", Name: "Odd Hat", Quality: "MYTHIC_PLUS_SOMETHING", Level: 1},
+		}, nil
+	}
+
+	panel := armoryPanel(t, get(t, stack(t, fake, true), "/app/dashboard").Body.String())
+
+	if !strings.Contains(panel, "Odd Hat") {
+		t.Error("an item with an unknown quality was dropped instead of shown plain")
+	}
+	if strings.Contains(panel, "MYTHIC_PLUS_SOMETHING") {
+		t.Error("the raw quality string reached the page")
+	}
+}
+
+// TestArmorySurvivesMissingGear: the same rule as a missing render. Everything
+// above the gear list is already in hand, so losing the list must not lose it.
+func TestArmorySurvivesMissingGear(t *testing.T) {
+	fake := twoChars()
+	fake.gearFor = func(blizzard.CharacterRef) ([]blizzard.EquippedItem, error) {
+		return nil, &blizzard.APIError{Endpoint: "character-equipment", Outcome: blizzard.OutcomeUnavailable}
+	}
+
+	rec := get(t, stack(t, fake, true), "/app/dashboard")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET with no equipment available = %d, want 200", rec.Code)
+	}
+	if !strings.Contains(armoryPanel(t, rec.Body.String()), "Newest") {
+		t.Error("the character's details vanished along with its gear")
 	}
 }
 

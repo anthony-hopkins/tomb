@@ -65,6 +65,10 @@ func (f *fakeClient) CharacterMedia(context.Context, string, blizzard.CharacterR
 	return blizzard.Media{}, nil
 }
 
+func (f *fakeClient) CharacterEquipment(context.Context, string, blizzard.CharacterRef) ([]blizzard.EquippedItem, error) {
+	return nil, nil
+}
+
 var _ blizzard.Client = (*fakeClient)(nil)
 
 func refsFor(names ...string) []blizzard.CharacterRef {

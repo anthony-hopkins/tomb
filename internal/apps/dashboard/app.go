@@ -108,6 +108,22 @@ type armoryView struct {
 	// empty when there is none. Empty is normal, not an error: a character
 	// Blizzard has never rendered simply has no assets.
 	Render string
+
+	// Gear is what the character is wearing, in the game's own slot order.
+	Gear []gearView
+}
+
+// gearView is one equipped item, ready for the template.
+type gearView struct {
+	Slot    string
+	Name    string
+	Level   int
+	Quality string
+
+	// QualityClass is the CSS class for the item's colour, pre-computed so the
+	// template does not have to lowercase anything. Empty for an unknown
+	// quality, which renders in the ordinary text colour rather than guessing.
+	QualityClass string
 }
 
 // characterKey identifies a character in a URL. Realm first, because a
@@ -170,6 +186,7 @@ func (a *App) show(w http.ResponseWriter, r *http.Request) {
 		v.Selected = &armoryView{
 			characterView: a.characterView(ranked[chosen]),
 			Render:        a.render(r, ranked[chosen]),
+			Gear:          a.gear(r, ranked[chosen]),
 		}
 	}
 
@@ -225,6 +242,54 @@ func (a *App) render(r *http.Request, c blizzard.Character) string {
 		return ""
 	}
 	return media.Hero()
+}
+
+// knownQualities are the item qualities the stylesheet has a colour for.
+//
+// A map rather than trusting the API's string straight into a class name: that
+// value reaches the page, and building a CSS class out of unvalidated input is
+// how markup gets injected. Anything unrecognised renders uncoloured.
+var knownQualities = map[string]string{
+	"POOR": "q-poor", "COMMON": "q-common", "UNCOMMON": "q-uncommon",
+	"RARE": "q-rare", "EPIC": "q-epic", "LEGENDARY": "q-legendary",
+	"ARTIFACT": "q-artifact", "HEIRLOOM": "q-heirloom",
+}
+
+// gear fetches what the character is wearing.
+//
+// One call, for the one character on display -- the same argument as render.
+// Failing costs the gear list and nothing else: everything above it on the page
+// is already in hand, and a missing equipment endpoint is no reason to refuse
+// to show somebody their character.
+func (a *App) gear(r *http.Request, c blizzard.Character) []gearView {
+	session, ok := platform.SessionFrom(r.Context())
+	if !ok {
+		return nil
+	}
+
+	items, err := a.deps.Blizzard.CharacterEquipment(
+		r.Context(), session.AccessToken,
+		blizzard.CharacterRef{Name: c.Name, RealmSlug: c.RealmSlug},
+	)
+	if err != nil {
+		a.deps.Logger.Warn("character equipment unavailable",
+			"realm", c.RealmSlug,
+			"outcome", blizzard.OutcomeOf(err).String(),
+		)
+		return nil
+	}
+
+	gear := make([]gearView, 0, len(items))
+	for _, it := range items {
+		gear = append(gear, gearView{
+			Slot:         it.SlotName,
+			Name:         it.Name,
+			Level:        it.Level,
+			Quality:      it.Quality,
+			QualityClass: knownQualities[it.Quality],
+		})
+	}
+	return gear
 }
 
 // guildLabel is the character's guild, or empty when it has none.

@@ -89,6 +89,19 @@
           <dt>Last played</dt>
           <dd>{{.LastLogin}}</dd>
         </dl>
+
+        {{if .Gear}}
+        <h3 class="gear-heading">Equipped</h3>
+        <ul class="gear-list">
+          {{range .Gear}}
+          <li>
+            <span class="gear-slot">{{.Slot}}</span>
+            <span class="gear-name {{.QualityClass}}">{{.Name}}</span>
+            <span class="gear-ilvl">{{if .Level}}{{.Level}}{{end}}</span>
+          </li>
+          {{end}}
+        </ul>
+        {{end}}
       </div>
     </section>
     {{else}}

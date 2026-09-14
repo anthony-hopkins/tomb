@@ -441,6 +441,59 @@ main:has(.dashboard) { max-width: none; }
   .armory-figure img { max-width: 16rem; margin: 0 auto; }
 }
 
+/* Equipped gear, in the game's own slot order. */
+.gear-heading {
+  margin: 1.5rem 0 0.6rem;
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.gear-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.3rem;
+}
+
+.gear-list li {
+  display: grid;
+  grid-template-columns: 6.5rem minmax(0, 1fr) 3rem;
+  gap: 0.75rem;
+  align-items: baseline;
+  font-size: 0.9rem;
+}
+
+.gear-slot { color: var(--muted); }
+.gear-name { overflow-wrap: anywhere; }
+.gear-ilvl {
+  text-align: right;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Item quality, the colours players read gear by.
+   
+   Six are the game's own values unchanged. Rare and Epic are lightened:
+   at #0070dd and #a335ee they land near 3:1 on this background, which is
+   below AA and exactly the two qualities most gear is. The hue and
+   saturation are kept, so they still read as the blue one and the purple
+   one -- only the lightness moves, and only as far as it must. */
+.q-poor { color: #9d9d9d; }
+.q-common { color: #ffffff; }
+.q-uncommon { color: #1eff00; }
+.q-rare { color: #3a9eff; } /* game #0070dd, lightened to 5.3:1 */
+.q-epic { color: #c37cf4; } /* game #a335ee, lightened to 5.3:1 */
+.q-legendary { color: #ff8000; }
+.q-artifact { color: #e6cc80; }
+.q-heirloom { color: #00ccff; }
+
+@media (max-width: 48rem) {
+  .gear-list li { grid-template-columns: 5.5rem minmax(0, 1fr) 2.5rem; }
+}
+
 /* Roadmap: placeholder copy for things that do not exist yet. Styled plainly
    on purpose -- it should read as a list of intentions, not as navigation
    somebody will try to click. */

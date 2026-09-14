@@ -227,6 +227,51 @@ func (c *HTTPClient) CharacterMedia(ctx context.Context, token string, ref Chara
 	return m, nil
 }
 
+func (c *HTTPClient) CharacterEquipment(ctx context.Context, token string, ref CharacterRef) ([]EquippedItem, error) {
+	const endpoint = "character-equipment"
+
+	var payload struct {
+		EquippedItems []struct {
+			Name string `json:"name"`
+			Slot struct {
+				Type string `json:"type"`
+				Name string `json:"name"`
+			} `json:"slot"`
+			Quality struct {
+				Type string `json:"type"`
+			} `json:"quality"`
+			Level struct {
+				Value int `json:"value"`
+			} `json:"level"`
+		} `json:"equipped_items"`
+	}
+
+	path := fmt.Sprintf("/profile/wow/character/%s/%s/equipment",
+		url.PathEscape(strings.ToLower(ref.RealmSlug)),
+		url.PathEscape(strings.ToLower(ref.Name)),
+	)
+	q := url.Values{
+		"namespace": {c.Namespace},
+		"locale":    {c.Locale},
+	}
+	if err := c.get(ctx, endpoint, c.APIHost+path, q, token, &payload); err != nil {
+		return nil, err
+	}
+
+	items := make([]EquippedItem, 0, len(payload.EquippedItems))
+	for _, it := range payload.EquippedItems {
+		items = append(items, EquippedItem{
+			SlotType: it.Slot.Type,
+			SlotName: it.Slot.Name,
+			Name:     it.Name,
+			Quality:  it.Quality.Type,
+			Level:    it.Level.Value,
+		})
+	}
+	SortEquipment(items)
+	return items, nil
+}
+
 // get performs one authenticated GET and decodes JSON into out, classifying
 // every failure per contracts/blizzard-api.md.
 func (c *HTTPClient) get(ctx context.Context, endpoint, rawURL string, q url.Values, token string, out any) error {
