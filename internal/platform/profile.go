@@ -3,6 +3,7 @@ package platform
 import (
 	"context"
 	"log/slog"
+	"slices"
 
 	"golang.org/x/sync/errgroup"
 
@@ -118,5 +119,44 @@ func (f *ProfileFetcher) Fetch(ctx context.Context, accessToken string) (Profile
 	}
 
 	p.Membership = f.Guild.Derive(p.Characters)
+	f.logDenial(refs, p)
 	return p, nil
+}
+
+// logDenial records why a member was turned away.
+//
+// Denial is the outcome people actually complain about, and the logs said
+// nothing about its cause. Three quite different failures produced the same
+// silent "TOMB members only" page: a character dropped by a 404 before the
+// check ever saw it, a guild name that differs from the configured one, and a
+// guild whose realm slug is not the configured slug. Telling them apart meant
+// guessing.
+//
+// Guild identities are public -- the armory prints them beside every character
+// -- so recording the ones actually seen costs nothing in privacy while making
+// a mismatch obvious at a glance. Character names are still withheld, as
+// elsewhere in this file.
+func (f *ProfileFetcher) logDenial(refs []blizzard.CharacterRef, p Profile) {
+	if p.Membership.IsMember || f.Logger == nil {
+		return
+	}
+
+	seen := make([]string, 0, len(p.Characters))
+	for i := range p.Characters {
+		g := p.Characters[i].Guild
+		if g == nil {
+			continue
+		}
+		identity := g.Name + "@" + g.RealmSlug
+		if !slices.Contains(seen, identity) {
+			seen = append(seen, identity)
+		}
+	}
+
+	f.Logger.Warn("guild membership denied",
+		"want", f.Guild.Name+"@"+f.Guild.RealmSlug,
+		"characters_considered", len(p.Characters),
+		"characters_dropped", len(refs)-len(p.Characters),
+		"guilds_seen", seen,
+	)
 }
