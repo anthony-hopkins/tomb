@@ -290,6 +290,10 @@ type boardEntry struct {
 	Class string // CSS slug; the name is written in the class's colour
 	Value string // already formatted: "311", "2431", "3M · 8H"
 
+	// Pct is the length of the bar behind the row, as a percentage of the
+	// row: the entry's standing within its board, see standing.
+	Pct int
+
 	// RankIndex is the member's guild rank, for the authority mark beside
 	// the name: a guild master or officer stays recognisable on a board
 	// where the rank headings of the rail are not there to say so.
@@ -807,7 +811,7 @@ func (a *App) boards(members []blizzard.GuildMember, details map[string]memberDe
 	}
 
 	var out []boardView
-	add := func(title string, keep func(contender) bool, less func(x, y contender) bool, value func(contender) string) {
+	add := func(title string, keep func(contender) bool, less func(x, y contender) bool, value func(contender) string, score func(contender) int) {
 		var pool []contender
 		for _, c := range cs {
 			if keep(c) {
@@ -828,14 +832,20 @@ func (a *App) boards(members []blizzard.GuildMember, details map[string]memberDe
 			}
 			return strings.ToLower(pool[i].member.Name) < strings.ToLower(pool[j].member.Name)
 		})
+		top := pool[:min(boardSize, len(pool))]
+		lo, hi := score(top[0]), score(top[0])
+		for _, c := range top[1:] {
+			lo, hi = min(lo, score(c)), max(hi, score(c))
+		}
 		b := boardView{Title: title}
-		for i, c := range pool[:min(boardSize, len(pool))] {
+		for i, c := range top {
 			b.Entries = append(b.Entries, boardEntry{
 				Rank:      i + 1,
 				Name:      c.member.Name,
 				Key:       memberKey(c.member),
 				Class:     armory.ClassSlug(c.detail.Class),
 				Value:     value(c),
+				Pct:       standing(score(c), lo, hi),
 				RankIndex: c.member.Rank,
 			})
 		}
@@ -846,12 +856,18 @@ func (a *App) boards(members []blizzard.GuildMember, details map[string]memberDe
 		func(c contender) bool { return c.detail.AverageItemLevel > 0 },
 		func(x, y contender) bool { return x.detail.AverageItemLevel < y.detail.AverageItemLevel },
 		func(c contender) string { return strconv.Itoa(c.detail.AverageItemLevel) },
+		func(c contender) int { return c.detail.AverageItemLevel },
 	)
 	add("Top Mythic+ rating",
 		func(c contender) bool { return c.detail.MythicPlusRating > 0 },
 		func(x, y contender) bool { return x.detail.MythicPlusRating < y.detail.MythicPlusRating },
 		func(c contender) string { return strconv.Itoa(c.detail.MythicPlusRating) },
+		func(c contender) int { return c.detail.MythicPlusRating },
 	)
+	// The bosses board is ordered by difficulty -- mythic, then heroic, then
+	// normal -- but its bar is bosses down altogether, since that is what the
+	// board is called. So a bar can be longer than the one above it: the
+	// order says how hard, the bar says how many.
 	add("Most raid bosses down",
 		func(c contender) bool { return c.mythic+c.heroic+c.normal > 0 },
 		func(x, y contender) bool {
@@ -864,8 +880,28 @@ func (a *App) boards(members []blizzard.GuildMember, details map[string]memberDe
 			return x.normal < y.normal
 		},
 		func(c contender) string { return bossesLabel(c) },
+		func(c contender) int { return c.mythic + c.heroic + c.normal },
 	)
 	return out
+}
+
+// barFloor is the shortest bar on a board, as a percentage of the row.
+const barFloor = 25
+
+// standing is how long a board row's bar is: the row's place between the
+// board's lowest score (barFloor) and its highest (the full row).
+//
+// Not a measurement from zero, on purpose. A top ten's item levels differ by
+// a few points in three hundred and its ratings by a few hundred in three
+// thousand; bars from zero would all be the same length, and the point of
+// the bar is to tell the rows apart at a glance. The number beside it is the
+// measurement.
+func standing(score, lo, hi int) int {
+	if hi <= lo {
+		return 100
+	}
+	span := hi - lo
+	return barFloor + ((100-barFloor)*(score-lo)*2+span)/(2*span)
 }
 
 // bossesLabel is the compact form a leaderboard row has room for: the two

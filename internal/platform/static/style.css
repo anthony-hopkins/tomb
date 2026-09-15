@@ -1206,13 +1206,31 @@ main:has(.dashboard) { max-width: none; }
 }
 
 .board-list li {
+  position: relative;
   display: grid;
   grid-template-columns: 1.25rem minmax(0, 1fr) auto;
   gap: 0.55rem;
   align-items: center;
+  padding: 0 0.5rem;
   font-size: 0.9rem;
   line-height: 1.7;
 }
+
+/* The bar behind each row, the same look as the class chart's bars but
+   under the text rather than beside it. It is the row's whole height and
+   faint, so a white Priest bar or a yellow Rogue one never swallows the
+   name; the text is positioned so it paints over the bar. */
+.board-bar {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.board-bar .bar-fill { opacity: 0.22; }
+
+.board-list li > :not(.board-bar) { position: relative; }
 
 .board-rank {
   color: var(--muted);
