@@ -126,6 +126,13 @@ daylight saving on its own, so it reads EDT in summer and EST in winter.
 The guild master and officers can add, change and remove events; everyone else
 reads. Every change is recorded in the Logs: who, when, and what changed.
 
+An event can repeat: every day, every week or every two weeks, on the days
+you tick — raid days are one event, Tuesday and Thursday, rather than one a
+week — until a last day, or until it is removed. A repeating event is shown
+eight weeks ahead; a one-off is shown however far off it is. Officers can
+skip one night of a repeating event without touching the rest; Edit and
+Remove act on the whole series.
+
 ## Logs (guild master and officers)
 
 Officers have a **Logs** entry in the navigation that nobody else sees or can

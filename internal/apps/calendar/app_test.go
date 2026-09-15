@@ -32,7 +32,9 @@ func (m *memStore) Upcoming(_ context.Context, from time.Time) ([]Event, error) 
 	}
 	var out []Event
 	for _, e := range m.events {
-		if !e.StartsAt.Before(from) {
+		// The same rule as the SQL: a one-off from from, a series until
+		// it is over.
+		if !e.StartsAt.Before(from) || (e.Repeat.Recurring() && (e.Until == nil || e.Until.After(from))) {
 			out = append(out, e)
 		}
 	}
@@ -73,6 +75,21 @@ func (m *memStore) Delete(_ context.Context, id int64, _ int64) error {
 		}
 	}
 	return ErrNotFound
+}
+
+func (m *memStore) Skip(_ context.Context, id int64, day string, _ int64) error {
+	for i := range m.events {
+		if m.events[i].ID != id {
+			continue
+		}
+		for _, d := range m.events[i].Skips {
+			if d == day {
+				return nil
+			}
+		}
+		m.events[i].Skips = append(m.events[i].Skips, day)
+	}
+	return nil
 }
 
 // memAudit records what was recorded.
