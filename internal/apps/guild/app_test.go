@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"html"
 	"html/template"
 	"io"
@@ -997,6 +998,40 @@ func TestBoardsRankAndCut(t *testing.T) {
 	if bosses.Entries[0].Value != "2M · 8H" || bosses.Entries[3].Value != "8N" {
 		t.Errorf("boss labels = %q and %q, want 2M · 8H and 8N", bosses.Entries[0].Value, bosses.Entries[3].Value)
 	}
+
+	// The bar behind each row is its standing between the board's lowest
+	// and highest, not a length from zero: 320 down to 290 runs from the
+	// full row to the floor, with 305 halfway between.
+	pcts := func(b boardView) []int {
+		var out []int
+		for _, e := range b.Entries {
+			out = append(out, e.Pct)
+		}
+		return out
+	}
+	if got := pcts(ilvl); fmt.Sprint(got) != "[100 88 75 63 50 25]" {
+		t.Errorf("item level bars = %v, want [100 88 75 63 50 25]", got)
+	}
+	// Bosses are ordered by difficulty but the bar is bosses down altogether:
+	// Alpha's sixteen (3rd) outbars Delta's twelve (2nd), and that is right.
+	if got := pcts(bosses); fmt.Sprint(got) != "[100 55 85 25]" {
+		t.Errorf("bosses bars = %v, want [100 55 85 25]", got)
+	}
+}
+
+// TestStandingFloorsAndTies: one entry, or a board where everyone is level,
+// gets the full row; nobody gets less than the floor.
+func TestStandingFloorsAndTies(t *testing.T) {
+	for _, tc := range []struct{ score, lo, hi, want int }{
+		{300, 300, 300, 100},
+		{7, 7, 69, barFloor},
+		{69, 7, 69, 100},
+		{38, 7, 69, 63},
+	} {
+		if got := standing(tc.score, tc.lo, tc.hi); got != tc.want {
+			t.Errorf("standing(%d, %d, %d) = %d, want %d", tc.score, tc.lo, tc.hi, got, tc.want)
+		}
+	}
 }
 
 // TestNoDetailNoBoards: a snapshot with no member detail yet gives no boards,
@@ -1044,6 +1079,9 @@ func TestOverviewRendersChartsWithoutInlineStyles(t *testing.T) {
 		`class="dashboard-main dashboard-main--wide"`,
 		// Leaderboard names are written in their class colour.
 		`<a class="class-name cls-death-knight" href="?c=area-52%2fnekromoo">`,
+		// And each row has the class's bar behind it, sized by attribute.
+		`<svg class="board-bar" aria-hidden="true">`,
+		`<rect class="bar-fill cls-death-knight" width="100%" height="100%" rx="4"/>`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("the overview is missing %s", want)

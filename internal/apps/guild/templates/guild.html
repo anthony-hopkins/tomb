@@ -250,6 +250,13 @@
         <ol class="board-list">
           {{range .Entries}}
           <li>
+            {{/* The bar behind the row, in the class's colour, as long as
+                 the row's standing on the board (standing, in app.go). It
+                 sits under the text at low opacity; the name and the number
+                 are what is read, the bar is what is compared. */}}
+            <svg class="board-bar" aria-hidden="true">
+              <rect class="bar-fill cls-{{.Class}}" width="{{.Pct}}%" height="100%" rx="4"/>
+            </svg>
             <span class="board-rank">{{.Rank}}</span>
             <a class="class-name cls-{{.Class}}" href="?c={{.Key}}">{{template "rank-mark" .RankIndex}}{{.Name}}</a>
             <span class="board-n">{{.Value}}</span>

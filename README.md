@@ -67,8 +67,10 @@ with, under each class, how many of them are tanks, healers and DPS by their
 current specialisation. Beside it are three leaderboards — top item
 level, top Mythic+ rating, and most raid bosses down (mythic kills first, then
 heroic, then normal) — each naming the top ten, with every name a link to that
-character's Armory view. All of it is counted from the roster the site already
-holds, so it costs nothing extra to show.
+character's Armory view. Each row has a bar behind it in the character's class
+colour, longest for first place and shortest for tenth, so a board reads at a
+glance the way the class chart does. All of it is counted from the roster the
+site already holds, so it costs nothing extra to show.
 
 A few things worth knowing:
 
