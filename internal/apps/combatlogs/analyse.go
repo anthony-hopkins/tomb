@@ -254,6 +254,20 @@ func (a *App) topPlayer(ctx context.Context, encounterID, diff int, class, spec,
 	if ranking.Class == "" {
 		ranking.Class = class
 	}
+	// The leaderboard's talents are ids alone, every point of them; the
+	// player's own ranking on the boss is the same kill with the talents
+	// as a named tree, the shape the member's side comes in. One more
+	// read, so the diff is like against like and needs no name lookups.
+	// The leaderboard's answer stands when that read fails.
+	if own, err := a.deps.WCL.BestRank(ctx, ref, encounterID, diff, metric); err == nil && len(own.Talents) > 0 {
+		ranking.Talents = own.Talents
+		if len(own.Gear) > 0 {
+			ranking.Gear = own.Gear
+		}
+		if own.ReportCode != "" {
+			ranking.ReportCode, ranking.FightID = own.ReportCode, own.FightID
+		}
+	}
 	// Two rows: the leaderboard's answer under the class-and-spec key, and
 	// the player's parse under their own, so a later run on that player
 	// finds it too.

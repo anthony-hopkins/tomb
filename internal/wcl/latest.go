@@ -9,7 +9,8 @@ import (
 // zoneQuery is a character's standing in the current raid: which bosses
 // they have ranked kills on, as which spec, at which difficulty. With no
 // zone or difficulty given, Warcraft Logs answers for the current raid at
-// the highest difficulty the character has rankings in (UNCONFIRMED; the
+// the highest difficulty the character has rankings in (confirmed live on
+// 2026-09-16, T050; the
 // fixture is hand-written, T050).
 const zoneQuery = `query($name: String, $slug: String, $region: String, $id: Int) {
   characterData {
@@ -52,7 +53,9 @@ func (c *HTTPClient) ZoneRankings(ctx context.Context, ref CharacterRef) (Zone, 
 	return decodeZone(ch.ClassID, ch.ZoneRankings)
 }
 
-// zoneRankings is the shape of the zoneRankings scalar (UNCONFIRMED).
+// zoneRankings is the shape of the zoneRankings scalar, confirmed against
+// the live API on 2026-09-16 (T050): a boss with no kill has null percent
+// and spec and zero totalKills.
 type zoneRankings struct {
 	Difficulty int    `json:"difficulty"`
 	Metric     string `json:"metric"`

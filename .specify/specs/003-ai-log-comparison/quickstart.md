@@ -33,6 +33,12 @@ answers recorded in `research.md`:
 
 ## Local checks (any machine)
 
+With the Warcraft Logs credentials to hand, `go test -tags live -run TestLive
+./internal/wcl` (env `WCL_CLIENT_ID`, `WCL_CLIENT_SECRET`, `WCL_LIVE_OUT=<file>`,
+optionally `WCL_LIVE_NAME/REALM/REGION/CLASS/SPEC`) writes the real API answers to
+the file. That is how T050 was done; run it again when a decoder starts logging
+`decode` errors.
+
 ```
 go build ./... && go vet ./... && go test -race ./...
 golangci-lint run ./...        # from WSL on this machine
@@ -95,6 +101,9 @@ core and exercises begin → pieces → finish → parsed with a fake store.
 
 ### 6. Run a comparison (US3, scenarios 1, 2, 6; amended: the whole raid, from Warcraft Logs first)
 
+The controls are in the left rail under your character list; the result is the
+column to the right of the card (fourth amendment).
+
 1. On the card, leave the source as **My latest raid on Warcraft Logs** and press
    **Analyse**. Nothing needs uploading: the site reads your ranked kills in the
    current raid from Warcraft Logs and finds the top-ranked player of your class
@@ -119,16 +128,15 @@ core and exercises begin → pieces → finish → parsed with a fake store.
    yours yet, so this is the other way round: the top <spec> <class> parses,
    broken down, against your current gear", the table compares your *current*
    equipment (as on the card's Equipped block) against the top player's on the
-   first boss, and the write-up has Build, Rotation (with casts per minute read
-   from the top kill), Itemization and "Do these first" sections, one boss
-   after another for the whole current raid.
-2. Check a rotation line against the top player's Warcraft Logs report (the
-   Casts table of that kill): the counts should match and the per-minute rate
-   should be count over the kill's minutes.
+   first boss, and the write-up has Talents, Itemization, "The short version"
+   and "Do these first" sections, one boss after another for the whole current
+   raid, and says nothing about rotation or ability use.
+2. Check a gear line against the top player's Warcraft Logs character page: the
+   pieces named should be what they wore in that kill.
 3. Logs: the `combatlogs.analyse` entry reads "showcase of top <spec> <class>
    parses in <raid> against <name>: done".
 4. Run it again as an officer within the day: the app log shows no leaderboard
-   or casts fetch (the day's cache answers, casts included).
+   fetch (the day's cache answers).
 
 ### 7. Refusals and the allowance (US3, scenarios 3, 4, 5)
 

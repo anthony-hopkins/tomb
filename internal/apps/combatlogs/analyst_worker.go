@@ -348,7 +348,7 @@ func (a *App) fromShowcase(ctx context.Context, an fights.Analysis, cp *fights.C
 		Raid: ai.Raid{
 			Difficulty: fights.DifficultyName(wcl.GameDifficulty(cp.WCLDiff)),
 			Date:       a.now().In(a.deps.Config.Timezone).Format("2 Jan 2006"),
-			Note:       "the raider has no logs on Warcraft Logs and no upload; each boss shows the top-ranked parse of their class and specialization, with that player's cast counts in the kill",
+			Note:       "the raider has no logs on Warcraft Logs and no upload; each boss shows the top-ranked parse of their class and specialization -- the player, the parse, their talents and gear. Nothing about how anyone played is known",
 		},
 		Label: fmt.Sprintf("showcase of top %s %s parses in %s", spec, class, raid.Name),
 	}
@@ -366,40 +366,15 @@ func (a *App) fromShowcase(ctx context.Context, an fights.Analysis, cp *fights.C
 				continue
 			}
 		}
-		if len(rk.Casts) == 0 && rk.ReportCode != "" {
-			casts, err := a.deps.WCL.Casts(ctx, rk.ReportCode, rk.FightID, rk.Name)
-			if err != nil {
-				a.deps.Logger.Warn("casts of a top parse", "encounter", e.ID, "error", err)
-			} else {
-				rk.Casts = casts
-				// Keep them with the cached leaderboard answer for next time.
-				if payload, err := json.Marshal(rk); err == nil {
-					_, _ = a.store.PutComparisonPlayer(ctx, fights.ComparisonPlayer{
-						Region: "top", RealmSlug: wcl.ClassSlug(class), Name: strings.ToLower(spec), Encounter: e.ID, WCLDiff: cp.WCLDiff, Metric: cp.Metric,
-						FetchedAt: a.now(), ClassID: rk.ClassID, Class: rk.Class, Spec: rk.Spec, RankPercent: rk.RankPercent, Amount: rk.Amount, Payload: payload,
-					})
-				}
-				if e.ID == cp.Encounter {
-					top.Casts = casts
-				}
-			}
-		}
+		// The parse, the player, and how long the kill took: what a ranking
+		// carries. Nothing about how they played is asked for -- there is
+		// no log of the raider's to set it against -- so the briefing is
+		// talents and gear (spec 003, third amendment as revised).
 		line := ai.Boss{Name: e.Name, TheirName: rk.Name, TheirRankPercent: rk.RankPercent, TheirDuration: seconds(rk.Duration)}
 		if healer {
 			line.TheirHPS = rk.Amount
 		} else {
 			line.TheirDPS = rk.Amount
-		}
-		minutes := rk.Duration.Minutes()
-		for _, c := range rk.Casts {
-			rate := 0.0
-			if minutes > 0 {
-				rate = float64(c.Count) / minutes
-			}
-			line.TheirCasts = append(line.TheirCasts, ai.CastRate{Name: c.Name, Count: c.Count, PerMinute: float64(int(rate*10)) / 10})
-		}
-		if len(rk.Casts) == 0 {
-			line.Note = "cast counts for this kill could not be read"
 		}
 		you.Bosses = append(you.Bosses, line)
 		you.BossIDs = append(you.BossIDs, e.ID)

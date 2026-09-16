@@ -447,17 +447,19 @@ player's class and specialization."
   class and spec is found on its first boss, at Mythic if anyone is ranked there,
   else Heroic, and that sets the difficulty for the rest.
 - **What the showcase holds.** For every boss of the raid: the top-ranked parse
-  (player, rank percent, DPS or HPS, duration) and that player's **cast counts in
-  the kill**, read from the parse's report and turned into casts per minute — the
-  rotation as it was actually played. The first boss's talents are the build. The
-  upgrade table and talent diff are computed as ever, against the character's
-  **current** equipment and, when Blizzard gives it, current build, both fetched
-  as the site (no member token needed).
-- **The write-up** is a briefing, not a review: what the build is and why,
-  the rotation as the cast rates show it, the itemization slot by slot against
-  the character's current gear, and "Do these first" for a raider who has not
-  yet logged a raid. The card says so: "No logs of yours yet, so this is the
-  other way round".
+  (player, rank percent, DPS or HPS, duration), the talents used and the gear
+  worn. The first boss's talents are the build. The upgrade table and talent
+  diff are computed as ever, against the character's **current** equipment and,
+  when Blizzard gives it, current build, both fetched as the site (no member
+  token needed). *Revised the same evening*: no cast counts and no rotation.
+  With no log of the raider's there is nothing to set play against, so the
+  showcase is talents and gear only, and the report's cast table is not read.
+- **The write-up** is a briefing, not a review: the build and what it is built
+  around, the itemization slot by slot against the character's current gear, a
+  short summary of what a ready character looks like, and "Do these first" for a
+  raider who has not yet logged a raid. It says nothing about rotation or
+  ability use. The card says so: "No logs of yours yet, so this is the other
+  way round".
 - **Refusals that remain**: Blizzard has no specialization for the character
   (`nospec`); the raid list cannot be read, or nobody of the class and spec is
   ranked on the first boss at either difficulty (`nologs`: "no logs for this
@@ -466,5 +468,14 @@ player's class and specialization."
   any other run.
 - **Everything else holds**: officers unlimited, the trail (the entry reads
   "showcase of top <spec> <class> parses in <raid>"), leaderboard answers cached
-  a day per boss with the casts kept on them, nothing ever sent to Warcraft
+  a day per boss, nothing ever sent to Warcraft
   Logs. Analyses record the source `showcase`.
+
+## Fourth amendment, 2026-09-16: the card's layout
+
+The guild master then directed where the comparison lives on My Characters:
+the controls (source picker, Analyse, notices) sit in the left rail directly
+under the character list, and the result — the upgrade table, the talent
+difference and the write-up — sits in a third column to the right of the
+character card. Nobody scrolls to the foot of the page to run one or read one.
+On a narrow screen the three stack: rail, card, result.

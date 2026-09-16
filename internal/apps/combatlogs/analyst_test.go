@@ -47,10 +47,11 @@ func TestAnalystFromWarcraftLogs(t *testing.T) {
 	if newest == nil || newest.State != fights.Done || done == nil {
 		t.Fatalf("state = %+v", newest)
 	}
-	// One top lookup on Vexie (most kills), your latest kill on both
-	// bosses, their parse on Cauldron.
-	if w.tops != 1 || w.zones != 2 || w.latests != 2 || w.ranks != 1 {
-		t.Errorf("tops %d zones %d latests %d ranks %d; want 1 2 2 1", w.tops, w.zones, w.latests, w.ranks)
+	// One top lookup on Vexie (most kills) plus the top player's own
+	// ranking there (named talents), your latest kill on both bosses,
+	// their parse on Cauldron.
+	if w.tops != 1 || w.zones != 2 || w.latests != 2 || w.ranks != 2 {
+		t.Errorf("tops %d zones %d latests %d ranks %d; want 1 2 2 2", w.tops, w.zones, w.latests, w.ranks)
 	}
 	var head, neck *fights.UpgradeRow
 	for i := range done.Table {
@@ -82,14 +83,15 @@ func TestAnalystFromWarcraftLogs(t *testing.T) {
 }
 
 // TestAnalystShowcase: a raider with no logs gets the top parses of their
-// class and spec on every boss of the current raid, with cast counts and
-// rates, against their current gear; the prompt is the showcase one.
+// class and spec on every boss of the current raid -- talents and gear,
+// nothing about play -- against their current gear; the prompt is the
+// showcase one.
 func TestAnalystShowcase(t *testing.T) {
 	store := fights.NewMemStore()
 	audit := &memAudit{}
 	w := topOnly()
 	a, _ := seeded(t, store, audit, w)
-	model := &fakeAI{text: "Rotation\n\nDeath Strike 12 times a minute.\n\nDo these first\n\n- Copy the build."}
+	model := &fakeAI{text: "Talents\n\nCopy the build.\n\nDo these first\n\n- Copy the build."}
 	a.deps.AI = model
 	audit.entries = nil
 	postAnalyse(a, true, "", nekromoo)
@@ -102,14 +104,16 @@ func TestAnalystShowcase(t *testing.T) {
 		t.Fatalf("state = %+v", newest)
 	}
 	// The route looked the top player up on the first boss at Mythic; the
-	// worker used that answer and looked up the second boss; casts for both.
-	if w.tops != 2 || w.castsN != 2 || w.latests != 0 {
-		t.Errorf("tops %d casts %d latests %d; want 2 2 0", w.tops, w.castsN, w.latests)
+	// worker used that answer and looked up the second boss; each lookup
+	// re-read that player's own ranking for named talents. Nothing else:
+	// no report is opened, no cast table read, nothing of the member's.
+	if w.tops != 2 || w.latests != 0 || w.ranks != 2 {
+		t.Errorf("tops %d latests %d ranks %d; want 2 0 2", w.tops, w.latests, w.ranks)
 	}
 	if !strings.Contains(model.system, "briefing one of your raiders who has no logged raids") {
 		t.Error("the compare instruction was used for a showcase")
 	}
-	for _, want := range []string{"## mode\n\"showcase\"", "Vexie and the Geargrinders", "Cauldron of Carnage", `"their_name": "Toptank"`, `"name": "Death Strike"`, `"per_minute": 12.1`, `"name": "Dancing Rune Weapon"`, "Mythic"} {
+	for _, want := range []string{"## mode\n\"showcase\"", "Vexie and the Geargrinders", "Cauldron of Carnage", `"their_name": "Toptank"`, "Baleful Grave-Knight's Casque", "Consumption", "Nothing about how anyone played is known", "Mythic"} {
 		if !strings.Contains(model.prompt, want) {
 			t.Errorf("prompt is missing %q", want)
 		}
@@ -118,13 +122,15 @@ func TestAnalystShowcase(t *testing.T) {
 	if !strings.Contains(model.prompt, "could not be fetched") {
 		t.Error("the prompt does not explain the missing gear")
 	}
+	if strings.Contains(model.prompt, "casts") || strings.Contains(model.system, "Rotation") {
+		t.Error("a showcase talks about play it has no data for")
+	}
 	if len(audit.entries) != 1 || !strings.Contains(audit.entries[0].Detail, "showcase of top Blood Death Knight parses in The Venomous Abyss against Toptank: done") {
 		t.Errorf("audit = %+v", audit.entries)
 	}
-	// The leaderboard answers were cached under the class-and-spec key, with
-	// the casts kept on them.
+	// The leaderboard answers were cached under the class-and-spec key.
 	cached, err := store.ComparisonPlayer(context.Background(), fights.ComparisonKey{Region: "top", RealmSlug: "DeathKnight", Name: "blood", Encounter: 3010, WCLDiff: 5, Metric: "dps"})
-	if err != nil || !strings.Contains(string(cached.Payload), "Dancing Rune Weapon") {
+	if err != nil || !strings.Contains(string(cached.Payload), "Toptank") {
 		t.Errorf("cached leaderboard = %+v, %v", cached, err)
 	}
 }
@@ -176,10 +182,10 @@ func TestAnalystFromUpload(t *testing.T) {
 			}
 			// Nekromoo pulled Vexie (Mythic) and Cauldron (Heroic) once
 			// each; the night is the harder difficulty, so Vexie alone: one
-			// top-player lookup, no other boss to fetch, no Warcraft Logs
-			// lookup of the member.
-			if w.tops != 1 || w.ranks != 0 || w.zones != 0 || w.latests != 0 {
-				t.Errorf("tops %d ranks %d zones %d latests %d; want 1 0 0 0", w.tops, w.ranks, w.zones, w.latests)
+			// top-player lookup plus that player's own ranking there, no other
+			// boss to fetch, no Warcraft Logs lookup of the member.
+			if w.tops != 1 || w.ranks != 1 || w.zones != 0 || w.latests != 0 {
+				t.Errorf("tops %d ranks %d zones %d latests %d; want 1 1 0 0", w.tops, w.ranks, w.zones, w.latests)
 			}
 			var head, neck *fights.UpgradeRow
 			for i := range done.Table {
@@ -266,8 +272,8 @@ func TestAnalystFetchesEveryBoss(t *testing.T) {
 	if !a.AnalyseOnce(context.Background()) {
 		t.Fatal("nothing pending")
 	}
-	if w.tops != 1 || w.ranks != 1 {
-		t.Errorf("top lookups %d, rank fetches %d; want 1 and 1", w.tops, w.ranks)
+	if w.tops != 1 || w.ranks != 2 {
+		t.Errorf("top lookups %d, rank fetches %d; want 1 and 2 (the top player's own ranking, then the other boss)", w.tops, w.ranks)
 	}
 	for _, want := range []string{"Vexie and the Geargrinders", "Cauldron of Carnage", `"pulls": 2`, `"their_dps": 1400000`} {
 		if !strings.Contains(model.prompt, want) {

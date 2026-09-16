@@ -84,9 +84,10 @@ func (c *HTTPClient) TopPlayer(ctx context.Context, encounterID, wclDifficulty i
 	return decodeLeaderboard(enc.CharacterRankings, metric)
 }
 
-// leaderboard is the shape of the characterRankings scalar. UNCONFIRMED in
-// its field names until a live response is captured (T050); the decoder is
-// lenient.
+// leaderboard is the shape of the characterRankings scalar, confirmed against
+// the live API on 2026-09-16 (T050): the server carries a name and a region
+// ("EU") and no slug, the class is written without spaces, and the talents
+// are ids alone.
 type leaderboard struct {
 	Rankings []struct {
 		Name     string  `json:"name"`
@@ -103,16 +104,8 @@ type leaderboard struct {
 			Slug   string `json:"slug"`
 			Region string `json:"region"`
 		} `json:"server"`
-		Gear []struct {
-			ID        int    `json:"id"`
-			Name      string `json:"name"`
-			ItemLevel int    `json:"itemLevel"`
-			Quality   int    `json:"quality"`
-		} `json:"gear"`
-		Talents []struct {
-			ID   int    `json:"id"`
-			Name string `json:"name"`
-		} `json:"talents"`
+		Gear    []gearJSON      `json:"gear"`
+		Talents json.RawMessage `json:"talents"`
 	} `json:"rankings"`
 }
 
@@ -139,11 +132,11 @@ func decodeLeaderboard(raw json.RawMessage, metric string) (CharacterRef, Rankin
 		ReportCode: r.Report.Code, FightID: r.Report.FightID,
 	}
 	for _, g := range r.Gear {
-		out.Gear = append(out.Gear, Gear{ID: g.ID, Name: g.Name, ItemLevel: g.ItemLevel, Quality: g.Quality})
+		out.Gear = append(out.Gear, g.gear())
 	}
-	for _, t := range r.Talents {
-		out.Talents = append(out.Talents, Talent{ID: t.ID, Name: t.Name})
-	}
+	// Ids only, here: the leaderboard's talents carry no names, and the
+	// worker resolves them from Blizzard's Game Data.
+	out.Talents = decodeTalents(r.Talents)
 	return ref, out, nil
 }
 

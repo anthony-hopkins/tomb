@@ -38,16 +38,18 @@ func SystemFor(mode string) string {
 }
 
 // SystemShowcase is the instruction when the raider has no logs to compare:
-// the top parses are the subject, and the raider's current gear is the
-// only thing of theirs on the table.
-const SystemShowcase = `You are an experienced World of Warcraft raid leader briefing one of your raiders who has no logged raids yet. You are given, for their class and specialization, the top-ranked parse on each boss of the current raid at the given difficulty: the player, the parse, the talents used, the gear worn, and how many times each ability was cast in that kill with the kill's length. You are also given the raider's current gear and a computed slot-by-slot table against the top player's gear, and a computed talent difference where the raider's build is known.
+// the top parses are the subject, their talents and gear the whole of it,
+// and the raider's current gear and build the only things of theirs on the
+// table. Nothing about play: there is no log of the raider's to set it
+// against, and a rotation lecture from a parse is guesswork.
+const SystemShowcase = `You are an experienced World of Warcraft raid leader briefing one of your raiders who has no logged raids yet. You are given, for their class and specialization, the top-ranked parse on each boss of the current raid at the given difficulty: the player, the parse, the talents used and the gear worn. You are also given the raider's current gear, a computed slot-by-slot table against the top player's gear, and a computed talent difference where the raider's build is known. There are no cast counts or timings in the data, so say nothing about rotation or ability use.
 
 Write for the raider, plainly and specifically, the way you would before their first raid:
-- Rotation: from the cast counts and kill lengths, say what the top players press and how often -- casts per minute for the core abilities, which cooldowns and how many times per kill -- and what that implies about priority. Name abilities. Where bosses differ, say so.
-- Talents: the build the top parses use, and what it is built around. If the raider's own talents are known, name the differences; if not, say the build is what to copy.
-- Itemization: what the top players wear -- item level, notable pieces, trinkets and weapons -- and, from the table, which of the raider's slots are furthest behind. Treat the table as fact; do not restate it.
+- Talents: the build the top parses use and what it is built around; where the top players differ from boss to boss, say so and why that might be. If the raider's own talents are known, name the differences and which matter; if not, say the build is what to copy.
+- Itemization: what the top players wear -- item level, notable pieces, trinkets, weapons, enchants and gems where given -- and, from the table, which of the raider's slots are furthest behind and what to chase first. Treat the table as fact; do not restate it row by row.
+- A section titled "The short version": in a few lines, what a ready character of this specialization looks like for this raid, talents and gear together.
 - End with a section titled "Do these first" listing exactly three things in priority order, each one line.
-- About 600 words. Plain text with short headings on their own lines. No tables, no bullet symbols other than a leading dash, no markdown emphasis.
+- About 450 words. Plain text with short headings on their own lines. No tables, no bullet symbols other than a leading dash, no markdown emphasis.
 - Never invent an ability, item, talent or number that is not in the data.`
 
 // Input is everything the model is given, as labelled sections. Every
@@ -98,9 +100,6 @@ type Boss struct {
 	TheirHPS         float64 `json:"their_hps,omitempty"`
 	TheirRankPercent float64 `json:"their_rank_percent,omitempty"`
 	TheirDuration    string  `json:"their_kill_duration,omitempty"`
-	// TheirCasts is their ability use in that kill, with casts per minute
-	// worked out from the kill's length.
-	TheirCasts []CastRate `json:"their_casts,omitempty"`
 	// Note explains a missing side, such as no ranked kill by them here.
 	Note string `json:"note,omitempty"`
 }
@@ -118,13 +117,6 @@ type Player struct {
 	// Note explains a gap in the data, such as a night with no gear
 	// recorded, so the model does not read absence as a choice.
 	Note string `json:"note,omitempty"`
-}
-
-// CastRate is one ability's use in a kill, as a count and a rate.
-type CastRate struct {
-	Name      string  `json:"name"`
-	Count     int     `json:"count"`
-	PerMinute float64 `json:"per_minute"`
 }
 
 // Cast is one ability's use in a pull.
