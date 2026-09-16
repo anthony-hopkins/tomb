@@ -150,8 +150,12 @@ killed most, fetches their best parse, gear and talents on every boss, works out
 a slot-by-slot upgrade table and a talent difference itself, and has a model
 write the review, boss by boss and as a whole. Pick an uploaded night as the
 source instead and the review also covers wipes, pull counts and ability use,
-which Warcraft Logs' rankings do not carry. Nothing is ever sent to Warcraft Logs. A member may
-run one every two hours; officers are not limited. Every run is in the Logs.
+which Warcraft Logs' rankings do not carry. A character with no logs anywhere
+gets the reverse instead: the top parses of its class and specialization on every
+boss of the current raid, broken down into build, rotation (the top player's
+casts per minute in the kill) and itemization against the character's current
+gear. Nothing is ever sent to Warcraft Logs. A member may run one every two
+hours; officers are not limited. Every run is in the Logs.
 
 Configuration: `WCL_CLIENT_ID` and `WCL_CLIENT_SECRET` (a read-only Warcraft
 Logs API client; without them the card says comparisons are unavailable),

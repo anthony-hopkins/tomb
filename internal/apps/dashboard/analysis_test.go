@@ -35,6 +35,12 @@ func (noWCL) LatestRank(context.Context, wcl.CharacterRef, int, int, string) (wc
 	return wcl.Ranking{}, wcl.ErrNoRank
 }
 
+func (noWCL) CurrentZone(context.Context) (wcl.RaidZone, error) { return wcl.RaidZone{}, wcl.ErrNoRank }
+
+func (noWCL) Casts(context.Context, string, int, string) ([]wcl.CastCount, error) {
+	return nil, wcl.ErrNoRank
+}
+
 // stackAnalysis mounts the dashboard with a fights store and, when asked, a
 // Warcraft Logs client.
 func stackAnalysis(t *testing.T, store fights.Store, withWCL bool) http.Handler {
@@ -148,9 +154,9 @@ func TestAnalysisSection(t *testing.T) {
 		}), true, "/app/dashboard",
 			[]string{"could not be completed: the model is busy", "Old Casque"}, nil, false},
 		{"message: no spec", storeWith(t, nil), true, "/app/dashboard?c=area-52/nekromoo&msg=nospec",
-			[]string{"did not record this character"}, nil, false},
+			[]string{"specialization is not known"}, nil, false},
 		{"message: no logs", storeWith(t, nil), true, "/app/dashboard?c=area-52/nekromoo&msg=nologs",
-			[]string{"no ranked kills for this character"}, nil, false},
+			[]string{"no logs for this character"}, nil, false},
 		{"message: wait", storeWith(t, nil), true, "/app/dashboard?msg=wait&min=90",
 			[]string{"another analysis in 90 minutes"}, nil, false},
 		{"message: unknown code renders nothing", storeWith(t, nil), true, "/app/dashboard?msg=<script>",

@@ -111,12 +111,31 @@ core and exercises begin → pieces → finish → parsed with a fake store.
 4. Logs: a `combatlogs.analyse` entry naming you, the character, the fight and the
    player (scenario 6).
 
+### 6a. A character with no logs: the showcase (third amendment)
+
+1. Pick a character of yours that has never been logged on Warcraft Logs (an
+   alt is ideal), leave the source as **My latest raid on Warcraft Logs** and
+   press **Analyse**. Expected: "analysing…", then the card says "No logs of
+   yours yet, so this is the other way round: the top <spec> <class> parses,
+   broken down, against your current gear", the table compares your *current*
+   equipment (as on the card's Equipped block) against the top player's on the
+   first boss, and the write-up has Build, Rotation (with casts per minute read
+   from the top kill), Itemization and "Do these first" sections, one boss
+   after another for the whole current raid.
+2. Check a rotation line against the top player's Warcraft Logs report (the
+   Casts table of that kill): the counts should match and the per-minute rate
+   should be count over the kill's minutes.
+3. Logs: the `combatlogs.analyse` entry reads "showcase of top <spec> <class>
+   parses in <raid> against <name>: done".
+4. Run it again as an officer within the day: the app log shows no leaderboard
+   or casts fetch (the day's cache answers, casts included).
+
 ### 7. Refusals and the allowance (US3, scenarios 3, 4, 5)
 
 | Do | Expected |
 |---|---|
-| Analyse from Warcraft Logs on a character with no logs there | "no ranked kills for this character"; nothing created |
-| Analyse an upload recorded without Advanced Combat Logging | "did not record this character's specialization"; nothing created |
+| Analyse from Warcraft Logs on a character with no logs there | Not a refusal since the third amendment: a **showcase** runs (section 6a). The message "Warcraft Logs has no logs for this character and the top parses of its class could not be read just now" appears only when the raid list or leaderboard could not be read; then nothing is created |
+| Analyse an upload recorded without Advanced Combat Logging | "This character's specialization is not known…"; nothing created |
 | Analyse a night on a boss where nobody of your class and spec is ranked yet (a brand-new tier) | Refused with the message; allowance untouched (scenario 3) |
 | As a member (not officer), run one, then try again | "You can run another in N minutes" (scenario 4); as an officer it runs |
 | Temporarily revoke `roles/aiplatform.user` on develop's VM account, run one | The card says it could not be completed; the previous result stays; the allowance is not spent (scenario 5); the app log shows the reason. Restore the role |
@@ -124,7 +143,7 @@ core and exercises begin → pieces → finish → parsed with a fake store.
 
 ### 8. Nothing goes to Warcraft Logs (US3, scenario 7; FR-035)
 
-Code review check, not a runtime one: `internal/wcl` has four read methods and
+Code review check, not a runtime one: `internal/wcl` has six read methods and
 one request path; `grep -rn "warcraftlogs" internal/` shows only the token
 URL, the client endpoint and the link parser. No page mentions uploading to
 Warcraft Logs.

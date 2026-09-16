@@ -1,0 +1,13 @@
+{
+  "_note": "HAND-WRITTEN from the documented shape of worldData.zones (research D9, third amendment). UNCONFIRMED: replace with a live capture (T050).",
+  "data": {
+    "worldData": {
+      "zones": [
+        {"id": 39, "name": "Mythic+ Dungeons", "frozen": false, "expansion": {"id": 5, "name": "The War Within"}, "difficulties": [{"id": 10, "name": "Mythic+"}], "encounters": [{"id": 12660, "name": "Ara-Kara"}]},
+        {"id": 42, "name": "Liberation of Undermine", "frozen": true, "expansion": {"id": 5, "name": "The War Within"}, "difficulties": [{"id": 1, "name": "LFR"}, {"id": 3, "name": "Normal"}, {"id": 4, "name": "Heroic"}, {"id": 5, "name": "Mythic"}], "encounters": [{"id": 3009, "name": "Vexie and the Geargrinders"}]},
+        {"id": 44, "name": "The Venomous Abyss", "frozen": false, "expansion": {"id": 6, "name": "Midnight"}, "difficulties": [{"id": 1, "name": "LFR"}, {"id": 3, "name": "Normal"}, {"id": 4, "name": "Heroic"}, {"id": 5, "name": "Mythic"}], "encounters": [{"id": 3009, "name": "Vexie and the Geargrinders"}, {"id": 3010, "name": "Cauldron of Carnage"}, {"id": 3011, "name": "Rik Reverb"}]},
+        {"id": 45, "name": "Midnight Dungeons", "frozen": false, "expansion": {"id": 6, "name": "Midnight"}, "difficulties": [{"id": 10, "name": "Mythic+"}], "encounters": [{"id": 12700, "name": "Some Dungeon"}]}
+      ]
+    }
+  }
+}

@@ -38,6 +38,14 @@ func (f fakeWCL) ZoneRankings(context.Context, wcl.CharacterRef) (wcl.Zone, erro
 		Encounters: []wcl.ZoneEncounter{{ID: 3009, Name: "Vexie and the Geargrinders", Kills: 6}, {ID: 3010, Name: "Cauldron of Carnage", Kills: 4}}}, nil
 }
 
+func (f fakeWCL) CurrentZone(context.Context) (wcl.RaidZone, error) {
+	return wcl.RaidZone{ID: 44, Name: "The Venomous Abyss", Encounters: []wcl.ZoneEncounter{{ID: 3009, Name: "Vexie and the Geargrinders"}}}, nil
+}
+
+func (f fakeWCL) Casts(context.Context, string, int, string) ([]wcl.CastCount, error) {
+	return []wcl.CastCount{{ID: 49998, Name: "Death Strike", Count: 63}}, nil
+}
+
 func (f fakeWCL) LatestRank(context.Context, wcl.CharacterRef, int, int, string) (wcl.Ranking, error) {
 	return wcl.Ranking{Name: "Nekromoo", Class: "Death Knight", Spec: "Blood", Metric: "dps", RankPercent: 74, Amount: 1102000, Duration: 250 * time.Second,
 		StartedAt: time.Date(2026, 9, 14, 20, 0, 0, 0, time.UTC),

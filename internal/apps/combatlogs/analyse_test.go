@@ -27,11 +27,26 @@ type fakeWCL struct {
 	zone     wcl.Zone
 	zoneErr  error
 	latest   wcl.Ranking
+	raid     wcl.RaidZone
+	casts    []wcl.CastCount
 	tops     int
 	ranks    int
 	zones    int
 	latests  int
+	castsN   int
 	lastSpec string
+}
+
+func (f *fakeWCL) CurrentZone(context.Context) (wcl.RaidZone, error) {
+	if f.raid.ID == 0 {
+		return wcl.RaidZone{}, errors.New("no zone")
+	}
+	return f.raid, nil
+}
+
+func (f *fakeWCL) Casts(context.Context, string, int, string) ([]wcl.CastCount, error) {
+	f.castsN++
+	return f.casts, nil
 }
 
 func (f *fakeWCL) BestRank(context.Context, wcl.CharacterRef, int, int, string) (wcl.Ranking, error) {
@@ -55,7 +70,7 @@ func (f *fakeWCL) LatestRank(context.Context, wcl.CharacterRef, int, int, string
 	return f.latest, nil
 }
 
-var topTank = wcl.Ranking{Name: "Toptank", Class: "Death Knight", Spec: "Blood", Metric: "dps", RankPercent: 100, Amount: 1498220, Duration: 312 * time.Second,
+var topTank = wcl.Ranking{Name: "Toptank", Class: "Death Knight", Spec: "Blood", Metric: "dps", RankPercent: 100, Amount: 1498220, Duration: 312 * time.Second, ReportCode: "AbCdEf123", FightID: 7,
 	Gear:    []wcl.Gear{{ID: 212345, Name: "Baleful Grave-Knight's Casque", ItemLevel: 320}, {ID: 999, Name: "Pendant of Malefic Fury", ItemLevel: 324}},
 	Talents: []wcl.Talent{{ID: 1, Name: "Marrowrend"}, {ID: 2, Name: "Consumption"}}}
 
@@ -70,7 +85,17 @@ func healthyWCL() *fakeWCL {
 		latest: wcl.Ranking{Name: "Nekromoo", Class: "Death Knight", Spec: "Blood", Metric: "dps", RankPercent: 74, Amount: 1102000, Duration: 250 * time.Second,
 			StartedAt: time.Date(2026, 9, 14, 20, 0, 0, 0, time.UTC),
 			Gear:      []wcl.Gear{{ID: 212345, Name: "Baleful Grave-Knight's Casque", ItemLevel: 311}}, Talents: []wcl.Talent{{ID: 1, Name: "Marrowrend"}, {ID: 3, Name: "Bonestorm"}}},
+		raid:  wcl.RaidZone{ID: 44, Name: "The Venomous Abyss", Encounters: []wcl.ZoneEncounter{{ID: 3009, Name: "Vexie and the Geargrinders"}, {ID: 3010, Name: "Cauldron of Carnage"}}},
+		casts: []wcl.CastCount{{ID: 49998, Name: "Death Strike", Count: 63}, {ID: 49028, Name: "Dancing Rune Weapon", Count: 4}},
 	}
+}
+
+// topOnly is a Warcraft Logs that knows the leaderboards and the raid but
+// has never seen the member: what a raider with no logs gets.
+func topOnly() *fakeWCL {
+	w := healthyWCL()
+	w.zoneErr = wcl.ErrNoCharacter
+	return w
 }
 
 // seeded parses the synthetic night into the store and returns the app and
@@ -95,7 +120,7 @@ func postAnalyse(a *App, officer bool, source, character string) *httptest.Respo
 	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	ctx := platform.ContextWithSession(r.Context(), auth.Session{User: auth.User{ID: 1, BattleTag: "Lazzloe#1149"}, AccessToken: "t"})
 	ctx = platform.ContextWithProfile(ctx, platform.Profile{
-		Characters: []blizzard.Character{{Name: "Nekromoo", RealmSlug: "area-52"}},
+		Characters: []blizzard.Character{{Name: "Nekromoo", RealmSlug: "area-52", Class: "Death Knight", ActiveSpec: "Blood"}},
 		Membership: platform.GuildMembership{IsMember: true, IsOfficer: officer},
 	})
 	rec := httptest.NewRecorder()
@@ -125,8 +150,10 @@ func TestAnalyseRoute(t *testing.T) {
 		wantRows int
 	}{
 		{"warcraft logs: success", healthyWCL(), "", nil, "", 1},
-		{"warcraft logs: no logs", &fakeWCL{zoneErr: wcl.ErrNoLogs, top: topTank, topRef: topRef}, "", nil, "nologs", 0},
-		{"warcraft logs: unknown character", &fakeWCL{zoneErr: wcl.ErrNoCharacter}, "", nil, "nologs", 0},
+		{"warcraft logs: no logs -> a showcase", topOnly(), "", nil, "", 1},
+		{"warcraft logs: unknown character -> a showcase", topOnly(), "", nil, "", 1},
+		{"no logs and no raid to showcase", &fakeWCL{zoneErr: wcl.ErrNoLogs, top: topTank, topRef: topRef}, "", nil, "nologs", 0},
+		{"no logs and nobody ranked", &fakeWCL{zoneErr: wcl.ErrNoLogs, topErr: wcl.ErrNoRank, raid: healthyWCL().raid}, "", nil, "nologs", 0},
 		{"warcraft logs: down", &fakeWCL{zoneErr: errors.New("boom")}, "", nil, "unavailable", 0},
 		{"upload: success", healthyWCL(), "upload", nil, "", 1},
 		{"upload: no raid pulls", healthyWCL(), "upload", func(s *fights.MemStore) {
@@ -178,6 +205,9 @@ func TestAnalyseRoute(t *testing.T) {
 					wantSource, wantUpload := fights.SourceWCL, int64(0)
 					if tc.source == "upload" {
 						wantSource, wantUpload = fights.SourceUpload, u.ID
+					}
+					if tc.wcl.zoneErr != nil {
+						wantSource = fights.SourceShowcase
 					}
 					if an.Source != wantSource || an.UploadID != wantUpload || an.Name != "Nekromoo" || an.ComparisonID == 0 {
 						t.Errorf("analysis = %+v", an)

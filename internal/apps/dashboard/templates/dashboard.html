@@ -124,7 +124,11 @@
           {{if .Pending}}<p class="notice" role="status">Analysing&hellip; this page will update itself.</p>{{end}}
           {{with .Failure}}<p class="notice" role="alert">The last analysis could not be completed: {{.}}. Try again later.</p>{{end}}
           {{with .Result}}
+          {{if .Showcase}}
+          <p class="analysis-meta">No logs of yours yet, so this is the other way round: the top {{.AgainstAs}} parses, broken down, against your current gear. Analysed {{.Analysed}}; <strong>{{.Against}}</strong> holds the first boss.</p>
+          {{else}}
           <p class="analysis-meta">Analysed {{.Analysed}} against <strong>{{.Against}}</strong>{{with .AgainstAs}}, {{.}}{{end}}</p>
+          {{end}}
           <table class="upgrade-table">
             <thead><tr><th>Slot</th><th>Yours</th><th>Theirs</th><th>Verdict</th></tr></thead>
             <tbody>

@@ -215,6 +215,20 @@ records each analysis's `source`; the route takes `source=wcl` (default) or
 picker offers Warcraft Logs first, then uploads. Tests updated throughout; the
 zone-rankings fixture is hand-written and UNCONFIRMED like the others.
 
+## Third amendment, 2026-09-16: a showcase when the character has no logs
+
+Also done the same day, after the guild master's next direction (spec → Third
+amendment): a character Warcraft Logs does not know gets a showcase instead of
+a refusal. `wcl.CurrentZone` and `wcl.Casts` read the current raid and a top
+player's cast counts in their kill; the route falls back to source `showcase`
+with the class and spec from Blizzard's profile and the top player on the
+raid's first boss (Mythic, then Heroic), cached a day under a class-and-spec
+key; the worker fills every boss with its top parse and cast rates, fetches
+the character's current gear and build as the site, and uses the showcase
+prompt (`ai.SystemShowcase`, `ai.ModeShowcase`); the card explains the
+reversal. Fixtures `zones.json` and `casts.json` are hand-written and
+UNCONFIRMED, so T040/T050 now cover them too.
+
 ## Phase 6: Polish & cross-cutting
 
 - [X] T069 [P] `docs/adding-an-app.md`: document `Deps.WCL` / `Deps.AI`, the shared-store pattern (`internal/fights` beside `internal/armory`), the CSRF header form for scripted requests, and the "meta refresh, not polling" convention for background work.

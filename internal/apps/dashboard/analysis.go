@@ -42,6 +42,7 @@ type sourceOption struct {
 }
 
 type resultView struct {
+	Showcase   bool // no logs of the raider's: the top parses, broken down
 	Against    string
 	AgainstAs  string // "Blood Death Knight, top on Vexie"
 	Analysed   string
@@ -59,9 +60,9 @@ type paragraph struct {
 // messages are the analyse route's codes, worded for the card. The route
 // never sends text; a code that is not here renders nothing.
 var messages = map[string]string{
-	"nologs":      "Warcraft Logs has no ranked kills for this character in the current raid. Log your raids with the Warcraft Logs uploader, or upload a combat log here and pick it as the source.",
+	"nologs":      "Warcraft Logs has no logs for this character and the top parses of its class could not be read just now. Try again later, or upload a combat log here and pick it as the source.",
 	"nopulls":     "That upload has no raid pulls for this character.",
-	"nospec":      "The log did not record this character's specialization, so there is nothing to compare against. Switch on Advanced Combat Logging before the next raid.",
+	"nospec":      "This character's specialization is not known, so there is nothing to compare against: the log did not record it (switch on Advanced Combat Logging before the next raid), or Blizzard has none for it yet.",
 	"norank":      "Warcraft Logs has no ranked player of this class and specialization on that boss at that difficulty yet.",
 	"unavailable": "The comparison could not be started just now. Try again later.",
 }
@@ -157,7 +158,7 @@ func plural(n int) string {
 }
 
 func (a *App) result(an fights.Analysis) *resultView {
-	rv := &resultView{Table: an.Table, Model: an.Model, Analysed: an.CreatedAt.In(a.deps.Config.Timezone).Format("2 Jan 2006, 15:04")}
+	rv := &resultView{Showcase: an.Source == fights.SourceShowcase, Table: an.Table, Model: an.Model, Analysed: an.CreatedAt.In(a.deps.Config.Timezone).Format("2 Jan 2006, 15:04")}
 	if an.FinishedAt != nil {
 		rv.Analysed = an.FinishedAt.In(a.deps.Config.Timezone).Format("2 Jan 2006, 15:04")
 	}

@@ -81,6 +81,54 @@ func TestAnalystFromWarcraftLogs(t *testing.T) {
 	}
 }
 
+// TestAnalystShowcase: a raider with no logs gets the top parses of their
+// class and spec on every boss of the current raid, with cast counts and
+// rates, against their current gear; the prompt is the showcase one.
+func TestAnalystShowcase(t *testing.T) {
+	store := fights.NewMemStore()
+	audit := &memAudit{}
+	w := topOnly()
+	a, _ := seeded(t, store, audit, w)
+	model := &fakeAI{text: "Rotation\n\nDeath Strike 12 times a minute.\n\nDo these first\n\n- Copy the build."}
+	a.deps.AI = model
+	audit.entries = nil
+	postAnalyse(a, true, "", nekromoo)
+
+	if !a.AnalyseOnce(context.Background()) {
+		t.Fatal("nothing pending")
+	}
+	newest, done, _ := store.LatestAnalyses(context.Background(), "Nekromoo", "area-52")
+	if newest == nil || newest.State != fights.Done || done == nil || done.Source != fights.SourceShowcase {
+		t.Fatalf("state = %+v", newest)
+	}
+	// The route looked the top player up on the first boss at Mythic; the
+	// worker used that answer and looked up the second boss; casts for both.
+	if w.tops != 2 || w.castsN != 2 || w.latests != 0 {
+		t.Errorf("tops %d casts %d latests %d; want 2 2 0", w.tops, w.castsN, w.latests)
+	}
+	if !strings.Contains(model.system, "briefing one of your raiders who has no logged raids") {
+		t.Error("the compare instruction was used for a showcase")
+	}
+	for _, want := range []string{"## mode\n\"showcase\"", "Vexie and the Geargrinders", "Cauldron of Carnage", `"their_name": "Toptank"`, `"name": "Death Strike"`, `"per_minute": 12.1`, `"name": "Dancing Rune Weapon"`, "Mythic"} {
+		if !strings.Contains(model.prompt, want) {
+			t.Errorf("prompt is missing %q", want)
+		}
+	}
+	// Nekromoo has no gear on record and the fake Blizzard cannot fetch any.
+	if !strings.Contains(model.prompt, "could not be fetched") {
+		t.Error("the prompt does not explain the missing gear")
+	}
+	if len(audit.entries) != 1 || !strings.Contains(audit.entries[0].Detail, "showcase of top Blood Death Knight parses in The Venomous Abyss against Toptank: done") {
+		t.Errorf("audit = %+v", audit.entries)
+	}
+	// The leaderboard answers were cached under the class-and-spec key, with
+	// the casts kept on them.
+	cached, err := store.ComparisonPlayer(context.Background(), fights.ComparisonKey{Region: "top", RealmSlug: "DeathKnight", Name: "blood", Encounter: 3010, WCLDiff: 5, Metric: "dps"})
+	if err != nil || !strings.Contains(string(cached.Payload), "Dancing Rune Weapon") {
+		t.Errorf("cached leaderboard = %+v, %v", cached, err)
+	}
+}
+
 // TestAnalystFromUpload: a run from an upload finishes with the computed
 // table, the diff, the write-up and one audit entry; a failing model fails
 // the row and leaves an earlier result alone; unknown ids keep their

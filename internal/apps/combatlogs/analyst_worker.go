@@ -66,6 +66,7 @@ func (a *App) AnalyseOnce(ctx context.Context) bool {
 // yourSide is the member's half of the comparison, whichever source it
 // came from: the night as the model reads it, and what to put in the table.
 type yourSide struct {
+	Mode        string // ai.ModeCompare or ai.ModeShowcase
 	Class, Spec string
 	Raid        ai.Raid
 	Bosses      []ai.Boss
@@ -122,47 +123,56 @@ func (a *App) run(ctx context.Context, an fights.Analysis) {
 
 	var you yourSide
 	var err error
-	if an.Source == fights.SourceWCL {
+	switch an.Source {
+	case fights.SourceWCL:
 		you, err = a.fromWCL(ctx, an, cp, healer)
-	} else {
+	case fights.SourceShowcase:
+		you, err = a.fromShowcase(ctx, an, cp, &top, healer)
+	default:
 		you, err = a.fromUpload(ctx, an, healer)
 	}
 	if err != nil {
 		fail(err.Error())
 		return
 	}
+	if you.Mode == "" {
+		you.Mode = ai.ModeCompare
+	}
 
 	// Their parse on every boss of the night, from the cache or Warcraft
-	// Logs; a boss they have no ranked kill on is noted, not fatal.
-	ref := wcl.CharacterRef{Region: cp.Region, Slug: cp.RealmSlug, Name: top.Name}
-	if cp.Region == "id" {
-		ref = wcl.CharacterRef{ID: parseID(cp.Name)}
-	}
+	// Logs; a boss they have no ranked kill on is noted, not fatal. A
+	// showcase filled these in itself, boss by boss.
 	theirs := map[int]*wcl.Ranking{cp.Encounter: &top}
-	for _, id := range you.BossIDs {
-		if _, have := theirs[id]; have {
-			continue
+	if you.Mode != ai.ModeShowcase {
+		ref := wcl.CharacterRef{Region: cp.Region, Slug: cp.RealmSlug, Name: top.Name}
+		if cp.Region == "id" {
+			ref = wcl.CharacterRef{ID: parseID(cp.Name)}
 		}
-		row, err := a.comparison(ctx, ref, id, cp.WCLDiff, cp.Metric)
-		if err != nil {
-			log.Warn("their parse on a boss", "encounter", id, "error", err)
-			continue
-		}
-		var rk wcl.Ranking
-		if json.Unmarshal(row.Payload, &rk) == nil {
-			theirs[id] = &rk
-		}
-	}
-	for i, id := range you.BossIDs {
-		if rk := theirs[id]; rk != nil {
-			you.Bosses[i].TheirRankPercent, you.Bosses[i].TheirDuration = rk.RankPercent, seconds(rk.Duration)
-			if healer {
-				you.Bosses[i].TheirHPS = rk.Amount
-			} else {
-				you.Bosses[i].TheirDPS = rk.Amount
+		for _, id := range you.BossIDs {
+			if _, have := theirs[id]; have {
+				continue
 			}
-		} else {
-			you.Bosses[i].Note = "the top player has no ranked kill of this boss at this difficulty"
+			row, err := a.comparison(ctx, ref, id, cp.WCLDiff, cp.Metric)
+			if err != nil {
+				log.Warn("their parse on a boss", "encounter", id, "error", err)
+				continue
+			}
+			var rk wcl.Ranking
+			if json.Unmarshal(row.Payload, &rk) == nil {
+				theirs[id] = &rk
+			}
+		}
+		for i, id := range you.BossIDs {
+			if rk := theirs[id]; rk != nil {
+				you.Bosses[i].TheirRankPercent, you.Bosses[i].TheirDuration = rk.RankPercent, seconds(rk.Duration)
+				if healer {
+					you.Bosses[i].TheirHPS = rk.Amount
+				} else {
+					you.Bosses[i].TheirDPS = rk.Amount
+				}
+			} else {
+				you.Bosses[i].Note = "the top player has no ranked kill of this boss at this difficulty"
+			}
 		}
 	}
 	// Their gear and talents: from the main boss, else the first boss that
@@ -206,6 +216,7 @@ func (a *App) run(ctx context.Context, an fights.Analysis) {
 		(you.Class != "" && theirClass != "" && !strings.EqualFold(you.Class, theirClass))
 
 	in := ai.Input{
+		Mode:   you.Mode,
 		Raid:   you.Raid,
 		Bosses: you.Bosses,
 		You: ai.Player{Name: an.Name, Class: you.Class, Spec: you.Spec, Damage: you.Damage, Healing: you.Healing, Deaths: you.Deaths,
@@ -218,7 +229,7 @@ func (a *App) run(ctx context.Context, an fights.Analysis) {
 
 	callCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
-	text, usage, err := a.deps.AI.Write(callCtx, ai.System, ai.Build(in))
+	text, usage, err := a.deps.AI.Write(callCtx, ai.SystemFor(you.Mode), ai.Build(in))
 	switch {
 	case errors.Is(err, ai.ErrBusy):
 		fail("the model is busy; try again in a few minutes")
@@ -316,6 +327,123 @@ func (a *App) fromWCL(ctx context.Context, an fights.Analysis, cp *fights.Compar
 	}
 	you.Talents = a.talentNames(ctx, latest.Talents)
 	return you, nil
+}
+
+// fromShowcase is a raider with no logs anywhere: the top-ranked parse of
+// their class and spec on every boss of the current raid, each with its
+// cast counts, against the raider's current gear and, when Blizzard gives
+// it, their current build. The comparison row is the first boss's top
+// player; the rest are looked up here, cached a day each.
+func (a *App) fromShowcase(ctx context.Context, an fights.Analysis, cp *fights.ComparisonPlayer, top *wcl.Ranking, healer bool) (yourSide, error) {
+	if a.deps.WCL == nil {
+		return yourSide{}, errors.New("the site has no warcraft logs client")
+	}
+	raid, err := a.deps.WCL.CurrentZone(ctx)
+	if err != nil {
+		return yourSide{}, errors.New("the current raid could not be read from warcraft logs")
+	}
+	class, spec := cp.Class, cp.Spec
+	you := yourSide{
+		Mode: ai.ModeShowcase, Class: class, Spec: spec,
+		Raid: ai.Raid{
+			Difficulty: fights.DifficultyName(wcl.GameDifficulty(cp.WCLDiff)),
+			Date:       a.now().In(a.deps.Config.Timezone).Format("2 Jan 2006"),
+			Note:       "the raider has no logs on Warcraft Logs and no upload; each boss shows the top-ranked parse of their class and specialization, with that player's cast counts in the kill",
+		},
+		Label: fmt.Sprintf("showcase of top %s %s parses in %s", spec, class, raid.Name),
+	}
+	for _, e := range raid.Encounters {
+		var rk wcl.Ranking
+		if e.ID == cp.Encounter {
+			rk = *top
+		} else {
+			row, err := a.topPlayer(ctx, e.ID, cp.WCLDiff, class, spec, cp.Metric)
+			if err != nil {
+				a.deps.Logger.Warn("top player on a boss", "encounter", e.ID, "error", err)
+				continue
+			}
+			if json.Unmarshal(row.Payload, &rk) != nil {
+				continue
+			}
+		}
+		if len(rk.Casts) == 0 && rk.ReportCode != "" {
+			casts, err := a.deps.WCL.Casts(ctx, rk.ReportCode, rk.FightID, rk.Name)
+			if err != nil {
+				a.deps.Logger.Warn("casts of a top parse", "encounter", e.ID, "error", err)
+			} else {
+				rk.Casts = casts
+				// Keep them with the cached leaderboard answer for next time.
+				if payload, err := json.Marshal(rk); err == nil {
+					_, _ = a.store.PutComparisonPlayer(ctx, fights.ComparisonPlayer{
+						Region: "top", RealmSlug: wcl.ClassSlug(class), Name: strings.ToLower(spec), Encounter: e.ID, WCLDiff: cp.WCLDiff, Metric: cp.Metric,
+						FetchedAt: a.now(), ClassID: rk.ClassID, Class: rk.Class, Spec: rk.Spec, RankPercent: rk.RankPercent, Amount: rk.Amount, Payload: payload,
+					})
+				}
+				if e.ID == cp.Encounter {
+					top.Casts = casts
+				}
+			}
+		}
+		line := ai.Boss{Name: e.Name, TheirName: rk.Name, TheirRankPercent: rk.RankPercent, TheirDuration: seconds(rk.Duration)}
+		if healer {
+			line.TheirHPS = rk.Amount
+		} else {
+			line.TheirDPS = rk.Amount
+		}
+		minutes := rk.Duration.Minutes()
+		for _, c := range rk.Casts {
+			rate := 0.0
+			if minutes > 0 {
+				rate = float64(c.Count) / minutes
+			}
+			line.TheirCasts = append(line.TheirCasts, ai.CastRate{Name: c.Name, Count: c.Count, PerMinute: float64(int(rate*10)) / 10})
+		}
+		if len(rk.Casts) == 0 {
+			line.Note = "cast counts for this kill could not be read"
+		}
+		you.Bosses = append(you.Bosses, line)
+		you.BossIDs = append(you.BossIDs, e.ID)
+	}
+	if len(you.Bosses) == 0 {
+		return yourSide{}, errors.New("no top parses of that class and specialization could be read")
+	}
+
+	// The raider's own side: current gear, and the current build when
+	// Blizzard gives it, both fetched as the site.
+	you.Gear, you.GearNote = a.yourGear(ctx, an.Name, an.RealmSlug, nil)
+	if you.GearNote != "" {
+		you.GearNote = strings.Replace(you.GearNote, "gear was not recorded at the pulls (advanced combat logging was off); ", "", 1)
+	}
+	you.Talents = a.currentTalents(ctx, an.Name, an.RealmSlug)
+	return you, nil
+}
+
+// currentTalents is the character's build from Blizzard, fetched as the
+// site; empty when Blizzard has none to give.
+func (a *App) currentTalents(ctx context.Context, name, realm string) []string {
+	type appTokened interface {
+		AppToken(ctx context.Context) (string, error)
+	}
+	reader, ok := a.deps.Blizzard.(blizzard.SpecializationsReader)
+	at, ok2 := a.deps.Blizzard.(appTokened)
+	if !ok || !ok2 {
+		return nil
+	}
+	token, err := at.AppToken(ctx)
+	if err != nil {
+		return nil
+	}
+	lo, err := reader.CharacterSpecializations(ctx, token, blizzard.CharacterRef{Name: name, RealmSlug: realm})
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, group := range [][]blizzard.TalentChoice{lo.Class, lo.SpecTalents, lo.Hero} {
+		for _, t := range group {
+			out = append(out, t.Name)
+		}
+	}
+	return out
 }
 
 // latestDate reads a date the way fromWCL wrote it, for comparison.

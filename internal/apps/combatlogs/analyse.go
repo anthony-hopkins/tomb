@@ -82,28 +82,57 @@ func (a *App) analyse(w http.ResponseWriter, r *http.Request) {
 
 	switch {
 	case source == "" || source == fights.SourceWCL:
-		// The character's own standing on Warcraft Logs.
+		// The character's own standing on Warcraft Logs -- or, with none,
+		// a showcase of the top parses of their class and spec instead.
 		an.Source = fights.SourceWCL
 		zone, err := a.deps.WCL.ZoneRankings(r.Context(), a.selfRef(*ref))
 		switch {
 		case errors.Is(err, wcl.ErrNoCharacter), errors.Is(err, wcl.ErrNoLogs):
-			back(msgNoLogs, nil)
-			return
+			an.Source = fights.SourceShowcase
+			class, spec = a.blizzardSpec(profile, *ref)
+			if class == "" || spec == "" {
+				back(msgNoSpec, nil)
+				return
+			}
+			metric = wcl.MetricForSpec(spec)
+			// Either failure below is told as "no logs, and no showcase
+			// just now", which also names the upload alternative.
+			raid, err := a.deps.WCL.CurrentZone(r.Context())
+			if err != nil || len(raid.Encounters) == 0 {
+				a.deps.Logger.Warn("current zone", "error", err)
+				back(msgNoLogs, nil)
+				return
+			}
+			// The first boss of the raid, at the highest difficulty anyone
+			// of the class and spec is ranked at.
+			mainEncounter = raid.Encounters[0].ID
+			diff = 0
+			for _, d := range []int{5, 4} {
+				if _, err := a.topPlayer(r.Context(), mainEncounter, d, class, spec, metric); err == nil {
+					diff = d
+					break
+				}
+			}
+			if diff == 0 {
+				back(msgNoLogs, nil)
+				return
+			}
 		case err != nil:
 			a.deps.Logger.Warn("zone rankings", "character", ref.Name, "error", err)
 			back(msgUnavailable, nil)
 			return
-		}
-		main := zone.Encounters[0]
-		for _, e := range zone.Encounters {
-			if e.Kills > main.Kills {
-				main = e
+		default:
+			main := zone.Encounters[0]
+			for _, e := range zone.Encounters {
+				if e.Kills > main.Kills {
+					main = e
+				}
 			}
-		}
-		mainEncounter, diff, class, spec, metric = main.ID, zone.Difficulty, zone.Class, zone.Spec, zone.Metric
-		if class == "" || spec == "" {
-			back(msgNoSpec, nil)
-			return
+			mainEncounter, diff, class, spec, metric = main.ID, zone.Difficulty, zone.Class, zone.Spec, zone.Metric
+			if class == "" || spec == "" {
+				back(msgNoSpec, nil)
+				return
+			}
 		}
 
 	case strings.HasPrefix(source, "upload:"):
@@ -175,6 +204,17 @@ func (a *App) analyse(w http.ResponseWriter, r *http.Request) {
 	back("", nil)
 }
 
+// blizzardSpec is the character's class and active specialization as
+// Blizzard has them, for a character Warcraft Logs has never seen.
+func (a *App) blizzardSpec(p platform.Profile, ref fights.CharacterRef) (class, spec string) {
+	for _, c := range p.Characters {
+		if strings.EqualFold(c.Name, ref.Name) && c.RealmSlug == ref.RealmSlug {
+			return c.Class, c.ActiveSpec
+		}
+	}
+	return "", ""
+}
+
 // selfRef is the member's character as Warcraft Logs names it: the
 // configured region and Blizzard's realm slug, which Warcraft Logs shares.
 func (a *App) selfRef(c fights.CharacterRef) wcl.CharacterRef {
@@ -199,8 +239,14 @@ func summariesOf(fs []fights.Fight, name, realm string) []fights.Summary {
 }
 
 // topPlayer is the leaderboard's first player of a class and spec on a
-// boss, as a comparison row.
+// boss, as a comparison row. The leaderboard itself is cached a day, keyed
+// by class and spec rather than by player, so a busy night asks Warcraft
+// Logs once per boss.
 func (a *App) topPlayer(ctx context.Context, encounterID, diff int, class, spec, metric string) (fights.ComparisonPlayer, error) {
+	key := topKey(class, spec, encounterID, diff, metric)
+	if have, err := a.store.ComparisonPlayer(ctx, key); err == nil && a.now().Sub(have.FetchedAt) < comparisonTTL {
+		return have, nil
+	}
 	ref, ranking, err := a.deps.WCL.TopPlayer(ctx, encounterID, diff, wcl.ClassSlug(class), spec, metric)
 	if err != nil {
 		return fights.ComparisonPlayer{}, err
@@ -208,7 +254,25 @@ func (a *App) topPlayer(ctx context.Context, encounterID, diff int, class, spec,
 	if ranking.Class == "" {
 		ranking.Class = class
 	}
-	return a.putComparison(ctx, ref, encounterID, diff, metric, ranking)
+	// Two rows: the leaderboard's answer under the class-and-spec key, and
+	// the player's parse under their own, so a later run on that player
+	// finds it too.
+	_, _ = a.putComparison(ctx, ref, encounterID, diff, metric, ranking)
+	payload, err := json.Marshal(ranking)
+	if err != nil {
+		return fights.ComparisonPlayer{}, err
+	}
+	return a.store.PutComparisonPlayer(ctx, fights.ComparisonPlayer{
+		Region: key.Region, RealmSlug: key.RealmSlug, Name: key.Name, Encounter: encounterID, WCLDiff: diff, Metric: metric,
+		FetchedAt: a.now(), ClassID: ranking.ClassID, Class: ranking.Class, Spec: ranking.Spec, RankPercent: ranking.RankPercent, Amount: ranking.Amount,
+		Payload: payload,
+	})
+}
+
+// topKey is the cache key of a leaderboard answer: region "top", the class
+// slug where a realm would be, and the spec where a name would be.
+func topKey(class, spec string, encounterID, diff int, metric string) fights.ComparisonKey {
+	return fights.ComparisonKey{Region: "top", RealmSlug: wcl.ClassSlug(class), Name: strings.ToLower(spec), Encounter: encounterID, WCLDiff: diff, Metric: metric}
 }
 
 // comparison is a named player's best parse on a boss: from the day's

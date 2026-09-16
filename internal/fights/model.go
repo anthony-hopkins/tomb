@@ -220,6 +220,10 @@ const (
 	SourceWCL = "wcl"
 	// SourceUpload is a night the member uploaded.
 	SourceUpload = "upload"
+	// SourceShowcase is a character with no logs anywhere: the top parses
+	// of the class and spec are broken down instead, against the
+	// character's current gear.
+	SourceShowcase = "showcase"
 )
 
 // Analysis is one run of the comparison (FR-038..FR-041): a character's
