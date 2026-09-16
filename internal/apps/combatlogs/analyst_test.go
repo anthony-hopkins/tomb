@@ -45,10 +45,11 @@ func TestAnalystWorker(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			store := fights.NewMemStore()
 			audit := &memAudit{}
-			a, sm := seeded(t, store, audit, &fakeWCL{rank: topTank})
+			w := healthyWCL()
+			a, u := seeded(t, store, audit, w)
 			a.deps.AI = tc.model
 			audit.entries = nil
-			postAnalyse(a, true, sm.ID, goodLink)
+			postAnalyse(a, true, u.ID, nekromoo)
 
 			if !a.AnalyseOnce(context.Background()) {
 				t.Fatal("nothing pending")
@@ -66,13 +67,19 @@ func TestAnalystWorker(t *testing.T) {
 				}
 				return
 			}
-			if done.Writeup != tc.model.text || done.Model != "" && done.Model != a.deps.Config.AIModel || done.PromptTokens != 1500 {
+			if done.Writeup != tc.model.text || done.PromptTokens != 1500 {
 				t.Errorf("done = %+v", done)
 			}
-			// The table: Nekromoo's Head is item 212345 at 311 against the
-			// same item at 320 -> same; Neck 999 at 324 vs nothing on
-			// Nekromoo -> theirs only. Item 212345 has no name from Game
-			// Data here, so it keeps its number on your side.
+			// Nekromoo pulled Vexie (Mythic) and Cauldron (Heroic) once
+			// each; the night is the harder difficulty, so Vexie alone: one
+			// top-player lookup, no other boss to fetch.
+			if w.tops != 1 || w.ranks != 0 {
+				t.Errorf("top lookups %d, rank fetches %d; want 1 and 0", w.tops, w.ranks)
+			}
+			// The table: the Vexie snapshot has Head 212345 at 311 against
+			// the same item at 320 -> same; Neck is empty on your side ->
+			// theirs only. Item 212345 has no name from Game Data here, so
+			// it keeps its number on your side.
 			var head, neck *fights.UpgradeRow
 			for i := range done.Table {
 				switch done.Table[i].Slot {
@@ -88,13 +95,13 @@ func TestAnalystWorker(t *testing.T) {
 			if neck == nil || neck.Yours != "" || neck.Theirs != "Pendant of Malefic Fury" || neck.Verdict != "" {
 				t.Errorf("neck row = %+v", neck)
 			}
-			// Talents: yours are entry ids 2 and 4 with no names -> "2", "4";
-			// theirs are named.
+			// Talents: the snapshot has entries 2 and 4, unnamed.
 			if done.TalentDiff == nil || strings.Join(done.TalentDiff.TheirsOnly, ",") != "Consumption,Marrowrend" || strings.Join(done.TalentDiff.YoursOnly, ",") != "2,4" {
 				t.Errorf("diff = %+v", done.TalentDiff)
 			}
-			// The prompt carried names, the fight and the flag.
-			for _, want := range []string{"Vexie and the Geargrinders", "Toptank", "Death Strike", "Pendant of Malefic Fury", `"mismatch"`, "Do these first"} {
+			// The prompt carried the night, the boss, names, the pull left
+			// out at the other difficulty, and the flag.
+			for _, want := range []string{"## raid", "Vexie and the Geargrinders", "Toptank", "Death Strike", "Pendant of Malefic Fury", `"mismatch"`, `"pulls": 1`, "left out", "Do these first"} {
 				if !strings.Contains(tc.model.prompt+tc.model.system, want) {
 					t.Errorf("prompt is missing %q", want)
 				}
@@ -110,12 +117,67 @@ func TestAnalystWorker(t *testing.T) {
 // plain reason rather than hanging.
 func TestAnalystNoModel(t *testing.T) {
 	store := fights.NewMemStore()
-	a, sm := seeded(t, store, &memAudit{}, &fakeWCL{rank: topTank})
+	a, u := seeded(t, store, &memAudit{}, healthyWCL())
 	a.deps.AI = nil
-	postAnalyse(a, true, sm.ID, goodLink)
+	postAnalyse(a, true, u.ID, nekromoo)
 	a.AnalyseOnce(context.Background())
 	newest, _, _ := store.LatestAnalyses(context.Background(), "Nekromoo", "area-52")
 	if newest == nil || newest.State != fights.AFailed || !strings.Contains(newest.Failure, "no model") {
 		t.Errorf("newest = %+v", newest)
+	}
+}
+
+// TestNightOf: the difficulty raided most wins, bosses order by pulls then
+// recency, the best pull is the kill or the highest rate, and the latest
+// snapshot is kept.
+func TestNightOf(t *testing.T) {
+	store := fights.NewMemStore()
+	a, u := seeded(t, store, &memAudit{}, nil)
+	fs, _ := a.store.FightsForUpload(context.Background(), u.ID)
+	n, ok := nightOf(summariesOf(fs, "Nekromoo", "area-52"), false)
+	if !ok {
+		t.Fatal("no night")
+	}
+	// Vexie is Mythic, Cauldron Heroic: one pull each, so the harder one.
+	if n.Difficulty != 16 || len(n.Pulls) != 1 || n.LeftOut != 1 || n.SpecID != 250 {
+		t.Errorf("night = diff %d, pulls %d, left out %d, spec %d", n.Difficulty, len(n.Pulls), n.LeftOut, n.SpecID)
+	}
+	if len(n.Bosses) != 1 || n.Bosses[0].Name != "Vexie and the Geargrinders" || n.Bosses[0].Kills != 1 || n.Bosses[0].Damage != 3600 {
+		t.Errorf("bosses = %+v", n.Bosses)
+	}
+	if len(n.Gear) != 3 || len(n.Talents) != 2 {
+		t.Errorf("snapshot = %d gear, %d talents", len(n.Gear), len(n.Talents))
+	}
+	if _, ok := nightOf(nil, false); ok {
+		t.Error("an empty night was accepted")
+	}
+}
+
+// TestAnalystFetchesEveryBoss: with two bosses at one difficulty, the top
+// player is looked up on the boss pulled most (ties to the latest) and
+// their parse on the other boss is fetched and named in the prompt.
+func TestAnalystFetchesEveryBoss(t *testing.T) {
+	store := fights.NewMemStore()
+	w := healthyWCL()
+	a, u := seeded(t, store, &memAudit{}, w)
+	for _, f := range store.Fights {
+		f.DifficultyID = 16
+	}
+	model := &fakeAI{text: "fine"}
+	a.deps.AI = model
+	postAnalyse(a, true, u.ID, nekromoo)
+	if !a.AnalyseOnce(context.Background()) {
+		t.Fatal("nothing pending")
+	}
+	if w.tops != 1 || w.ranks != 1 {
+		t.Errorf("top lookups %d, rank fetches %d; want 1 and 1", w.tops, w.ranks)
+	}
+	for _, want := range []string{"Vexie and the Geargrinders", "Cauldron of Carnage", `"pulls": 2`, `"their_dps": 1400000`} {
+		if !strings.Contains(model.prompt, want) {
+			t.Errorf("prompt is missing %q", want)
+		}
+	}
+	if strings.Contains(model.prompt, "left out") {
+		t.Error("nothing was left out, but the prompt says so")
 	}
 }

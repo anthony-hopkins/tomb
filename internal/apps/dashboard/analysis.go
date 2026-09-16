@@ -11,14 +11,18 @@ import (
 	"github.com/anthony-hopkins/tomb/internal/platform"
 )
 
-// The comparison on the card (spec 003, FR-038, FR-041): the Analyse form
-// and the computed table on the left, the write-up on the right. The card
-// only reads; the Combat logs app owns the route the form posts to.
+// The comparison on the card (spec 003, FR-038, FR-041; amendment of
+// 2026-09-16): the member picks one of their uploads, and their whole night
+// on that character is measured against the top-ranked player of the same
+// class and spec. The computed table on the left, the write-up on the
+// right. The card only reads; the Combat logs app owns the route the form
+// posts to.
 
 // analysisView is the section, ready for the template.
 type analysisView struct {
-	Available bool // a Warcraft Logs client is configured
-	Fights    []fightOption
+	Available bool   // a Warcraft Logs client is configured
+	Character string // "realm/name", what the form posts
+	Uploads   []uploadOption
 	Action    string
 	CSRF      struct{ Field, Token string }
 
@@ -30,13 +34,14 @@ type analysisView struct {
 	Result  *resultView
 }
 
-type fightOption struct {
+type uploadOption struct {
 	ID    int64
 	Label string
 }
 
 type resultView struct {
 	Against    string
+	AgainstAs  string // "Blood Death Knight, top on Vexie"
 	Analysed   string
 	Table      []fights.UpgradeRow
 	Diff       fights.TalentDiff
@@ -52,10 +57,9 @@ type paragraph struct {
 // messages are the analyse route's codes, worded for the card. The route
 // never sends text; a code that is not here renders nothing.
 var messages = map[string]string{
-	"badlink":     "That is not a Warcraft Logs character link. It looks like https://www.warcraftlogs.com/character/us/area-52/name.",
-	"notraid":     "Only raid fights can be compared in this version.",
-	"nochar":      "Warcraft Logs knows no player by that link.",
-	"norank":      "That player has no recorded kill of this boss at this difficulty, so there is nothing to compare against.",
+	"nopulls":     "That upload has no raid pulls for this character.",
+	"nospec":      "The log did not record this character's specialization, so there is nothing to compare against. Switch on Advanced Combat Logging before the next raid.",
+	"norank":      "Warcraft Logs has no ranked player of this class and specialization on that boss at that difficulty yet.",
 	"unavailable": "The comparison could not be started just now. Try again later.",
 }
 
@@ -70,7 +74,11 @@ func (a *App) analysis(r *http.Request, c blizzard.Character) *analysisView {
 	if !ok {
 		return nil
 	}
-	v := &analysisView{Available: a.deps.WCL != nil, Action: "/app/combatlogs/analyses"}
+	v := &analysisView{
+		Available: a.deps.WCL != nil,
+		Character: c.RealmSlug + "/" + strings.ToLower(c.Name),
+		Action:    "/app/combatlogs/analyses",
+	}
 	v.CSRF.Field, v.CSRF.Token = platform.CSRFFieldName, platform.CSRFTokenFrom(ctx)
 
 	q := r.URL.Query()
@@ -86,24 +94,35 @@ func (a *App) analysis(r *http.Request, c blizzard.Character) *analysisView {
 		v.Msg = messages[code]
 	}
 
-	sums, err := a.Fights.SummariesForCharacter(ctx, sess.User.ID, c.Name, c.RealmSlug)
+	// The uploads with raid pulls for this character, newest first.
+	uploads, err := a.Fights.ListUploads(ctx, sess.User.ID)
 	if err != nil {
-		a.deps.Logger.Warn("summaries for character", "character", c.Name, "error", err)
+		a.deps.Logger.Warn("list uploads", "error", err)
 	}
-	for _, sm := range sums {
-		if sm.Fight == nil {
+	for _, u := range uploads {
+		if u.State != fights.Parsed {
 			continue
 		}
-		if d := sm.Fight.DifficultyID; d != 14 && d != 15 && d != 16 && d != 17 {
-			continue // not a raid; the route would refuse it
+		fs, err := a.Fights.FightsForUpload(ctx, u.ID)
+		if err != nil {
+			continue
 		}
-		result := "Wipe"
-		if sm.Fight.Kill {
-			result = "Kill"
+		pulls := 0
+		for _, f := range fs {
+			if d := f.DifficultyID; d != 14 && d != 15 && d != 16 && d != 17 {
+				continue
+			}
+			for _, sm := range f.Summaries {
+				if strings.EqualFold(sm.Name, c.Name) && sm.RealmSlug == c.RealmSlug {
+					pulls++
+				}
+			}
 		}
-		v.Fights = append(v.Fights, fightOption{ID: sm.ID, Label: fmt.Sprintf("%s · %s · %s · %s",
-			sm.Fight.EncounterName, fights.DifficultyName(sm.Fight.DifficultyID), result,
-			sm.Fight.StartedAt.In(a.deps.Config.Timezone).Format("2 Jan 2006 15:04"))})
+		if pulls == 0 {
+			continue
+		}
+		v.Uploads = append(v.Uploads, uploadOption{ID: u.ID, Label: fmt.Sprintf("%s · %s · %d raid pull%s",
+			u.Filename, u.CreatedAt.In(a.deps.Config.Timezone).Format("2 Jan 2006"), pulls, plural(pulls))})
 	}
 
 	newest, done, err := a.Fights.LatestAnalyses(ctx, c.Name, c.RealmSlug)
@@ -125,6 +144,13 @@ func (a *App) analysis(r *http.Request, c blizzard.Character) *analysisView {
 	return v
 }
 
+func plural(n int) string {
+	if n == 1 {
+		return ""
+	}
+	return "s"
+}
+
 func (a *App) result(an fights.Analysis) *resultView {
 	rv := &resultView{Table: an.Table, Model: an.Model, Analysed: an.CreatedAt.In(a.deps.Config.Timezone).Format("2 Jan 2006, 15:04")}
 	if an.FinishedAt != nil {
@@ -133,13 +159,32 @@ func (a *App) result(an fights.Analysis) *resultView {
 	if an.TalentDiff != nil {
 		rv.Diff = *an.TalentDiff
 	}
-	if an.Comparison != nil {
-		rv.Against = an.Comparison.Name
+	if cp := an.Comparison; cp != nil {
+		rv.Against = cp.Name
 		var payload struct {
-			Name string `json:"Name"`
+			Name  string `json:"Name"`
+			Class string `json:"Class"`
+			Spec  string `json:"Spec"`
 		}
-		if json.Unmarshal(an.Comparison.Payload, &payload) == nil && payload.Name != "" {
+		if json.Unmarshal(cp.Payload, &payload) == nil && payload.Name != "" {
 			rv.Against = payload.Name
+		}
+		as := strings.TrimSpace(payload.Spec + " " + payload.Class)
+		if as == "" {
+			as = cp.Spec
+		}
+		boss := ""
+		for _, sm := range an.Summaries {
+			if sm.Fight != nil && sm.Fight.EncounterID == cp.Encounter {
+				boss = sm.Fight.EncounterName
+				break
+			}
+		}
+		switch {
+		case as != "" && boss != "":
+			rv.AgainstAs = fmt.Sprintf("top %s on %s", as, boss)
+		case as != "":
+			rv.AgainstAs = "top " + as
 		}
 	}
 	rv.Paragraphs = paragraphs(an.Writeup)

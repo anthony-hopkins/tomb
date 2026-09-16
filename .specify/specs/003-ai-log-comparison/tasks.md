@@ -195,6 +195,16 @@ fakes.
 
 ---
 
+## Amendment, 2026-09-16: the whole night against the top player
+
+Done the same day, after the guild master's direction (spec → Amendment): an
+analysis is one upload's raid pulls for a character (migration `0006`,
+`analyses.upload_id`), the target is the top-ranked player of the class and spec
+on the boss pulled most (`wcl.TopPlayer`), their parses on the other bosses are
+fetched in the worker, the prompt is a night with per-boss lines, and the card's
+form picks an upload instead of a pull and a link. Tests updated throughout. The
+link parser and per-pull plumbing stay for the drill-down to come.
+
 ## Phase 6: Polish & cross-cutting
 
 - [X] T069 [P] `docs/adding-an-app.md`: document `Deps.WCL` / `Deps.AI`, the shared-store pattern (`internal/fights` beside `internal/armory`), the CSRF header form for scripted requests, and the "meta refresh, not polling" convention for background work.

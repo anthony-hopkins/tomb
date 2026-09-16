@@ -1,0 +1,51 @@
+{
+  "_note": "HAND-WRITTEN from the documented shape of Encounter.characterRankings (research D9). UNCONFIRMED: replace with a live capture (T050) and adjust the decoder if field names differ.",
+  "data": {
+    "worldData": {
+      "encounter": {
+        "id": 3009,
+        "name": "Vexie and the Geargrinders",
+        "characterRankings": {
+          "page": 1,
+          "hasMorePages": true,
+          "count": 100,
+          "rankings": [
+            {
+              "name": "Toptank",
+              "class": "DeathKnight",
+              "spec": "Blood",
+              "amount": 1498220.1,
+              "hardModeLevel": 0,
+              "duration": 312000,
+              "startTime": 1757900123000,
+              "report": {"code": "aBcD1234eFgH", "fightID": 7, "startTime": 1757900000000},
+              "server": {"id": 1168, "name": "Area 52", "region": "US"},
+              "bracketData": 320,
+              "faction": 1,
+              "medal": "gold",
+              "talents": [
+                {"name": "Marrowrend", "id": 195182, "icon": "ability_deathknight_marrowrend.jpg", "type": 1},
+                {"name": "Consumption", "id": 274156, "icon": "inv_axe_2h_artifactmaw_d_01.jpg", "type": 1}
+              ],
+              "gear": [
+                {"name": "Baleful Grave-Knight's Casque", "quality": 4, "id": 212345, "itemLevel": 320, "permanentEnchant": 0, "gems": [], "bonusIDs": []},
+                {"name": "Pendant of Malefic Fury", "quality": 4, "id": 212346, "itemLevel": 324, "permanentEnchant": 0, "gems": [], "bonusIDs": []}
+              ]
+            },
+            {
+              "name": "Secondbest",
+              "class": "DeathKnight",
+              "spec": "Blood",
+              "amount": 1401000.0,
+              "duration": 340000,
+              "report": {"code": "zZzZzZzZ", "fightID": 3},
+              "server": {"id": 57, "name": "Illidan", "region": "US"},
+              "talents": [],
+              "gear": []
+            }
+          ]
+        }
+      }
+    }
+  }
+}

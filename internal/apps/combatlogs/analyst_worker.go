@@ -19,8 +19,9 @@ import (
 // analystParallel is how many analyses may be in flight at once.
 const analystParallel = 2
 
-// RunAnalyst is the background worker for comparisons: the computed table
-// and diff, then the model's write-up (research D6, D10, D11).
+// RunAnalyst is the background worker for comparisons: the top player's
+// parses on every boss of the night, the computed table and diff, then the
+// model's write-up (research D6, D10, D11).
 func (a *App) RunAnalyst(ctx context.Context) {
 	sem := make(chan struct{}, analystParallel)
 	for {
@@ -66,18 +67,21 @@ func (a *App) AnalyseOnce(ctx context.Context) bool {
 func (a *App) run(ctx context.Context, an fights.Analysis) {
 	log := a.deps.Logger.With("analysis", an.ID, "user", an.UserID, "character", an.Name)
 	started := a.now()
-	sm, cp := an.Summary, an.Comparison
+	cp := an.Comparison
 	tag := ""
-	if u, err := a.store.Upload(ctx, sm.Fight.UploadID, an.UserID); err == nil {
+	if u, err := a.store.Upload(ctx, an.UploadID, an.UserID); err == nil {
 		tag = u.BattleTag
 	}
-	fightLabel := fmt.Sprintf("%s (%s, %s)", sm.Fight.EncounterName, fights.DifficultyName(sm.Fight.DifficultyID), sm.Fight.StartedAt.In(a.deps.Config.Timezone).Format("2 Jan 2006"))
+	against := "?"
+	if cp != nil {
+		against = cp.Name
+	}
 
 	fail := func(reason string) {
 		if err := a.store.FailAnalysis(ctx, an.ID, reason); err != nil {
 			log.Error("mark analysis failed", "error", err)
 		}
-		a.audit(ctx, an.UserID, tag, "combatlogs.analyse", an.Name, fmt.Sprintf("%s against %s: failed: %s", fightLabel, cp.Name, reason))
+		a.audit(ctx, an.UserID, tag, "combatlogs.analyse", an.Name, fmt.Sprintf("night against %s: failed: %s", against, reason))
 		log.Warn("analysis failed", "reason", reason)
 	}
 	defer func() {
@@ -86,8 +90,8 @@ func (a *App) run(ctx context.Context, an fights.Analysis) {
 			fail("something went wrong on the site's side")
 		}
 	}()
-	if sm == nil || cp == nil || sm.Fight == nil {
-		fail("the fight or the player could not be read")
+	if cp == nil || len(an.Summaries) == 0 {
+		fail("the night or the player could not be read")
 		return
 	}
 	if a.deps.AI == nil {
@@ -95,91 +99,109 @@ func (a *App) run(ctx context.Context, an fights.Analysis) {
 		return
 	}
 
-	var ranking wcl.Ranking
-	if err := json.Unmarshal(cp.Payload, &ranking); err != nil {
+	var top wcl.Ranking
+	if err := json.Unmarshal(cp.Payload, &top); err != nil {
 		fail("the player's parse could not be read")
 		return
 	}
-
-	// Your gear: from the pull, or your current gear when the pull did not
-	// record it (no advanced logging), or nothing, said so.
-	gd, _ := a.deps.Blizzard.(blizzard.GameData)
-	yours, yourNote := a.yourGear(ctx, *sm)
-	theirs := make([]fights.GearNamed, 0, len(ranking.Gear))
-	var missingItems []int
-	for i, g := range ranking.Gear {
-		if g.Name == "" {
-			missingItems = append(missingItems, g.ID)
-		}
-		theirs = append(theirs, fights.GearNamed{Slot: i, ID: g.ID, Name: g.Name, Level: g.ItemLevel})
+	against = top.Name
+	healer := cp.Metric == "hps"
+	n, ok := nightOf(an.Summaries, healer)
+	if !ok {
+		fail("the upload has no raid pulls for this character")
+		return
 	}
-	if len(missingItems) > 0 {
-		names := fights.ResolveItems(ctx, a.store, gd, missingItems)
-		for i := range theirs {
-			if theirs[i].Name == "" {
-				theirs[i].Name = names[theirs[i].ID]
+	yourClass, yourSpec := wcl.SpecName(n.SpecID)
+	ref := wcl.CharacterRef{Region: cp.Region, Slug: cp.RealmSlug, Name: top.Name}
+	if cp.Region == "id" {
+		ref = wcl.CharacterRef{ID: parseID(cp.Name)}
+	}
+
+	// Their parse on every boss of the night, from the cache or Warcraft
+	// Logs; a boss they have no ranked kill on is noted, not fatal.
+	theirs := map[int]*wcl.Ranking{cp.Encounter: &top}
+	for _, b := range n.Bosses {
+		if _, have := theirs[b.EncounterID]; have {
+			continue
+		}
+		row, err := a.comparison(ctx, ref, b.EncounterID, cp.WCLDiff, cp.Metric)
+		if err != nil {
+			log.Warn("their parse on a boss", "encounter", b.EncounterID, "error", err)
+			continue
+		}
+		var rk wcl.Ranking
+		if json.Unmarshal(row.Payload, &rk) == nil {
+			theirs[b.EncounterID] = &rk
+		}
+	}
+	// Their gear and talents: from the main boss, else the first boss that
+	// carried them.
+	theirGear, theirTalents := top.Gear, top.Talents
+	if len(theirGear) == 0 {
+		for _, b := range n.Bosses {
+			if rk := theirs[b.EncounterID]; rk != nil && len(rk.Gear) > 0 {
+				theirGear, theirTalents = rk.Gear, rk.Talents
+				break
 			}
 		}
 	}
 
-	// Talents, by name on both sides.
+	gd, _ := a.deps.Blizzard.(blizzard.GameData)
+	yours, yourNote := a.yourGear(ctx, an.Name, an.RealmSlug, n.Gear)
+	theirNamed := make([]fights.GearNamed, 0, len(theirGear))
+	var missingItems []int
+	for i, g := range theirGear {
+		if g.Name == "" {
+			missingItems = append(missingItems, g.ID)
+		}
+		theirNamed = append(theirNamed, fights.GearNamed{Slot: i, ID: g.ID, Name: g.Name, Level: g.ItemLevel})
+	}
+	if len(missingItems) > 0 {
+		names := fights.ResolveItems(ctx, a.store, gd, missingItems)
+		for i := range theirNamed {
+			if theirNamed[i].Name == "" {
+				theirNamed[i].Name = names[theirNamed[i].ID]
+			}
+		}
+	}
+
 	var yourTalents []string
-	if len(sm.Talents) > 0 {
-		ids := make([]int, 0, len(sm.Talents))
-		for _, t := range sm.Talents {
+	if len(n.Talents) > 0 {
+		ids := make([]int, 0, len(n.Talents))
+		for _, t := range n.Talents {
 			ids = append(ids, t.Entry)
 		}
 		names := fights.ResolveTalents(ctx, a.store, gd, ids)
-		for _, t := range sm.Talents {
+		for _, t := range n.Talents {
 			yourTalents = append(yourTalents, names[t.Entry])
 		}
 	}
-	var theirTalents []string
+	var theirTalentNames []string
 	var missingTalents []int
-	for _, t := range ranking.Talents {
+	for _, t := range theirTalents {
 		if t.Name == "" {
 			missingTalents = append(missingTalents, t.ID)
 		}
 	}
 	names := fights.ResolveTalents(ctx, a.store, gd, missingTalents)
-	for _, t := range ranking.Talents {
+	for _, t := range theirTalents {
 		if t.Name != "" {
-			theirTalents = append(theirTalents, t.Name)
+			theirTalentNames = append(theirTalentNames, t.Name)
 		} else {
-			theirTalents = append(theirTalents, names[t.ID])
+			theirTalentNames = append(theirTalentNames, names[t.ID])
 		}
 	}
 
-	table := fights.UpgradeTable(yours, theirs)
-	diff := fights.DiffTalents(yourTalents, theirTalents)
-
-	yourClass, yourSpec := wcl.SpecName(sm.SpecID)
-	theirClass := wcl.ClassName(ranking.ClassID)
-	mismatch := (yourSpec != "" && ranking.Spec != "" && !strings.EqualFold(yourSpec, ranking.Spec)) ||
+	table := fights.UpgradeTable(yours, theirNamed)
+	diff := fights.DiffTalents(yourTalents, theirTalentNames)
+	theirClass := top.Class
+	if theirClass == "" {
+		theirClass = wcl.ClassName(top.ClassID)
+	}
+	mismatch := (yourSpec != "" && top.Spec != "" && !strings.EqualFold(yourSpec, top.Spec)) ||
 		(yourClass != "" && theirClass != "" && !strings.EqualFold(yourClass, theirClass))
 
-	in := ai.Input{
-		Fight: ai.Fight{
-			Boss: sm.Fight.EncounterName, Difficulty: fights.DifficultyName(sm.Fight.DifficultyID), Kill: sm.Fight.Kill,
-			Duration: seconds(sm.Fight.Duration), Date: sm.Fight.StartedAt.In(a.deps.Config.Timezone).Format("2 Jan 2006"),
-		},
-		You: ai.Player{
-			Name: sm.Name, Class: yourClass, Spec: yourSpec,
-			Damage: sm.Damage, Healing: sm.Healing, Deaths: sm.Deaths, ActiveTime: seconds(sm.Active),
-			DPS: perSecond(sm.Damage, sm.Fight.Duration), HPS: perSecond(sm.Healing, sm.Fight.Duration),
-			Casts: casts(sm.Casts), Gear: gearLines(yours), Talents: orEmptyStrings(yourTalents), Note: yourNote,
-		},
-		Them: ai.Player{
-			Name: ranking.Name, Class: theirClass, Spec: ranking.Spec, RankPercent: ranking.RankPercent,
-			Duration: seconds(ranking.Duration), Gear: gearLines(theirs), Talents: orEmptyStrings(theirTalents),
-		},
-		Table: table, Diff: diff, Mismatch: mismatch,
-	}
-	if ranking.Metric == "hps" {
-		in.Them.HPS = ranking.Amount
-	} else {
-		in.Them.DPS = ranking.Amount
-	}
+	in := a.input(n, yours, yourNote, yourTalents, theirNamed, theirTalentNames, theirs, top, an, yourClass, yourSpec, theirClass, table, diff, mismatch)
 
 	callCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
@@ -201,24 +223,77 @@ func (a *App) run(ctx context.Context, an fights.Analysis) {
 		log.Error("finish analysis", "error", err)
 		return
 	}
-	a.audit(ctx, an.UserID, tag, "combatlogs.analyse", an.Name, fmt.Sprintf("%s against %s: done", fightLabel, ranking.Name))
-	log.Info("analysis done", "against", ranking.Name, "prompt_tokens", usage.PromptTokens, "output_tokens", usage.OutputTokens,
-		"took", a.now().Sub(started).Round(time.Millisecond))
+	a.audit(ctx, an.UserID, tag, "combatlogs.analyse", an.Name,
+		fmt.Sprintf("night of %s, %s, %d pulls on %d bosses against %s: done",
+			n.Pulls[0].Fight.StartedAt.In(a.deps.Config.Timezone).Format("2 Jan 2006"), fights.DifficultyName(n.Difficulty), len(n.Pulls), len(n.Bosses), top.Name))
+	log.Info("analysis done", "against", top.Name, "bosses", len(n.Bosses), "pulls", len(n.Pulls),
+		"prompt_tokens", usage.PromptTokens, "output_tokens", usage.OutputTokens, "took", a.now().Sub(started).Round(time.Millisecond))
 }
 
-// yourGear names the member's gear for the table: the pull's record when
-// there is one, else what the character wears now, fetched with the site's
-// own token, else nothing.
-func (a *App) yourGear(ctx context.Context, sm fights.Summary) ([]fights.GearNamed, string) {
+// input assembles what the model is given.
+func (a *App) input(n night, yours []fights.GearNamed, yourNote string, yourTalents []string, theirs []fights.GearNamed, theirTalents []string,
+	theirParses map[int]*wcl.Ranking, top wcl.Ranking, an fights.Analysis, yourClass, yourSpec, theirClass string,
+	table []fights.UpgradeRow, diff fights.TalentDiff, mismatch bool) ai.Input {
+	healer := top.Metric == "hps"
+	in := ai.Input{
+		Raid: ai.Raid{
+			Difficulty: fights.DifficultyName(n.Difficulty),
+			Date:       n.Pulls[0].Fight.StartedAt.In(a.deps.Config.Timezone).Format("2 Jan 2006"),
+			Pulls:      len(n.Pulls),
+		},
+		You:      ai.Player{Name: an.Name, Class: yourClass, Spec: yourSpec, Gear: gearLines(yours), Talents: orEmptyStrings(yourTalents), Note: yourNote},
+		Them:     ai.Player{Name: top.Name, Class: theirClass, Spec: top.Spec, Gear: gearLines(theirs), Talents: orEmptyStrings(theirTalents)},
+		Table:    table,
+		Diff:     diff,
+		Mismatch: mismatch,
+	}
+	if n.LeftOut > 0 {
+		in.Raid.Note = fmt.Sprintf("%d pulls at another difficulty were left out", n.LeftOut)
+	}
+	for _, b := range n.Bosses {
+		in.Raid.Kills += b.Kills
+		in.You.Damage += b.Damage
+		in.You.Healing += b.Healing
+		in.You.Deaths += b.Deaths
+		line := ai.Boss{
+			Name: b.Name, Pulls: b.Pulls, Kills: b.Kills, YourDeaths: b.Deaths,
+			YourBestDuration: seconds(b.Best.Fight.Duration), YourBestWasKill: b.Best.Fight.Kill,
+			YourCasts: casts(b.Best.Casts),
+		}
+		if healer {
+			line.YourBestHPS = perSecond(b.Best.Healing, b.Best.Fight.Duration)
+		} else {
+			line.YourBestDPS = perSecond(b.Best.Damage, b.Best.Fight.Duration)
+		}
+		if rk := theirParses[b.EncounterID]; rk != nil {
+			line.TheirRankPercent, line.TheirDuration = rk.RankPercent, seconds(rk.Duration)
+			if healer {
+				line.TheirHPS = rk.Amount
+			} else {
+				line.TheirDPS = rk.Amount
+			}
+		} else {
+			line.Note = "the top player has no ranked kill of this boss at this difficulty"
+		}
+		in.Bosses = append(in.Bosses, line)
+	}
+	in.Raid.Wipes = in.Raid.Pulls - in.Raid.Kills
+	return in
+}
+
+// yourGear names the member's gear for the table: the night's latest
+// snapshot when there is one, else what the character wears now, fetched
+// with the site's own token, else nothing.
+func (a *App) yourGear(ctx context.Context, name, realm string, snapshot []fights.GearPiece) ([]fights.GearNamed, string) {
 	gd, _ := a.deps.Blizzard.(blizzard.GameData)
-	if len(sm.Gear) > 0 {
-		ids := make([]int, 0, len(sm.Gear))
-		for _, g := range sm.Gear {
+	if len(snapshot) > 0 {
+		ids := make([]int, 0, len(snapshot))
+		for _, g := range snapshot {
 			ids = append(ids, g.Item)
 		}
 		names := fights.ResolveItems(ctx, a.store, gd, ids)
-		out := make([]fights.GearNamed, 0, len(sm.Gear))
-		for _, g := range sm.Gear {
+		out := make([]fights.GearNamed, 0, len(snapshot))
+		for _, g := range snapshot {
 			if g.Item == 0 {
 				continue
 			}
@@ -227,13 +302,12 @@ func (a *App) yourGear(ctx context.Context, sm fights.Summary) ([]fights.GearNam
 		return out, ""
 	}
 
-	// No snapshot: the current gear, if the client can fetch it as the site.
 	type appTokened interface {
 		AppToken(ctx context.Context) (string, error)
 	}
 	if at, ok := a.deps.Blizzard.(appTokened); ok && a.deps.Blizzard != nil {
 		if token, err := at.AppToken(ctx); err == nil {
-			items, err := a.deps.Blizzard.CharacterEquipment(ctx, token, blizzard.CharacterRef{Name: sm.Name, RealmSlug: sm.RealmSlug})
+			items, err := a.deps.Blizzard.CharacterEquipment(ctx, token, blizzard.CharacterRef{Name: name, RealmSlug: realm})
 			if err == nil && len(items) > 0 {
 				out := make([]fights.GearNamed, 0, len(items))
 				for _, it := range items {
@@ -241,11 +315,11 @@ func (a *App) yourGear(ctx context.Context, sm fights.Summary) ([]fights.GearNam
 						out = append(out, fights.GearNamed{Slot: slot, Name: it.Name, Level: it.Level})
 					}
 				}
-				return out, "gear was not recorded at this pull (advanced combat logging was off); this is the character's current gear instead"
+				return out, "gear was not recorded at the pulls (advanced combat logging was off); this is the character's current gear instead"
 			}
 		}
 	}
-	return nil, "gear was not recorded at this pull (advanced combat logging was off) and could not be fetched"
+	return nil, "gear was not recorded at the pulls (advanced combat logging was off) and could not be fetched"
 }
 
 // slotIndex maps Blizzard's slot keys to the gear array's positions.
@@ -266,8 +340,8 @@ func gearLines(gear []fights.GearNamed) []ai.Gear {
 	return out
 }
 
-// casts is the fight's ability use for the model: every spell, counts for
-// the rotational ones and timings for the rare ones, most used first.
+// casts is a pull's ability use for the model: every spell, counts for the
+// rotational ones and timings for the rare ones, most used first.
 func casts(cs []fights.Cast) []ai.Cast {
 	out := make([]ai.Cast, 0, len(cs))
 	for _, c := range cs {
@@ -285,6 +359,11 @@ func perSecond(amount int64, d time.Duration) float64 {
 		return 0
 	}
 	return float64(amount) / d.Seconds()
+}
+
+func parseID(s string) int64 {
+	id, _ := strconv.ParseInt(s, 10, 64)
+	return id
 }
 
 func orEmptyStrings(s []string) []string {

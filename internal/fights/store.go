@@ -253,8 +253,11 @@ func (s *SQLStore) Remove(ctx context.Context, id, userID int64) (Upload, error)
 	if err != nil {
 		return Upload{}, notFound(err)
 	}
-	// Fights cascade to summaries and analyses; the upload row stays for the
-	// audit trail.
+	// Fights cascade to summaries; analyses of the night go with them; the
+	// upload row stays for the audit trail.
+	if _, err := tx.ExecContext(ctx, `DELETE FROM analyses WHERE upload_id = $1`, id); err != nil {
+		return Upload{}, fmt.Errorf("remove analyses: %w", err)
+	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM fights WHERE upload_id = $1`, id); err != nil {
 		return Upload{}, fmt.Errorf("remove fights: %w", err)
 	}
@@ -304,6 +307,9 @@ func (s *SQLStore) SweepOld(ctx context.Context, age time.Duration) (int, error)
 		return 0, err
 	}
 	for _, id := range ids {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM analyses WHERE upload_id = $1`, id); err != nil {
+			return 0, fmt.Errorf("remove analyses: %w", err)
+		}
 		if _, err := tx.ExecContext(ctx, `DELETE FROM fights WHERE upload_id = $1`, id); err != nil {
 			return 0, fmt.Errorf("remove fights: %w", err)
 		}
@@ -582,6 +588,15 @@ const comparisonColumns = `id, region, realm_slug, name, encounter_id, wcl_diffi
 func scanComparison(row interface{ Scan(...any) error }) (ComparisonPlayer, error) {
 	var p ComparisonPlayer
 	err := row.Scan(&p.ID, &p.Region, &p.RealmSlug, &p.Name, &p.Encounter, &p.WCLDiff, &p.Metric, &p.FetchedAt, &p.ClassID, &p.Spec, &p.RankPercent, &p.Amount, &p.Payload)
+	if err == nil {
+		// The class name travels in the payload; the column holds the id.
+		var payload struct {
+			Class string `json:"Class"`
+		}
+		if json.Unmarshal(p.Payload, &payload) == nil {
+			p.Class = payload.Class
+		}
+	}
 	return p, err
 }
 
@@ -616,7 +631,7 @@ func (s *SQLStore) PutComparisonPlayer(ctx context.Context, p ComparisonPlayer) 
 
 // analysisColumns are bare, not aliased: every analysis query reads one
 // table, so there is nothing to disambiguate.
-const analysisColumns = `id, user_id, summary_id, character_name, realm_slug, comparison_id, state, failure,
+const analysisColumns = `id, user_id, upload_id, summary_id, character_name, realm_slug, comparison_id, state, failure,
 	table_json, talent_diff, writeup, model, prompt_tokens, output_tokens, created_at, started_at, finished_at`
 
 func scanAnalysis(row interface{ Scan(...any) error }) (Analysis, error) {
@@ -624,13 +639,14 @@ func scanAnalysis(row interface{ Scan(...any) error }) (Analysis, error) {
 	var state string
 	var table, diff []byte
 	var writeup sql.NullString
-	var pt, ot sql.NullInt64
+	var uploadID, summaryID, pt, ot sql.NullInt64
 	var started, finished sql.NullTime
-	err := row.Scan(&a.ID, &a.UserID, &a.SummaryID, &a.Name, &a.RealmSlug, &a.ComparisonID, &state, &a.Failure,
+	err := row.Scan(&a.ID, &a.UserID, &uploadID, &summaryID, &a.Name, &a.RealmSlug, &a.ComparisonID, &state, &a.Failure,
 		&table, &diff, &writeup, &a.Model, &pt, &ot, &a.CreatedAt, &started, &finished)
 	if err != nil {
 		return Analysis{}, err
 	}
+	a.UploadID, a.SummaryID = uploadID.Int64, summaryID.Int64
 	a.State = AnalysisState(state)
 	a.Writeup = writeup.String
 	a.PromptTokens, a.OutputTokens = int(pt.Int64), int(ot.Int64)
@@ -683,10 +699,17 @@ func (s *SQLStore) CreateAnalysis(ctx context.Context, a Analysis, unlimited boo
 		}
 	}
 	const q = `
-		INSERT INTO analyses (user_id, summary_id, character_name, realm_slug, comparison_id, state)
-		VALUES ($1, $2, $3, $4, $5, 'pending')
+		INSERT INTO analyses (user_id, upload_id, summary_id, character_name, realm_slug, comparison_id, state)
+		VALUES ($1, $2, $3, $4, $5, $6, 'pending')
 		RETURNING ` + analysisColumns
-	out, err := scanAnalysis(tx.QueryRowContext(ctx, q, a.UserID, a.SummaryID, a.Name, a.RealmSlug, a.ComparisonID))
+	var uploadID, summaryID any
+	if a.UploadID != 0 {
+		uploadID = a.UploadID
+	}
+	if a.SummaryID != 0 {
+		summaryID = a.SummaryID
+	}
+	out, err := scanAnalysis(tx.QueryRowContext(ctx, q, a.UserID, uploadID, summaryID, a.Name, a.RealmSlug, a.ComparisonID))
 	if err != nil {
 		return Analysis{}, fmt.Errorf("create analysis: %w", err)
 	}
@@ -718,21 +741,34 @@ func (s *SQLStore) NextPendingAnalysis(ctx context.Context) (Analysis, error) {
 	return s.attach(ctx, a)
 }
 
-// attach fills the comparison player and the summary an analysis refers to.
+// attach fills the comparison player and the character's pulls in the
+// upload an analysis refers to.
 func (s *SQLStore) attach(ctx context.Context, a Analysis) (Analysis, error) {
 	p, err := scanComparison(s.DB.QueryRowContext(ctx, `SELECT `+comparisonColumns+` FROM comparison_players WHERE id = $1`, a.ComparisonID))
 	if err != nil {
 		return Analysis{}, fmt.Errorf("analysis comparison: %w", err)
 	}
 	a.Comparison = &p
-	sm, err := scanSummaryWithFight(s.DB.QueryRowContext(ctx, `
-		SELECT `+summaryColumns+`, `+fightColumns+`
-		  FROM fight_summaries s JOIN fights f ON f.id = s.fight_id WHERE s.id = $1`, a.SummaryID))
-	if err != nil {
-		return Analysis{}, fmt.Errorf("analysis summary: %w", err)
+	if a.UploadID == 0 {
+		return a, nil
 	}
-	a.Summary = &sm
-	return a, nil
+	rows, err := s.DB.QueryContext(ctx, `
+		SELECT `+summaryColumns+`, `+fightColumns+`
+		  FROM fight_summaries s JOIN fights f ON f.id = s.fight_id
+		 WHERE f.upload_id = $1 AND lower(s.character_name) = lower($2) AND s.realm_slug = $3
+		 ORDER BY f.ordinal`, a.UploadID, a.Name, a.RealmSlug)
+	if err != nil {
+		return Analysis{}, fmt.Errorf("analysis summaries: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		sm, err := scanSummaryWithFight(rows)
+		if err != nil {
+			return Analysis{}, err
+		}
+		a.Summaries = append(a.Summaries, sm)
+	}
+	return a, rows.Err()
 }
 
 func (s *SQLStore) FinishAnalysis(ctx context.Context, id int64, table []UpgradeRow, diff TalentDiff, writeup, model string, promptTokens, outputTokens int) error {

@@ -4,8 +4,9 @@
 
 **Created**: 2026-09-16
 
-**Status**: Draft — decisions taken with the guild master on 2026-09-16; defaults
-assumed where noted.
+**Status**: Implemented on `003-ai-log-comparison`, 2026-09-16; **amended the same
+day** (see the Amendment section) so the comparison is a whole night against the
+top-ranked player rather than one pull against a pasted link.
 
 **Depends on**: 001-battlenet-sso-character-dashboard (sessions, the guild gate, the
 character card and its equipment), 002-officer-tools (officer standing, the audit
@@ -370,3 +371,36 @@ against each other; re-parsing an old upload with a newer parser (re-upload inst
 an in-game addon; a desktop uploader; sending anything to Warcraft Logs; a Discord
 posting of the result. Each is a reasonable later feature and none is needed for the
 guild master's by-hand workflow to become a button.
+
+## Amendment, 2026-09-16: the whole night, against the top player
+
+After the first version was built, the guild master directed that the comparison
+should first cover the **entire raid** a character was in, against the **top-ranked
+player of the same class and specialization**, with the per-pull view to come
+later as a drill-down on the same data. This section supersedes the parts of
+User Story 3 and FR-034..FR-038 it contradicts; everything else stands.
+
+- **Your side is one upload.** The member picks one of their uploads on the card;
+  every raid pull of that character in it is the night. Pulls are grouped by boss.
+  The night is taken at the difficulty the character raided most that upload
+  (ties go to the harder); pulls at another difficulty are left out and the
+  write-up is told how many.
+- **The other side is found, not named.** No link is pasted. The site looks up
+  the highest-ranked player of the character's class and specialization on the
+  boss pulled most (ties to the most recent) at that difficulty, and takes that
+  one player's best parse on every boss of the night, with the gear and talents
+  from it. A boss they have no ranked kill on is noted, not fatal. The class and
+  specialization come from the log's own record at the pulls; a log without it
+  (advanced logging off) is refused with a message saying so.
+- **The write-up covers the night**, boss by boss where it matters, then as a
+  whole; the computed upgrade table and talent diff are unchanged in kind, built
+  from the night's latest gear and talent snapshot against the top player's.
+- **Everything else holds**: raid pulls only, the 120-minute allowance, officers
+  unlimited, every run on the trail, results on the card with the newest first,
+  nothing ever sent to Warcraft Logs, and the top player fetched read-only and
+  cached a day per boss.
+- **FR-034 is withdrawn** (no link is pasted). **FR-035** now reads "fetch, read-only,
+  the top-ranked player of the character's class and specialization on the boss
+  pulled most, and that player's best parse on each boss of the night". **FR-037**
+  and **FR-038** read "night" for "fight". The per-pull comparison remains a
+  later feature, over the same stored pulls.

@@ -268,6 +268,13 @@ card code; record the answer in this file.
 - The client is **read-only by construction**: it has one method, a query. There is
   no upload path to Warcraft Logs in the code at all (FR-035).
 
+**Amendment 2026-09-16**: the comparison target is found, not named. A second
+query, `worldData.encounter(id).characterRankings(className, specName, difficulty,
+metric, includeCombatantInfo: true)`, gives the leaderboard for one class and spec
+on one boss; its first entry is the top player, and `BestRank` then fetches that
+player on the night's other bosses. Class names are spelled without spaces in the
+query. The link parser stays in the package for the per-pull view to come.
+
 **Setup step**: register a v2 API client at warcraftlogs.com/api/clients under a
 guild account; the ID and secret become `WCL_CLIENT_ID` and `WCL_CLIENT_SECRET`,
 the secret in Secret Manager beside the Battle.net secret.
