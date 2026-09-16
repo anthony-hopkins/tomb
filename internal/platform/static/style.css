@@ -1733,3 +1733,119 @@ a.log-kind:focus { border-color: var(--accent); }
 @media (max-width: 48rem) {
   .analysis-grid { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* ---------------------------------------------------------------------------
+   The front door (spec 004): what an anonymous visitor sees at "/".
+
+   Wider than the reading column, like the dashboard, and for the same reason:
+   the top lists sit beside the officers, not under them. Everything in a
+   panel, because muted text never sits bare on the artwork (see the palette
+   note at the top of this file).
+   ------------------------------------------------------------------------ */
+
+main:has(.welcome) { max-width: 64rem; }
+
+.welcome { display: grid; gap: 1.25rem; }
+
+.welcome-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(15rem, 2fr);
+  gap: 1.75rem;
+  align-items: start;
+}
+
+.welcome-hero h1 { font-size: 2rem; }
+
+.hero-actions {
+  display: grid;
+  gap: 0.75rem;
+  align-content: start;
+}
+
+.hero-actions form { margin: 0; }
+.hero-actions button.primary, .hero-actions .primary-link { width: 100%; text-align: center; }
+
+/* The Discord link is the second door, and reads as one: the same shape as
+   the sign-in button, on the panel's own surface rather than the accent. */
+.discord-link {
+  background: rgba(16, 48, 72, 0.55);
+  color: var(--ink);
+  border-color: var(--line);
+}
+.discord-link:hover { background: rgba(16, 48, 72, 0.85); border-color: var(--accent); }
+
+.welcome-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(19rem, 1fr));
+  gap: 1.25rem;
+  align-items: start;
+}
+
+.welcome .summary-heading { margin-top: 0; }
+
+.officer-list {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+  display: grid;
+  gap: 0.6rem;
+}
+
+.officer-list li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.1rem 0.75rem;
+  align-items: baseline;
+}
+
+.officer-list .class-name { font-weight: 600; }
+
+.officer-rank {
+  color: var(--accent);
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+.officer-meta {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.welcome-stat { margin: 0.5rem 0 0; }
+.welcome-stat b { color: var(--accent); font-size: 1.4rem; }
+.welcome-stat small { color: var(--muted); }
+
+/* A board row's name when it is not a link: the same colour and clipping the
+   guild page gives the linked one. */
+.board-name {
+  color: var(--cls-text, var(--ink));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.welcome .leaderboards .board { padding: 0.5rem 0 0; }
+
+.cares h3 { font-size: 1rem; margin-bottom: 0.4rem; }
+.cares ul { margin: 0 0 1rem; padding-left: 1.2rem; }
+.cares li { margin: 0.2rem 0; }
+
+.cares-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+  gap: 1.5rem;
+}
+
+.cares-motto {
+  color: var(--accent);
+  font-size: 1.35rem;
+  font-weight: 600;
+  margin: 0.25rem 0;
+}
+
+.cares .notice a { color: #cfe8fb; }
+
+@media (max-width: 44rem) {
+  .welcome-hero { grid-template-columns: 1fr; }
+}

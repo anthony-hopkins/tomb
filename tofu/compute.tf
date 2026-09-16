@@ -143,6 +143,7 @@ resource "google_compute_instance" "main" {
     tomb-guild-officer-rank = var.guild_officer_rank
     tomb-timezone           = var.timezone
     tomb-admin              = var.admin
+    tomb-discord-invite     = var.discord_invite
     tomb-upload-dir         = var.upload_dir
     tomb-ai-model           = var.ai_model
     tomb-ai-region          = var.ai_region

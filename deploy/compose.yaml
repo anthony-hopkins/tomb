@@ -41,6 +41,8 @@ services:
       TOMB_GUILD_OFFICER_RANK: ${TOMB_GUILD_OFFICER_RANK:-}
       TOMB_TIMEZONE: ${TOMB_TIMEZONE:-}
       TOMB_ADMIN: ${TOMB_ADMIN:-}
+      # The front door's Discord link (spec 004); empty says to ask an officer.
+      TOMB_DISCORD_INVITE: ${TOMB_DISCORD_INVITE:-}
       # Combat logs and the AI comparison (spec 003). Leave TOMB_UPLOAD_DIR
       # empty: the app's default is the path bound below. The Warcraft Logs
       # pair empty means comparisons are unavailable, not a failure to start.

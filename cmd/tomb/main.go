@@ -27,6 +27,7 @@ import (
 	"github.com/anthony-hopkins/tomb/internal/apps/dashboard"
 	"github.com/anthony-hopkins/tomb/internal/apps/guild"
 	"github.com/anthony-hopkins/tomb/internal/apps/logs"
+	"github.com/anthony-hopkins/tomb/internal/apps/welcome"
 	"github.com/anthony-hopkins/tomb/internal/auth"
 	"github.com/anthony-hopkins/tomb/internal/blizzard"
 	"github.com/anthony-hopkins/tomb/internal/fights"
@@ -208,6 +209,12 @@ func run() error {
 	}
 	characterDashboard.Fights = fightStore
 
+	// The front door: what "/" shows everyone who is not signed in (spec 004).
+	frontDoor, err := welcome.New(core.Deps)
+	if err != nil {
+		return fmt.Errorf("build welcome app: %w", err)
+	}
+
 	// The single registration point. Adding an app means adding one line here
 	// and nothing else (Principle II, contracts/app-registration.md).
 	//
@@ -222,6 +229,7 @@ func run() error {
 		schedule,
 		combatLogs,
 		auditLogs,
+		frontDoor,
 	}
 
 	handler, err := platform.Mount(core, authHandlers, apps)
@@ -231,6 +239,8 @@ func run() error {
 	}
 
 	go sweepSessions(ctx, store, logger)
+	// The guild's numbers for the front door, ahead of the first visitor.
+	go frontDoor.Warm(ctx)
 	go combatLogs.Housekeep(ctx)
 	go combatLogs.RunParser(ctx)
 	go combatLogs.RunAnalyst(ctx)

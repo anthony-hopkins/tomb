@@ -73,7 +73,7 @@ variable "data_disk_size" {
     prevent_destroy.
   EOT
   type        = number
-  default     = 20  # was 10; combat logs wait here between upload and parse (spec 003)
+  default     = 20 # was 10; combat logs wait here between upload and parse (spec 003)
 }
 
 variable "disk_type" {
@@ -306,6 +306,12 @@ variable "admin" {
 
 variable "timezone" {
   description = "The IANA zone every time is shown in. Empty is the app's default, America/New_York. Reaches the app as TOMB_TIMEZONE."
+  type        = string
+  default     = ""
+}
+
+variable "discord_invite" {
+  description = "The guild's Discord invite link, shown on the public front door (spec 004). A public https:// link, not a secret. Empty means the page says to ask an officer. Reaches the app as TOMB_DISCORD_INVITE."
   type        = string
   default     = ""
 }

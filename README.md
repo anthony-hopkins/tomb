@@ -135,6 +135,19 @@ eight weeks ahead; a one-off is shown however far off it is. Officers can
 skip one night of a repeating event without touching the rest; Edit and
 Remove act on the whole series.
 
+## The front door
+
+Anyone who opens the site without signing in gets the front door: a welcome,
+the guild master and officers, the top of the roster (item level, Mythic+
+rating, raid bosses down, five places each), the Discord link, the TOMB Cares
+initiative, and the way in for a member. The numbers are read from Blizzard
+with the site's own token, held between requests and refreshed in the
+background, so the page is drawn from memory. It shows character names and the
+public Armory facts about them, nothing about anyone's account.
+
+Configuration: `TOMB_DISCORD_INVITE`, the invite link (an `https://` link;
+without it the page says to whisper an officer).
+
 ## Combat logs
 
 Upload the game's combat log from a raid night under **Combat logs** and the
