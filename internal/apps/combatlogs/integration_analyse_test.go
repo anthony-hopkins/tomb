@@ -33,6 +33,25 @@ func (f fakeWCL) TopPlayer(context.Context, int, int, string, string, string) (w
 	return wcl.CharacterRef{Region: "us", Slug: "area-52", Name: "Toptank"}, f.rank, nil
 }
 
+func (f fakeWCL) ZoneRankings(context.Context, wcl.CharacterRef) (wcl.Zone, error) {
+	return wcl.Zone{Class: "Death Knight", Spec: "Blood", Difficulty: 5, Metric: "dps",
+		Encounters: []wcl.ZoneEncounter{{ID: 3009, Name: "Vexie and the Geargrinders", Kills: 6}, {ID: 3010, Name: "Cauldron of Carnage", Kills: 4}}}, nil
+}
+
+func (f fakeWCL) CurrentZone(context.Context) (wcl.RaidZone, error) {
+	return wcl.RaidZone{ID: 44, Name: "The Venomous Abyss", Encounters: []wcl.ZoneEncounter{{ID: 3009, Name: "Vexie and the Geargrinders"}}}, nil
+}
+
+func (f fakeWCL) Casts(context.Context, string, int, string) ([]wcl.CastCount, error) {
+	return []wcl.CastCount{{ID: 49998, Name: "Death Strike", Count: 63}}, nil
+}
+
+func (f fakeWCL) LatestRank(context.Context, wcl.CharacterRef, int, int, string) (wcl.Ranking, error) {
+	return wcl.Ranking{Name: "Nekromoo", Class: "Death Knight", Spec: "Blood", Metric: "dps", RankPercent: 74, Amount: 1102000, Duration: 250 * time.Second,
+		StartedAt: time.Date(2026, 9, 14, 20, 0, 0, 0, time.UTC),
+		Gear:      []wcl.Gear{{ID: 212345, Name: "Casque", ItemLevel: 311}}, Talents: []wcl.Talent{{ID: 2, Name: "Marrowrend"}}}, nil
+}
+
 type fakeAI struct{ text string }
 
 func (f fakeAI) Write(context.Context, string, string) (string, ai.Usage, error) {
@@ -131,10 +150,10 @@ func TestAnalyseEndToEnd(t *testing.T) {
 	// The card offers the night.
 	rec := do(h, httptest.NewRequest(http.MethodGet, "/app/dashboard?c=area-52/nekromoo", nil))
 	card := rec.Body.String()
-	if !strings.Contains(card, `action="/app/combatlogs/analyses"`) || !strings.Contains(card, "WoWCombatLog.txt") || !strings.Contains(card, "2 raid pulls") {
+	if !strings.Contains(card, `action="/app/combatlogs/analyses"`) || !strings.Contains(card, `<option value="wcl">`) || !strings.Contains(card, "WoWCombatLog.txt") || !strings.Contains(card, "2 raid pulls") {
 		t.Fatalf("card has no analyse form: %.300s", card)
 	}
-	form := url.Values{"upload": {itoa(uploadID)}, "character": {"area-52/nekromoo"}}
+	form := url.Values{"source": {"upload:" + itoa(uploadID)}, "character": {"area-52/nekromoo"}}
 
 	// Run it.
 	rec = postForm(h, "/app/combatlogs/analyses", form)
@@ -181,7 +200,7 @@ func TestAnalyseEndToEnd(t *testing.T) {
 
 	// A character not on the account is refused outright.
 	before := len(store.Analyses)
-	rec = postForm(h, "/app/combatlogs/analyses", url.Values{"upload": {itoa(uploadID)}, "character": {"area-52/nobody"}})
+	rec = postForm(h, "/app/combatlogs/analyses", url.Values{"source": {"upload:" + itoa(uploadID)}, "character": {"area-52/nobody"}})
 	if len(store.Analyses) != before || rec.Code != http.StatusNotFound {
 		t.Errorf("unknown character = %d, analyses %d -> %d", rec.Code, before, len(store.Analyses))
 	}

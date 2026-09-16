@@ -4,9 +4,12 @@
 
 **Created**: 2026-09-16
 
-**Status**: Implemented on `003-ai-log-comparison`, 2026-09-16; **amended the same
-day** (see the Amendment section) so the comparison is a whole night against the
-top-ranked player rather than one pull against a pasted link.
+**Status**: Implemented on `003-ai-log-comparison`, 2026-09-16; **amended three
+times the same day** (see the Amendment sections): the comparison is a whole raid
+against the top-ranked player rather than one pull against a pasted link, the
+member's side comes from Warcraft Logs first, with an upload as the alternative,
+and a character with no logs anywhere gets a showcase of the top parses of its
+class and specialization instead of a refusal.
 
 **Depends on**: 001-battlenet-sso-character-dashboard (sessions, the guild gate, the
 character card and its equipment), 002-officer-tools (officer standing, the audit
@@ -404,3 +407,64 @@ User Story 3 and FR-034..FR-038 it contradicts; everything else stands.
   pulled most, and that player's best parse on each boss of the night". **FR-037**
   and **FR-038** read "night" for "fight". The per-pull comparison remains a
   later feature, over the same stored pulls.
+
+## Second amendment, 2026-09-16: the member's side from Warcraft Logs first
+
+The guild master then directed that the site should take the character's latest
+raid parses from Warcraft Logs itself, and not rely on an upload initially.
+
+- **Default source: Warcraft Logs.** On the card, Analyse offers "My latest raid on
+  Warcraft Logs" first, for every character, whether or not anything was ever
+  uploaded. The site reads, read-only, the character's standing in the current
+  raid — which bosses they have ranked kills on, as which specialization, at which
+  difficulty — and their most recent ranked kill on each of those bosses, with the
+  gear and talents from the newest of them. The top player is found on the boss
+  they have killed most.
+- **What that side can and cannot say.** A ranked kill carries the parse (DPS or
+  HPS, rank percent, duration, date), gear and talents. It does not carry wipes,
+  pull counts or ability use, and the write-up is told so. Those come only from
+  an uploaded log, which stays available as the other choice in the same picker
+  ("My upload … · N raid pulls").
+- **Refusals.** A character Warcraft Logs does not know, or knows with no ranked
+  kill in the current raid, is refused with a message that names the two ways to
+  get one: log raids with the Warcraft Logs uploader, or upload a combat log here
+  and pick it as the source.
+- **Everything else holds**: the allowance, officers unlimited, the trail, the
+  computed table and diff, the newest result on the card, nothing ever sent to
+  Warcraft Logs. Every analysis records its source.
+
+## Third amendment, 2026-09-16: a showcase when the character has no logs
+
+The guild master then directed: "If there's no logs for the character, provide a
+breakdown of the rotation, talents, and itemization of the top parse(s) for that
+player's class and specialization."
+
+- **No logs is not a refusal.** When the source is Warcraft Logs and the site
+  finds no character, or no ranked kill in the current raid, and the member did
+  not pick an upload, Analyse still runs — as a **showcase**. The class and
+  specialization come from Blizzard's profile (the character card already has
+  them); the raid is Warcraft Logs' current raid; the top-ranked player of that
+  class and spec is found on its first boss, at Mythic if anyone is ranked there,
+  else Heroic, and that sets the difficulty for the rest.
+- **What the showcase holds.** For every boss of the raid: the top-ranked parse
+  (player, rank percent, DPS or HPS, duration) and that player's **cast counts in
+  the kill**, read from the parse's report and turned into casts per minute — the
+  rotation as it was actually played. The first boss's talents are the build. The
+  upgrade table and talent diff are computed as ever, against the character's
+  **current** equipment and, when Blizzard gives it, current build, both fetched
+  as the site (no member token needed).
+- **The write-up** is a briefing, not a review: what the build is and why,
+  the rotation as the cast rates show it, the itemization slot by slot against
+  the character's current gear, and "Do these first" for a raider who has not
+  yet logged a raid. The card says so: "No logs of yours yet, so this is the
+  other way round".
+- **Refusals that remain**: Blizzard has no specialization for the character
+  (`nospec`); the raid list cannot be read, or nobody of the class and spec is
+  ranked on the first boss at either difficulty (`nologs`: "no logs for this
+  character and the top parses of its class could not be read just now", which
+  names the upload alternative). A showcase counts against the allowance like
+  any other run.
+- **Everything else holds**: officers unlimited, the trail (the entry reads
+  "showcase of top <spec> <class> parses in <raid>"), leaderboard answers cached
+  a day per boss with the casts kept on them, nothing ever sent to Warcraft
+  Logs. Analyses record the source `showcase`.

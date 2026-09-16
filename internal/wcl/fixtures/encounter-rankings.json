@@ -5,7 +5,7 @@
       "character": {
         "id": 1234567,
         "name": "Toptank",
-        "classID": 6,
+        "classID": 1,
         "encounterRankings": {
           "bestAmount": 1534210.5,
           "medianPerformance": 91.2,

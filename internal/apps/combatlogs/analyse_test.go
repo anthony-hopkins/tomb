@@ -17,16 +17,36 @@ import (
 	"github.com/anthony-hopkins/tomb/internal/wcl"
 )
 
-// fakeWCL answers the two reads from a table, and counts.
+// fakeWCL answers the four reads from a table, and counts.
 type fakeWCL struct {
 	top      wcl.Ranking
 	topRef   wcl.CharacterRef
 	topErr   error
 	rank     wcl.Ranking
 	rankErr  error
+	zone     wcl.Zone
+	zoneErr  error
+	latest   wcl.Ranking
+	raid     wcl.RaidZone
+	casts    []wcl.CastCount
 	tops     int
 	ranks    int
+	zones    int
+	latests  int
+	castsN   int
 	lastSpec string
+}
+
+func (f *fakeWCL) CurrentZone(context.Context) (wcl.RaidZone, error) {
+	if f.raid.ID == 0 {
+		return wcl.RaidZone{}, errors.New("no zone")
+	}
+	return f.raid, nil
+}
+
+func (f *fakeWCL) Casts(context.Context, string, int, string) ([]wcl.CastCount, error) {
+	f.castsN++
+	return f.casts, nil
 }
 
 func (f *fakeWCL) BestRank(context.Context, wcl.CharacterRef, int, int, string) (wcl.Ranking, error) {
@@ -40,14 +60,42 @@ func (f *fakeWCL) TopPlayer(_ context.Context, _, _ int, class, spec, _ string) 
 	return f.topRef, f.top, f.topErr
 }
 
-var topTank = wcl.Ranking{Name: "Toptank", Class: "Death Knight", Spec: "Blood", Metric: "dps", RankPercent: 100, Amount: 1498220, Duration: 312 * time.Second,
+func (f *fakeWCL) ZoneRankings(context.Context, wcl.CharacterRef) (wcl.Zone, error) {
+	f.zones++
+	return f.zone, f.zoneErr
+}
+
+func (f *fakeWCL) LatestRank(context.Context, wcl.CharacterRef, int, int, string) (wcl.Ranking, error) {
+	f.latests++
+	return f.latest, nil
+}
+
+var topTank = wcl.Ranking{Name: "Toptank", Class: "Death Knight", Spec: "Blood", Metric: "dps", RankPercent: 100, Amount: 1498220, Duration: 312 * time.Second, ReportCode: "AbCdEf123", FightID: 7,
 	Gear:    []wcl.Gear{{ID: 212345, Name: "Baleful Grave-Knight's Casque", ItemLevel: 320}, {ID: 999, Name: "Pendant of Malefic Fury", ItemLevel: 324}},
 	Talents: []wcl.Talent{{ID: 1, Name: "Marrowrend"}, {ID: 2, Name: "Consumption"}}}
 
 var topRef = wcl.CharacterRef{Region: "us", Slug: "area-52", Name: "Toptank"}
 
 func healthyWCL() *fakeWCL {
-	return &fakeWCL{top: topTank, topRef: topRef, rank: wcl.Ranking{Name: "Toptank", Class: "Death Knight", Spec: "Blood", Metric: "dps", RankPercent: 96, Amount: 1400000, Duration: 200 * time.Second}}
+	return &fakeWCL{
+		top: topTank, topRef: topRef,
+		rank: wcl.Ranking{Name: "Toptank", Class: "Death Knight", Spec: "Blood", Metric: "dps", RankPercent: 96, Amount: 1400000, Duration: 200 * time.Second},
+		zone: wcl.Zone{Class: "Death Knight", Spec: "Blood", Difficulty: 4, Metric: "dps",
+			Encounters: []wcl.ZoneEncounter{{ID: 3009, Name: "Vexie and the Geargrinders", Kills: 6}, {ID: 3010, Name: "Cauldron of Carnage", Kills: 4}}},
+		latest: wcl.Ranking{Name: "Nekromoo", Class: "Death Knight", Spec: "Blood", Metric: "dps", RankPercent: 74, Amount: 1102000, Duration: 250 * time.Second,
+			StartedAt: time.Date(2026, 9, 14, 20, 0, 0, 0, time.UTC),
+			Gear:      []wcl.Gear{{ID: 212345, Name: "Baleful Grave-Knight's Casque", ItemLevel: 311}}, Talents: []wcl.Talent{{ID: 1, Name: "Marrowrend"}, {ID: 3, Name: "Bonestorm"}}},
+		raid:  wcl.RaidZone{ID: 44, Name: "The Venomous Abyss", Encounters: []wcl.ZoneEncounter{{ID: 3009, Name: "Vexie and the Geargrinders"}, {ID: 3010, Name: "Cauldron of Carnage"}}},
+		casts: []wcl.CastCount{{ID: 49998, Name: "Death Strike", Count: 63}, {ID: 49028, Name: "Dancing Rune Weapon", Count: 4}},
+	}
+}
+
+// topOnly is a Warcraft Logs that knows the leaderboards and the raid but
+// has never seen the member: what a raider with no logs gets.
+func topOnly() *fakeWCL {
+	w := healthyWCL()
+	w.zoneErr = wcl.ErrNoCharacter
+	return w
 }
 
 // seeded parses the synthetic night into the store and returns the app and
@@ -55,6 +103,7 @@ func healthyWCL() *fakeWCL {
 func seeded(t *testing.T, store *fights.MemStore, audit *memAudit, w *fakeWCL) (*App, fights.Upload) {
 	t.Helper()
 	a := newApp(t, store, audit, true)
+	a.deps.Config.BnetRegion = "us"
 	if w != nil {
 		a.deps.WCL = w
 	}
@@ -65,19 +114,21 @@ func seeded(t *testing.T, store *fights.MemStore, audit *memAudit, w *fakeWCL) (
 	return a, u
 }
 
-func postAnalyse(a *App, officer bool, uploadID int64, character string) *httptest.ResponseRecorder {
-	form := url.Values{"upload": {itoa(uploadID)}, "character": {character}}
+func postAnalyse(a *App, officer bool, source, character string) *httptest.ResponseRecorder {
+	form := url.Values{"source": {source}, "character": {character}}
 	r := httptest.NewRequest(http.MethodPost, "/app/combatlogs/analyses", strings.NewReader(form.Encode()))
 	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	ctx := platform.ContextWithSession(r.Context(), auth.Session{User: auth.User{ID: 1, BattleTag: "Lazzloe#1149"}, AccessToken: "t"})
 	ctx = platform.ContextWithProfile(ctx, platform.Profile{
-		Characters: []blizzard.Character{{Name: "Nekromoo", RealmSlug: "area-52"}},
+		Characters: []blizzard.Character{{Name: "Nekromoo", RealmSlug: "area-52", Class: "Death Knight", ActiveSpec: "Blood"}},
 		Membership: platform.GuildMembership{IsMember: true, IsOfficer: officer},
 	})
 	rec := httptest.NewRecorder()
 	a.analyse(rec, r.WithContext(ctx))
 	return rec
 }
+
+func uploadSource(u fights.Upload) string { return "upload:" + itoa(u.ID) }
 
 func location(rec *httptest.ResponseRecorder) (path string, q url.Values) {
 	u, _ := url.Parse(rec.Header().Get("Location"))
@@ -86,32 +137,40 @@ func location(rec *httptest.ResponseRecorder) (path string, q url.Values) {
 
 const nekromoo = "area-52/nekromoo"
 
-// TestAnalyseRoute walks every outcome of the form (FR-035, FR-039,
-// FR-041): each refusal creates nothing and spends no allowance.
+// TestAnalyseRoute walks every outcome of the form for both sources
+// (FR-035, FR-039, FR-041): each refusal creates nothing and spends no
+// allowance.
 func TestAnalyseRoute(t *testing.T) {
 	tests := []struct {
 		name     string
 		wcl      *fakeWCL // nil means no client configured
+		source   string   // "" is Warcraft Logs; "upload" is the seeded upload
 		mangle   func(store *fights.MemStore)
 		wantMsg  string
 		wantRows int
 	}{
-		{"success", healthyWCL(), nil, "", 1},
-		{"no raid pulls", healthyWCL(), func(s *fights.MemStore) {
+		{"warcraft logs: success", healthyWCL(), "", nil, "", 1},
+		{"warcraft logs: no logs -> a showcase", topOnly(), "", nil, "", 1},
+		{"warcraft logs: unknown character -> a showcase", topOnly(), "", nil, "", 1},
+		{"no logs and no raid to showcase", &fakeWCL{zoneErr: wcl.ErrNoLogs, top: topTank, topRef: topRef}, "", nil, "nologs", 0},
+		{"no logs and nobody ranked", &fakeWCL{zoneErr: wcl.ErrNoLogs, topErr: wcl.ErrNoRank, raid: healthyWCL().raid}, "", nil, "nologs", 0},
+		{"warcraft logs: down", &fakeWCL{zoneErr: errors.New("boom")}, "", nil, "unavailable", 0},
+		{"upload: success", healthyWCL(), "upload", nil, "", 1},
+		{"upload: no raid pulls", healthyWCL(), "upload", func(s *fights.MemStore) {
 			for _, f := range s.Fights {
 				f.DifficultyID = 8
 			}
 		}, "nopulls", 0},
-		{"no spec recorded", healthyWCL(), func(s *fights.MemStore) {
+		{"upload: no spec recorded", healthyWCL(), "upload", func(s *fights.MemStore) {
 			for _, f := range s.Fights {
 				for i := range f.Summaries {
 					f.Summaries[i].SpecID = 0
 				}
 			}
 		}, "nospec", 0},
-		{"nobody ranked", &fakeWCL{topErr: wcl.ErrNoRank}, nil, "norank", 0},
-		{"warcraft logs down", &fakeWCL{topErr: errors.New("boom")}, nil, "unavailable", 0},
-		{"no client configured", nil, nil, "unavailable", 0},
+		{"nobody ranked", &fakeWCL{topErr: wcl.ErrNoRank, zone: healthyWCL().zone}, "", nil, "norank", 0},
+		{"top player lookup down", &fakeWCL{topErr: errors.New("boom"), zone: healthyWCL().zone}, "", nil, "unavailable", 0},
+		{"no client configured", nil, "", nil, "unavailable", 0},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -123,7 +182,11 @@ func TestAnalyseRoute(t *testing.T) {
 			if tc.mangle != nil {
 				tc.mangle(store)
 			}
-			rec := postAnalyse(a, false, u.ID, nekromoo)
+			source := tc.source
+			if source == "upload" {
+				source = uploadSource(u)
+			}
+			rec := postAnalyse(a, false, source, nekromoo)
 			if rec.Code != http.StatusSeeOther {
 				t.Fatalf("code = %d", rec.Code)
 			}
@@ -139,7 +202,14 @@ func TestAnalyseRoute(t *testing.T) {
 					t.Errorf("top player looked up for %q, want DeathKnight/Blood", tc.wcl.lastSpec)
 				}
 				for _, an := range store.Analyses {
-					if an.UploadID != u.ID || an.Name != "Nekromoo" || an.ComparisonID == 0 {
+					wantSource, wantUpload := fights.SourceWCL, int64(0)
+					if tc.source == "upload" {
+						wantSource, wantUpload = fights.SourceUpload, u.ID
+					}
+					if tc.wcl.zoneErr != nil {
+						wantSource = fights.SourceShowcase
+					}
+					if an.Source != wantSource || an.UploadID != wantUpload || an.Name != "Nekromoo" || an.ComparisonID == 0 {
 						t.Errorf("analysis = %+v", an)
 					}
 				}
@@ -148,18 +218,21 @@ func TestAnalyseRoute(t *testing.T) {
 	}
 }
 
-// TestAnalyseRefusals: a character not on the upload, another member's
-// upload, and an unparsed upload are 404s.
+// TestAnalyseRefusals: a character not on the account, another member's
+// upload, and a malformed source are 404s.
 func TestAnalyseRefusals(t *testing.T) {
 	store := fights.NewMemStore()
 	a, u := seeded(t, store, &memAudit{}, healthyWCL())
-	if rec := postAnalyse(a, false, u.ID, "area-52/nobody"); rec.Code != http.StatusNotFound {
+	if rec := postAnalyse(a, false, "", "area-52/nobody"); rec.Code != http.StatusNotFound {
 		t.Errorf("unknown character = %d", rec.Code)
 	}
-	if rec := postAnalyse(a, false, u.ID+100, nekromoo); rec.Code != http.StatusNotFound {
+	if rec := postAnalyse(a, false, "upload:"+itoa(u.ID+100), nekromoo); rec.Code != http.StatusNotFound {
 		t.Errorf("unknown upload = %d", rec.Code)
 	}
-	r := httptest.NewRequest(http.MethodPost, "/app/combatlogs/analyses", strings.NewReader(url.Values{"upload": {itoa(u.ID)}, "character": {nekromoo}}.Encode()))
+	if rec := postAnalyse(a, false, "something-else", nekromoo); rec.Code != http.StatusNotFound {
+		t.Errorf("bad source = %d", rec.Code)
+	}
+	r := httptest.NewRequest(http.MethodPost, "/app/combatlogs/analyses", strings.NewReader(url.Values{"source": {uploadSource(u)}, "character": {nekromoo}}.Encode()))
 	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	rec := httptest.NewRecorder()
 	a.analyse(rec, as(r, 2))
@@ -174,16 +247,16 @@ func TestAnalyseAllowance(t *testing.T) {
 	store := fights.NewMemStore()
 	store.Now = func() time.Time { return clock }
 	w := healthyWCL()
-	a, u := seeded(t, store, &memAudit{}, w)
+	a, _ := seeded(t, store, &memAudit{}, w)
 
-	if _, q := location(postAnalyse(a, false, u.ID, nekromoo)); q.Get("msg") != "" {
+	if _, q := location(postAnalyse(a, false, "", nekromoo)); q.Get("msg") != "" {
 		t.Fatalf("first run refused: %s", q.Encode())
 	}
-	_, q := location(postAnalyse(a, false, u.ID, nekromoo))
+	_, q := location(postAnalyse(a, false, "", nekromoo))
 	if q.Get("msg") != "wait" || q.Get("min") != "120" {
 		t.Errorf("second run = %s, want wait 120", q.Encode())
 	}
-	if _, q := location(postAnalyse(a, true, u.ID, nekromoo)); q.Get("msg") != "" {
+	if _, q := location(postAnalyse(a, true, "", nekromoo)); q.Get("msg") != "" {
 		t.Errorf("officer refused: %s", q.Encode())
 	}
 	if len(store.Analyses) != 2 {

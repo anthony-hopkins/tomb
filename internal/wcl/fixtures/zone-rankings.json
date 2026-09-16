@@ -1,0 +1,28 @@
+{
+  "_note": "HAND-WRITTEN from the documented shape of Character.zoneRankings (research D9, second amendment). UNCONFIRMED: replace with a live capture (T050) and adjust the decoder if field names differ.",
+  "data": {
+    "characterData": {
+      "character": {
+        "id": 123456789,
+        "name": "Nekromoo",
+        "classID": 1,
+        "zoneRankings": {
+          "bestPerformanceAverage": 71.4,
+          "medianPerformanceAverage": 65.2,
+          "difficulty": 4,
+          "metric": "dps",
+          "partition": 1,
+          "zone": 44,
+          "allStars": [
+            {"partition": 1, "spec": "Blood", "points": 412.5, "possiblePoints": 960, "rank": 3120, "regionRank": 880, "serverRank": 12, "rankPercent": 71.4, "total": 10900}
+          ],
+          "rankings": [
+            {"encounter": {"id": 3009, "name": "Vexie and the Geargrinders"}, "rankPercent": 74.1, "medianPercent": 60.2, "lockedIn": true, "totalKills": 6, "fastestKill": 250000, "spec": "Blood", "bestSpec": "Blood", "bestAmount": 1102000.5},
+            {"encounter": {"id": 3010, "name": "Cauldron of Carnage"}, "rankPercent": 68.0, "medianPercent": 58.0, "lockedIn": true, "totalKills": 4, "fastestKill": 300000, "spec": "Blood", "bestSpec": "Blood", "bestAmount": 980000.0},
+            {"encounter": {"id": 3011, "name": "Rik Reverb"}, "rankPercent": 0, "medianPercent": 0, "lockedIn": false, "totalKills": 0, "fastestKill": 0, "spec": "", "bestSpec": "", "bestAmount": 0}
+          ]
+        }
+      }
+    }
+  }
+}

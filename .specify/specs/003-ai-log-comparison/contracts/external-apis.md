@@ -20,8 +20,23 @@ type Reader interface {
 }
 ```
 
-Read-only by construction: these are the only two methods, and the package has no
-other request path (FR-035). The second, added by the 2026-09-16 amendment:
+Read-only by construction: these are the only six methods, and the package has
+no other request path (FR-035). Added by the 2026-09-16 amendments:
+
+```go
+    // ZoneRankings is the character's standing in the current raid: bosses
+    // with ranked kills, spec, difficulty, metric. ErrNoLogs when none.
+    ZoneRankings(ctx context.Context, ref CharacterRef) (Zone, error)
+    // LatestRank is the character's most recent ranked kill on a boss.
+    LatestRank(ctx context.Context, ref CharacterRef, encounterID, wclDifficulty int, metric string) (Ranking, error)
+```
+
+`ZoneRankings` queries `character(...){ classID zoneRankings }` with no zone or
+difficulty given, taking Warcraft Logs' default of the current raid at the
+highest difficulty the character has rankings in (**UNCONFIRMED**; fixture
+`zone-rankings.json`); `LatestRank` is `encounterRankings` picking the rank with
+the latest `startTime`. The member's own reference is the configured region,
+Blizzard's realm slug and the character name, which Warcraft Logs shares.
 
 ```go
     // TopPlayer finds the highest-ranked player of a class and spec on an
@@ -34,6 +49,26 @@ specName:, metric:, includeCombatantInfo: true, page: 1)` and reads the first of
 `rankings[]` (**UNCONFIRMED** field names, fixture `character-rankings.json`;
 `server.region` and `server.name`/`slug` give the character reference). Class names
 are spelled without spaces in the query (`DeathKnight`).
+
+Added by the third amendment (the showcase for a character with no logs):
+
+```go
+    // CurrentZone is the current raid and its bosses.
+    CurrentZone(ctx context.Context) (RaidZone, error)
+    // Casts is one player's ability use in one kill, from the report the
+    // ranking names: how many times each ability was cast.
+    Casts(ctx context.Context, reportCode string, fightID int, player string) ([]CastCount, error)
+```
+
+`CurrentZone` queries `worldData.zones { id name frozen expansion{id name}
+difficulties{id name} encounters{id name} }` and picks the newest zone (highest
+expansion id, then zone id) that is not frozen and is ranked at a raid difficulty
+(**UNCONFIRMED** field names, fixture `zones.json`). `Casts` queries
+`reportData.report(code:).table(dataType: Casts, fightIDs: [n], filterExpression:
+"source.name = \"<player>\"")`, a JSON scalar whose `data.entries[]` carry
+`guid`, `name` and `total` (**UNCONFIRMED**, fixture `casts.json`). The worker
+turns counts into casts per minute over the kill's duration. Both are read-only
+like the rest.
 
 **Authentication**: `POST https://www.warcraftlogs.com/oauth/token`, HTTP basic auth
 with `WCL_CLIENT_ID` / `WCL_CLIENT_SECRET`, body `grant_type=client_credentials`.

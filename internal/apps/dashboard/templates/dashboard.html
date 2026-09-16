@@ -107,17 +107,15 @@
         <div class="analysis-left">
           {{if not .Available}}
           <p class="fineprint">Comparisons are not set up on this site yet.</p>
-          {{else if not .Uploads}}
-          <p class="fineprint">No parsed raid nights for this character yet. <a href="/app/combatlogs">Upload a combat log</a> to compare one.</p>
           {{else}}
           <form class="analyse-form" method="post" action="{{.Action}}">
             <input type="hidden" name="{{.CSRF.Field}}" value="{{.CSRF.Token}}">
             <input type="hidden" name="character" value="{{.Character}}">
-            <label for="an-upload">Your night</label>
-            <select id="an-upload" name="upload">
-              {{range .Uploads}}<option value="{{.ID}}">{{.Label}}</option>{{end}}
+            <label for="an-source">Your side</label>
+            <select id="an-source" name="source">
+              {{range .Sources}}<option value="{{.Value}}">{{.Label}}</option>{{end}}
             </select>
-            <p class="fineprint">Measured against the top-ranked player of your class and specialization on the boss you pulled most, at the difficulty you raided.</p>
+            <p class="fineprint">Your latest ranked kills on Warcraft Logs, or a night you <a href="/app/combatlogs">uploaded here</a>, measured against the top-ranked player of your class and specialization on the boss you pulled most, at the difficulty you raided.</p>
             <div class="form-actions">
               <button type="submit" class="primary">Analyse</button>
             </div>
@@ -126,7 +124,11 @@
           {{if .Pending}}<p class="notice" role="status">Analysing&hellip; this page will update itself.</p>{{end}}
           {{with .Failure}}<p class="notice" role="alert">The last analysis could not be completed: {{.}}. Try again later.</p>{{end}}
           {{with .Result}}
+          {{if .Showcase}}
+          <p class="analysis-meta">No logs of yours yet, so this is the other way round: the top {{.AgainstAs}} parses, broken down, against your current gear. Analysed {{.Analysed}}; <strong>{{.Against}}</strong> holds the first boss.</p>
+          {{else}}
           <p class="analysis-meta">Analysed {{.Analysed}} against <strong>{{.Against}}</strong>{{with .AgainstAs}}, {{.}}{{end}}</p>
+          {{end}}
           <table class="upgrade-table">
             <thead><tr><th>Slot</th><th>Yours</th><th>Theirs</th><th>Verdict</th></tr></thead>
             <tbody>

@@ -213,11 +213,27 @@ type ComparisonKey struct {
 	Metric                  string
 }
 
+// Analysis sources.
+const (
+	// SourceWCL is the character's latest ranked kill on each boss, read
+	// from Warcraft Logs. The default: no upload needed.
+	SourceWCL = "wcl"
+	// SourceUpload is a night the member uploaded.
+	SourceUpload = "upload"
+	// SourceShowcase is a character with no logs anywhere: the top parses
+	// of the class and spec are broken down instead, against the
+	// character's current gear.
+	SourceShowcase = "showcase"
+)
+
 // Analysis is one run of the comparison (FR-038..FR-041): a character's
-// whole night in one upload against the top player of their class and spec.
+// latest raid -- from Warcraft Logs, or from one upload -- against the top
+// player of their class and spec.
 type Analysis struct {
-	ID       int64
-	UserID   int64
+	ID     int64
+	UserID int64
+	// Source is SourceWCL or SourceUpload; UploadID is set for the latter.
+	Source   string
 	UploadID int64
 	// SummaryID is a single pull, for the per-fight view to come; zero for
 	// a night.

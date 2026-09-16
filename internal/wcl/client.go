@@ -14,7 +14,7 @@ import (
 )
 
 // HTTPClient reads Warcraft Logs' v2 API with the client credentials grant
-// (contracts/external-apis.md). One query; nothing else.
+// (contracts/external-apis.md). A handful of queries; nothing else.
 type HTTPClient struct {
 	ClientID     string
 	ClientSecret string
@@ -43,10 +43,10 @@ func New(clientID, clientSecret string) *HTTPClient {
 	}
 }
 
-// query is the one query the site makes: a character's best parse on a boss
-// at a difficulty, with the gear and talents used (research D9). The
-// encounterRankings field is a JSON scalar on Warcraft Logs' side.
-const query = `query($name: String, $slug: String, $region: String, $id: Int, $enc: Int!, $diff: Int!, $metric: CharacterRankingMetricType!) {
+// rankQuery is a character's ranked kills on a boss at a difficulty, with
+// the gear and talents used in each (research D9). The encounterRankings
+// field is a JSON scalar on Warcraft Logs' side.
+const rankQuery = `query($name: String, $slug: String, $region: String, $id: Int, $enc: Int!, $diff: Int!, $metric: CharacterRankingMetricType!) {
   characterData {
     character(name: $name, serverSlug: $slug, serverRegion: $region, id: $id) {
       id
@@ -59,43 +59,42 @@ const query = `query($name: String, $slug: String, $region: String, $id: Int, $e
 
 // BestRank fetches ref's best recorded performance on the encounter.
 func (c *HTTPClient) BestRank(ctx context.Context, ref CharacterRef, encounterID, wclDifficulty int, metric string) (Ranking, error) {
-	token, err := c.accessToken(ctx)
+	ranks, err := c.ranks(ctx, ref, encounterID, wclDifficulty, metric)
 	if err != nil {
 		return Ranking{}, err
 	}
+	best := 0
+	for i, r := range ranks {
+		if r.RankPercent > ranks[best].RankPercent {
+			best = i
+		}
+	}
+	return ranks[best], nil
+}
 
+// LatestRank fetches ref's most recent ranked kill on the encounter.
+func (c *HTTPClient) LatestRank(ctx context.Context, ref CharacterRef, encounterID, wclDifficulty int, metric string) (Ranking, error) {
+	ranks, err := c.ranks(ctx, ref, encounterID, wclDifficulty, metric)
+	if err != nil {
+		return Ranking{}, err
+	}
+	latest := 0
+	for i, r := range ranks {
+		if r.StartedAt.After(ranks[latest].StartedAt) {
+			latest = i
+		}
+	}
+	return ranks[latest], nil
+}
+
+// ranks fetches every ranked kill of ref on the encounter.
+func (c *HTTPClient) ranks(ctx context.Context, ref CharacterRef, encounterID, wclDifficulty int, metric string) ([]Ranking, error) {
 	vars := map[string]any{"enc": encounterID, "diff": wclDifficulty, "metric": metric}
 	if ref.ID != 0 {
 		vars["id"] = ref.ID
 	} else {
 		vars["name"], vars["slug"], vars["region"] = ref.Name, ref.Slug, ref.Region
 	}
-	body, _ := json.Marshal(map[string]any{"query": query, "variables": vars})
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.Endpoint, bytes.NewReader(body))
-	if err != nil {
-		return Ranking{}, err
-	}
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json")
-
-	resp, err := c.http().Do(req)
-	if err != nil {
-		return Ranking{}, fmt.Errorf("warcraft logs: %w", err)
-	}
-	defer func() {
-		_, _ = io.Copy(io.Discard, resp.Body)
-		_ = resp.Body.Close()
-	}()
-	switch resp.StatusCode {
-	case http.StatusOK:
-	case http.StatusTooManyRequests, http.StatusServiceUnavailable:
-		return Ranking{}, ErrBusy
-	default:
-		return Ranking{}, fmt.Errorf("warcraft logs answered %d", resp.StatusCode)
-	}
-
 	var payload struct {
 		Data struct {
 			CharacterData struct {
@@ -107,21 +106,67 @@ func (c *HTTPClient) BestRank(ctx context.Context, ref CharacterRef, encounterID
 				} `json:"character"`
 			} `json:"characterData"`
 		} `json:"data"`
+	}
+	if err := c.query(ctx, rankQuery, vars, &payload); err != nil {
+		return nil, err
+	}
+	ch := payload.Data.CharacterData.Character
+	if ch == nil {
+		return nil, ErrNoCharacter
+	}
+	return decodeRankings(ch.Name, ch.ClassID, metric, ch.EncounterRankings)
+}
+
+// query posts one GraphQL query and decodes the answer, surfacing
+// Warcraft Logs' own errors and a busy signal.
+func (c *HTTPClient) query(ctx context.Context, q string, vars map[string]any, out any) error {
+	token, err := c.accessToken(ctx)
+	if err != nil {
+		return err
+	}
+	body, _ := json.Marshal(map[string]any{"query": q, "variables": vars})
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.Endpoint, bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := c.http().Do(req)
+	if err != nil {
+		return fmt.Errorf("warcraft logs: %w", err)
+	}
+	defer func() {
+		_, _ = io.Copy(io.Discard, resp.Body)
+		_ = resp.Body.Close()
+	}()
+	switch resp.StatusCode {
+	case http.StatusOK:
+	case http.StatusTooManyRequests, http.StatusServiceUnavailable:
+		return ErrBusy
+	default:
+		return fmt.Errorf("warcraft logs answered %d", resp.StatusCode)
+	}
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
+	if err != nil {
+		return fmt.Errorf("warcraft logs: read: %w", err)
+	}
+	var envelope struct {
 		Errors []struct {
 			Message string `json:"message"`
 		} `json:"errors"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
-		return Ranking{}, fmt.Errorf("warcraft logs: decode: %w", err)
+	if err := json.Unmarshal(raw, &envelope); err != nil {
+		return fmt.Errorf("warcraft logs: decode: %w", err)
 	}
-	if len(payload.Errors) > 0 {
-		return Ranking{}, fmt.Errorf("warcraft logs: %s", payload.Errors[0].Message)
+	if len(envelope.Errors) > 0 {
+		return fmt.Errorf("warcraft logs: %s", envelope.Errors[0].Message)
 	}
-	ch := payload.Data.CharacterData.Character
-	if ch == nil {
-		return Ranking{}, ErrNoCharacter
+	if err := json.Unmarshal(raw, out); err != nil {
+		return fmt.Errorf("warcraft logs: decode: %w", err)
 	}
-	return decodeRankings(ch.Name, ch.ClassID, metric, ch.EncounterRankings)
+	return nil
 }
 
 // rankings is the shape of the encounterRankings scalar. UNCONFIRMED in
@@ -151,34 +196,32 @@ type rankings struct {
 	} `json:"ranks"`
 }
 
-func decodeRankings(name string, classID int, metric string, raw json.RawMessage) (Ranking, error) {
+func decodeRankings(name string, classID int, metric string, raw json.RawMessage) ([]Ranking, error) {
 	var rk rankings
 	if len(raw) > 0 && string(raw) != "null" {
 		if err := json.Unmarshal(raw, &rk); err != nil {
-			return Ranking{}, fmt.Errorf("warcraft logs: decode rankings: %w", err)
+			return nil, fmt.Errorf("warcraft logs: decode rankings: %w", err)
 		}
 	}
 	if len(rk.Ranks) == 0 {
-		return Ranking{}, ErrNoRank
+		return nil, ErrNoRank
 	}
-	best := 0
-	for i, r := range rk.Ranks {
-		if r.RankPercent > rk.Ranks[best].RankPercent {
-			best = i
+	out := make([]Ranking, 0, len(rk.Ranks))
+	for _, r := range rk.Ranks {
+		one := Ranking{
+			Name: name, ClassID: classID, Class: ClassName(classID), Spec: r.Spec, Metric: metric,
+			RankPercent: r.RankPercent, Amount: r.Amount,
+			Duration:   time.Duration(r.Duration) * time.Millisecond,
+			StartedAt:  time.UnixMilli(r.StartTime).UTC(),
+			ReportCode: r.Report.Code, FightID: r.Report.FightID,
 		}
-	}
-	r := rk.Ranks[best]
-	out := Ranking{
-		Name: name, ClassID: classID, Spec: r.Spec, Metric: metric,
-		RankPercent: r.RankPercent, Amount: r.Amount,
-		Duration:   time.Duration(r.Duration) * time.Millisecond,
-		ReportCode: r.Report.Code, FightID: r.Report.FightID,
-	}
-	for _, g := range r.Gear {
-		out.Gear = append(out.Gear, Gear{ID: g.ID, Name: g.Name, ItemLevel: g.ItemLevel, Quality: g.Quality})
-	}
-	for _, t := range r.Talents {
-		out.Talents = append(out.Talents, Talent{ID: t.ID, Name: t.Name})
+		for _, g := range r.Gear {
+			one.Gear = append(one.Gear, Gear{ID: g.ID, Name: g.Name, ItemLevel: g.ItemLevel, Quality: g.Quality})
+		}
+		for _, t := range r.Talents {
+			one.Talents = append(one.Talents, Talent{ID: t.ID, Name: t.Name})
+		}
+		out = append(out, one)
 	}
 	return out, nil
 }

@@ -20,9 +20,40 @@ Rules:
 - About 600 words. Plain text with short headings on their own lines. No tables, no bullet symbols other than a leading dash, no markdown emphasis.
 - Never invent an item, talent or number that is not in the data.`
 
+// Modes.
+const (
+	// ModeCompare is a raider's own raid against the top player.
+	ModeCompare = "compare"
+	// ModeShowcase is a raider with no logs: the top parses of their class
+	// and spec, broken down, against their current gear.
+	ModeShowcase = "showcase"
+)
+
+// SystemFor is the instruction for a mode.
+func SystemFor(mode string) string {
+	if mode == ModeShowcase {
+		return SystemShowcase
+	}
+	return System
+}
+
+// SystemShowcase is the instruction when the raider has no logs to compare:
+// the top parses are the subject, and the raider's current gear is the
+// only thing of theirs on the table.
+const SystemShowcase = `You are an experienced World of Warcraft raid leader briefing one of your raiders who has no logged raids yet. You are given, for their class and specialization, the top-ranked parse on each boss of the current raid at the given difficulty: the player, the parse, the talents used, the gear worn, and how many times each ability was cast in that kill with the kill's length. You are also given the raider's current gear and a computed slot-by-slot table against the top player's gear, and a computed talent difference where the raider's build is known.
+
+Write for the raider, plainly and specifically, the way you would before their first raid:
+- Rotation: from the cast counts and kill lengths, say what the top players press and how often -- casts per minute for the core abilities, which cooldowns and how many times per kill -- and what that implies about priority. Name abilities. Where bosses differ, say so.
+- Talents: the build the top parses use, and what it is built around. If the raider's own talents are known, name the differences; if not, say the build is what to copy.
+- Itemization: what the top players wear -- item level, notable pieces, trinkets and weapons -- and, from the table, which of the raider's slots are furthest behind. Treat the table as fact; do not restate it.
+- End with a section titled "Do these first" listing exactly three things in priority order, each one line.
+- About 600 words. Plain text with short headings on their own lines. No tables, no bullet symbols other than a leading dash, no markdown emphasis.
+- Never invent an ability, item, talent or number that is not in the data.`
+
 // Input is everything the model is given, as labelled sections. Every
 // name is a name: the caller resolves ids before building the prompt.
 type Input struct {
+	Mode     string `json:"mode"`
 	Raid     Raid   `json:"raid"`
 	Bosses   []Boss `json:"bosses"`
 	You      Player `json:"you"`
@@ -55,11 +86,21 @@ type Boss struct {
 	YourBestWasKill  bool    `json:"your_best_pull_was_kill"`
 	YourDeaths       int     `json:"your_deaths_across_pulls"`
 	YourCasts        []Cast  `json:"your_casts_on_best_pull,omitempty"`
+	// YourRankPercent and YourDate are known when your side came from
+	// Warcraft Logs rather than an upload.
+	YourRankPercent float64 `json:"your_rank_percent,omitempty"`
+	YourDate        string  `json:"your_kill_date,omitempty"`
 
+	// TheirName is set when the top player differs from boss to boss, as it
+	// does in a showcase.
+	TheirName        string  `json:"their_name,omitempty"`
 	TheirDPS         float64 `json:"their_dps,omitempty"`
 	TheirHPS         float64 `json:"their_hps,omitempty"`
 	TheirRankPercent float64 `json:"their_rank_percent,omitempty"`
 	TheirDuration    string  `json:"their_kill_duration,omitempty"`
+	// TheirCasts is their ability use in that kill, with casts per minute
+	// worked out from the kill's length.
+	TheirCasts []CastRate `json:"their_casts,omitempty"`
 	// Note explains a missing side, such as no ranked kill by them here.
 	Note string `json:"note,omitempty"`
 }
@@ -77,6 +118,13 @@ type Player struct {
 	// Note explains a gap in the data, such as a night with no gear
 	// recorded, so the model does not read absence as a choice.
 	Note string `json:"note,omitempty"`
+}
+
+// CastRate is one ability's use in a kill, as a count and a rate.
+type CastRate struct {
+	Name      string  `json:"name"`
+	Count     int     `json:"count"`
+	PerMinute float64 `json:"per_minute"`
 }
 
 // Cast is one ability's use in a pull.
@@ -97,7 +145,11 @@ type Gear struct {
 // as labelled JSON, which the model reads more reliably than prose.
 func Build(in Input) string {
 	var b strings.Builder
-	b.WriteString("Review the night below against the top-ranked player's parses. Sections follow as JSON.\n\n")
+	if in.Mode == ModeShowcase {
+		b.WriteString("Brief the raider below from the top-ranked parses of their class and specialization. Sections follow as JSON.\n\n")
+	} else {
+		b.WriteString("Review the night below against the top-ranked player's parses. Sections follow as JSON.\n\n")
+	}
 	section := func(name string, v any) {
 		b.WriteString("## " + name + "\n")
 		enc, err := json.MarshalIndent(v, "", "  ")
@@ -107,6 +159,7 @@ func Build(in Input) string {
 		b.Write(enc)
 		b.WriteString("\n\n")
 	}
+	section("mode", in.Mode)
 	section("raid", in.Raid)
 	section("bosses", in.Bosses)
 	section("you", in.You)

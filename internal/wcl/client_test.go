@@ -71,7 +71,7 @@ func TestBestRank(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Name != "Toptank" || got.ClassID != 6 || got.Spec != "Blood" || got.RankPercent != 97.3 || got.Amount != 1498220.1 {
+	if got.Name != "Toptank" || got.ClassID != 1 || got.Class != "Death Knight" || got.Spec != "Blood" || got.RankPercent != 97.3 || got.Amount != 1498220.1 {
 		t.Errorf("ranking = %+v", got)
 	}
 	if got.ReportCode != "aBcD1234eFgH" || got.FightID != 7 || got.Duration != 312*time.Second || got.Metric != "dps" {

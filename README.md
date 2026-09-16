@@ -143,13 +143,19 @@ every one. The file is compressed and sent in pieces from your browser, resumes
 if the connection drops, and is deleted the moment it has been read. A log
 contains everyone in the raid; only your own characters are kept.
 
-On **My Characters**, a character with parsed raid pulls gains a comparison: pick
-the night's upload and press Analyse. The site finds the top-ranked player of your
-class and specialization on the boss you pulled most, at the difficulty you
-raided, fetches their best parse, gear and talents on every boss of the night,
-works out a slot-by-slot upgrade table and a talent difference itself, and has a
-model write the review, boss by boss and as a whole. Nothing is ever sent to Warcraft Logs. A member may
-run one every two hours; officers are not limited. Every run is in the Logs.
+On **My Characters**, every character gains a comparison. Press Analyse and the
+site reads your latest ranked kills in the current raid from Warcraft Logs, finds
+the top-ranked player of your class and specialization on the boss you have
+killed most, fetches their best parse, gear and talents on every boss, works out
+a slot-by-slot upgrade table and a talent difference itself, and has a model
+write the review, boss by boss and as a whole. Pick an uploaded night as the
+source instead and the review also covers wipes, pull counts and ability use,
+which Warcraft Logs' rankings do not carry. A character with no logs anywhere
+gets the reverse instead: the top parses of its class and specialization on every
+boss of the current raid, broken down into build, rotation (the top player's
+casts per minute in the kill) and itemization against the character's current
+gear. Nothing is ever sent to Warcraft Logs. A member may run one every two
+hours; officers are not limited. Every run is in the Logs.
 
 Configuration: `WCL_CLIENT_ID` and `WCL_CLIENT_SECRET` (a read-only Warcraft
 Logs API client; without them the card says comparisons are unavailable),

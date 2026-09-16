@@ -82,26 +82,35 @@ while `queued` or `parsing`.
 Form, CSRF field. Sets `removed`, cascades fights, summaries and analyses, writes
 `combatlogs.remove`, redirects to `/app/combatlogs` (FR-031).
 
-### `POST /app/combatlogs/analyses` — run a comparison *(amended 2026-09-16)*
+### `POST /app/combatlogs/analyses` — run a comparison *(amended three times, 2026-09-16)*
 
-Form fields: `upload` (an upload id of the member's, parsed), `character`
-(`realm-slug/name`, one of the account's characters as the upload recorded them),
-CSRF field. Posted from the character card.
+Form fields: `character` (`realm-slug/name`, one of the account's characters),
+`source` (`wcl` — the default: the character's latest ranked kills on Warcraft
+Logs — or `upload:<id>`, one of the member's parsed uploads), CSRF field. Posted
+from the character card.
 
 | Condition | Status | Result |
 |---|---|---|
-| Valid, allowance available | 303 | Analysis created `pending` for the whole night; → `/app/dashboard?c=<character key>` where the card shows "analysing" with the `Refresh` header |
-| The upload has no raid pulls for the character | 303 | → the card with `msg=nopulls`; nothing created |
+| Valid, allowance available | 303 | Analysis created `pending` with its source; → `/app/dashboard?c=<character key>` where the card shows "analysing" with the `Refresh` header |
+| `wcl`: Warcraft Logs knows no such character, or no ranked kill in the current raid | 303 | A **showcase** is created `pending` instead (source `showcase`): the top parses of the character's class and spec, from Blizzard's profile, on every boss of the current raid; → the card as for a valid run |
+| `wcl`, showcase: Blizzard's profile has no specialization for the character | 303 | → the card with `msg=nospec`; nothing created |
+| `wcl`, showcase: the current raid cannot be read, or its top parses of the class and spec cannot be read | 303 | → the card with `msg=nologs` ("…and the top parses of its class could not be read just now"); nothing created |
+| `upload`: the upload has no raid pulls for the character | 303 | → the card with `msg=nopulls`; nothing created |
 | The log recorded no specialization (advanced logging off) | 303 | → the card with `msg=nospec`; nothing created |
 | Nobody of that class and spec is ranked on the main boss at that difficulty | 303 | → the card with `msg=norank`; nothing created; allowance untouched |
 | Warcraft Logs cannot be reached, or no client configured | 303 | → the card with `msg=unavailable`; nothing created (FR-041) |
 | Inside the 120-minute window (member, not officer) | 303 | → the card with `msg=wait&min=N` (FR-039) |
-| Upload not this member's or not parsed; character not on the upload | 404 | |
+| Upload not this member's or not parsed; character not on the account; a `source` of neither form | 404 | |
 
-The leaderboard lookup for the top player happens **in the request** (about a
-second) so the refusals above can be given before anything is created; that
-player's parses on the night's other bosses (cached a day each) and the model
-call run in the background worker. Every outcome that creates a row writes
+The character's standing (`wcl`) or the upload's pulls, and the leaderboard
+lookup for the top player, happen **in the request** (a second or two) so the
+refusals above can be given before anything is created; the character's latest
+kill per boss (`wcl`), the top player's parses on the other bosses (cached a day
+each) and the model call run in the background worker. A showcase looks the
+top player up on the raid's first boss in the request (Mythic, then Heroic);
+the worker finds the top player on every other boss, reads each one's cast
+counts from the parse's report (kept on the cached leaderboard row), and
+fetches the character's current equipment and build from Blizzard as the site. Every outcome that creates a row writes
 `combatlogs.analyse` when the worker finishes (FR-040).
 
 ---
@@ -114,11 +123,13 @@ The selected character's card gains:
 
 - a **Talents** block under Equipped: from Blizzard's active loadout, or from the
   character's latest parsed pull with the date, or "unavailable" (FR-033, D8);
-- an **Analyse** form in the left panel: a picker of this member's uploads with
-  raid pulls for the character (file, date, pull count), a hidden character field,
-  and the button. With none the panel says so and links to Combat logs;
+- an **Analyse** form in the left panel: a source picker — "My latest raid on
+  Warcraft Logs" first, then each of this member's uploads with raid pulls for the
+  character (file, date, pull count) — a hidden character field, and the button;
 - the **upgrade table** in the left panel and the **write-up** in the right, from the
-  newest `done` analysis for this character, with "Analysed <time> against <name>";
+  newest `done` analysis for this character, with "Analysed <time> against <name>"
+  (a showcase says instead "No logs of yours yet, so this is the other way round:
+  the top <spec> <class> parses, broken down, against your current gear");
   a `pending` newest analysis shows "analysing…" and the meta refresh; a `failed`
   newest analysis shows its reason above the previous result (FR-038, FR-041).
 

@@ -1,0 +1,23 @@
+{
+  "_note": "HAND-WRITTEN from the documented shape of report.table(dataType: Casts) (research D9, third amendment). UNCONFIRMED: replace with a live capture (T050).",
+  "data": {
+    "reportData": {
+      "report": {
+        "table": {
+          "data": {
+            "entries": [
+              {"name": "Death Strike", "guid": 49998, "type": 1, "abilityIcon": "spell_deathknight_butcher2.jpg", "total": 63, "hitCount": 63},
+              {"name": "Marrowrend", "guid": 195182, "type": 1, "abilityIcon": "ability_deathknight_marrowrend.jpg", "total": 24, "hitCount": 24},
+              {"name": "Heart Strike", "guid": 206930, "type": 1, "abilityIcon": "inv_artifact_stolenpower.jpg", "total": 58, "hitCount": 58},
+              {"name": "Dancing Rune Weapon", "guid": 49028, "type": 1, "abilityIcon": "inv_sword_07.jpg", "total": 4, "hitCount": 4},
+              {"name": "Melee", "guid": 1, "type": 1, "abilityIcon": "ability_meleedamage.jpg", "total": 210, "hitCount": 210},
+              {"name": "Broken Entry", "guid": 0, "type": 1, "total": 0}
+            ],
+            "totalTime": 312000,
+            "logVersion": 62
+          }
+        }
+      }
+    }
+  }
+}
