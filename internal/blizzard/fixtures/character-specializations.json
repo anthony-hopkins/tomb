@@ -1,0 +1,54 @@
+{
+  "_links": {"self": {"href": "https://us.api.blizzard.com/profile/wow/character/area-52/nekromoo/specializations?namespace=profile-us"}},
+  "_note": "HAND-WRITTEN from Blizzard's documented shape (research D8). Blizzard's loadouts array has been absent since patch 11.2; replace this file with a captured response when one is available (T040).",
+  "specializations": [
+    {
+      "specialization": {"key": {"href": "https://us.api.blizzard.com/data/wow/playable-specialization/250?namespace=static-us"}, "name": "Blood", "id": 250},
+      "loadouts": [
+        {
+          "is_active": true,
+          "talent_loadout_code": "CoPAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+          "selected_class_talent_tree": {"key": {"href": "https://us.api.blizzard.com/data/wow/talent-tree/750/playable-specialization/250?namespace=static-us"}, "name": "Death Knight"},
+          "selected_spec_talent_tree": {"key": {"href": "https://us.api.blizzard.com/data/wow/talent-tree/750/playable-specialization/250?namespace=static-us"}, "name": "Blood"},
+          "selected_hero_talent_tree": {"key": {"href": "https://us.api.blizzard.com/data/wow/talent-tree/750/playable-specialization/250?namespace=static-us"}, "name": "Deathbringer", "id": 33},
+          "selected_class_talents": [
+            {"id": 96204, "rank": 1, "tooltip": {"talent": {"key": {"href": "https://us.api.blizzard.com/data/wow/talent/96204?namespace=static-us"}, "name": "Icebound Fortitude", "id": 96204}, "spell_tooltip": {"spell": {"name": "Icebound Fortitude", "id": 48792}, "description": "Your blood freezes...", "cast_time": "Instant", "cooldown": "2 min cooldown"}}},
+            {"id": 96210, "rank": 1, "tooltip": {"talent": {"key": {"href": "https://us.api.blizzard.com/data/wow/talent/96210?namespace=static-us"}, "name": "Anti-Magic Zone", "id": 96210}, "spell_tooltip": {"spell": {"name": "Anti-Magic Zone", "id": 51052}, "description": "...", "cast_time": "Instant", "cooldown": "2 min cooldown"}}}
+          ],
+          "selected_spec_talents": [
+            {"id": 96301, "rank": 1, "tooltip": {"talent": {"key": {"href": "https://us.api.blizzard.com/data/wow/talent/96301?namespace=static-us"}, "name": "Marrowrend", "id": 96301}, "spell_tooltip": {"spell": {"name": "Marrowrend", "id": 195182}, "description": "...", "cast_time": "Instant"}}},
+            {"id": 96305, "rank": 2, "tooltip": {"talent": {"key": {"href": "https://us.api.blizzard.com/data/wow/talent/96305?namespace=static-us"}, "name": "Improved Death Strike", "id": 96305}, "spell_tooltip": {"spell": {"name": "Improved Death Strike", "id": 374277}, "description": "...", "cast_time": "Passive"}}}
+          ],
+          "selected_hero_talents": [
+            {"id": 117653, "rank": 1, "tooltip": {"talent": {"key": {"href": "https://us.api.blizzard.com/data/wow/talent/117653?namespace=static-us"}, "name": "Reaper's Mark", "id": 117653}, "spell_tooltip": {"spell": {"name": "Reaper's Mark", "id": 439843}, "description": "...", "cast_time": "Instant", "cooldown": "45 sec cooldown"}}}
+          ]
+        },
+        {
+          "is_active": false,
+          "talent_loadout_code": "CoPAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB",
+          "selected_class_talents": [],
+          "selected_spec_talents": [],
+          "selected_hero_talents": []
+        }
+      ]
+    },
+    {
+      "specialization": {"key": {"href": "https://us.api.blizzard.com/data/wow/playable-specialization/252?namespace=static-us"}, "name": "Unholy", "id": 252},
+      "loadouts": [
+        {
+          "is_active": true,
+          "talent_loadout_code": "CwPAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+          "selected_class_talents": [
+            {"id": 96204, "rank": 1, "tooltip": {"talent": {"name": "Icebound Fortitude", "id": 96204}, "spell_tooltip": {"spell": {"name": "Icebound Fortitude", "id": 48792}}}}
+          ],
+          "selected_spec_talents": [
+            {"id": 96401, "rank": 1, "tooltip": {"talent": {"name": "Festering Strike", "id": 96401}, "spell_tooltip": {"spell": {"name": "Festering Strike", "id": 85948}}}}
+          ],
+          "selected_hero_talents": []
+        }
+      ]
+    }
+  ],
+  "active_specialization": {"key": {"href": "https://us.api.blizzard.com/data/wow/playable-specialization/250?namespace=static-us"}, "name": "Blood", "id": 250},
+  "character": {"key": {"href": "https://us.api.blizzard.com/profile/wow/character/area-52/nekromoo?namespace=profile-us"}, "name": "Nekromoo", "id": 123456789, "realm": {"key": {"href": "https://us.api.blizzard.com/data/wow/realm/1168?namespace=dynamic-us"}, "name": "Area 52", "id": 1168, "slug": "area-52"}}
+}

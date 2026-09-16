@@ -1,0 +1,60 @@
+{{define "combatlogs.html"}}
+{{/* A member's combat logs: the upload form, then every upload newest
+     first. The form needs the uploader script to do anything -- a raid
+     night's log has to be compressed and cut up before it can travel -- and
+     says so when the browser cannot run it. */}}
+<section class="panel combatlogs" aria-label="Combat logs">
+  <h1>Combat logs</h1>
+  <p class="fineprint">
+    Upload the game's combat log from a raid night and the site reads it into
+    your pulls: each boss, kill or wipe, and your own numbers on every one.
+    The file itself is deleted the moment it has been read; upload it again if
+    you need it read again.
+  </p>
+  <p class="fineprint">
+    A combat log contains everyone who was in the raid. Only your own
+    characters are kept; nothing about anyone else is. Switch on
+    <strong>Advanced Combat Logging</strong> (Options &rarr; Network) before
+    you raid, or the log will not record your gear and talents at each pull.
+    Clear <code>WoWCombatLog.txt</code> between nights; the site accepts up to
+    {{.Limit}} compressed.
+  </p>
+
+  <form id="upload-form" class="upload-form" method="post" action="{{.BeginURL}}"
+        data-begin="{{.BeginURL}}" data-csrf="{{.CSRF.Token}}">
+    <input type="hidden" name="{{.CSRF.Field}}" value="{{.CSRF.Token}}">
+    <label for="upload-file">Combat log file</label>
+    <input id="upload-file" type="file" name="file" accept=".txt,text/plain">
+    <progress id="upload-progress" hidden value="0" max="1"></progress>
+    <p id="upload-status" class="upload-status" role="status">This page needs a current browser to upload.</p>
+    <div class="form-actions">
+      <button id="upload-button" type="submit" class="primary">Upload</button>
+    </div>
+  </form>
+  <script src="/static/upload.js" defer></script>
+
+  {{if not .Uploads}}
+  <p class="fineprint">Nothing uploaded yet.</p>
+  {{else}}
+  <ul class="uploads">
+    {{range .Uploads}}
+    <li class="upload-row">
+      <div>
+        <a href="{{.URL}}">{{.Filename}}</a>
+        <div class="upload-meta">
+          {{mib .RawSize}} &middot; {{.CreatedAt.Format "2 Jan 2006, 15:04"}}
+          {{if eq (print .State) "parsed"}}&middot; {{.FightCount}} fight{{if ne .FightCount 1}}s{{end}}{{end}}
+          {{if eq (print .State) "failed"}}&middot; {{.Failure}}{{end}}
+        </div>
+      </div>
+      <span class="upload-state {{.StateClass}}">{{.StateLabel}}</span>
+      <form class="upload-remove" method="post" action="{{.URL}}/remove">
+        <input type="hidden" name="{{$.CSRF.Field}}" value="{{$.CSRF.Token}}">
+        <button type="submit" aria-label="Remove {{.Filename}}">Remove</button>
+      </form>
+    </li>
+    {{end}}
+  </ul>
+  {{end}}
+</section>
+{{end}}

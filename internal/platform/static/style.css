@@ -1531,3 +1531,205 @@ a.log-kind:focus { border-color: var(--accent); }
 }
 
 .calendar-empty { margin-top: 1rem; }
+
+/* ---------------------------------------------------------------------------
+   Combat logs (spec 003): the upload page, an upload's fights, and the two
+   panels the comparison adds to the character card. */
+
+.combatlogs h1 { margin-top: 0; }
+
+.upload-form {
+  display: grid;
+  gap: 0.75rem;
+  margin: 1rem 0 1.5rem;
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  background: var(--panel-veil);
+}
+
+.upload-form input[type="file"] { color: var(--ink); max-width: 100%; }
+
+.upload-form progress {
+  width: 100%;
+  height: 0.6rem;
+  accent-color: var(--accent);
+}
+
+.upload-status { margin: 0; color: var(--muted); font-size: 0.9rem; }
+.upload-status.is-error { color: #f08a8a; }
+
+.uploads {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.upload-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 0.75rem;
+  align-items: center;
+  padding: 0.6rem 0.8rem;
+  border: 1px solid var(--line);
+  border-radius: 0.4rem;
+  background: var(--panel-veil);
+}
+
+.upload-row a { color: var(--ink); text-decoration: none; }
+.upload-row a:hover { color: var(--accent-2); }
+.upload-meta { color: var(--muted); font-size: 0.85rem; }
+
+.upload-state {
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.upload-state.is-parsed { color: var(--accent); }
+.upload-state.is-failed { color: #f08a8a; }
+.upload-state.is-busy { color: var(--accent-2); }
+
+.upload-remove button {
+  background: none;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 0.2rem 0.7rem;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.8rem;
+}
+.upload-remove button:hover { border-color: #f08a8a; color: #f08a8a; }
+
+.fight { margin-top: 1.25rem; }
+
+.fight-head {
+  display: flex;
+  gap: 0.75rem;
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+.fight-head h2 { margin: 0; font-size: 1.05rem; }
+.fight-result {
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.fight-result.is-kill { color: var(--accent); }
+
+.fight-summary {
+  margin: 0.5rem 0 0;
+  padding: 0.6rem 0.8rem;
+  border: 1px solid var(--line);
+  border-radius: 0.4rem;
+  background: var(--panel-veil);
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
+  gap: 0.4rem 1rem;
+  font-size: 0.9rem;
+}
+.fight-summary .stat-label {
+  display: block;
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.fight-summary .stat-value { font-variant-numeric: tabular-nums; }
+.fight-casts { grid-column: 1 / -1; color: var(--muted); font-size: 0.85rem; }
+
+/* The comparison on the character card: the computed table on the left,
+   the write-up on the right. */
+.card-analysis {
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
+}
+.card-analysis h3 {
+  margin: 0 0 0.6rem;
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.analysis-meta { margin: 0 0 0.6rem; color: var(--muted); font-size: 0.85rem; }
+
+.analyse-form { display: grid; gap: 0.5rem; margin-bottom: 1rem; }
+.analyse-form select,
+.analyse-form input[type="url"] {
+  width: 100%;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: 0.3rem;
+  background: var(--bg);
+  color: var(--ink);
+  font: inherit;
+}
+
+.upgrade-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+.upgrade-table th,
+.upgrade-table td {
+  padding: 0.35rem 0.5rem;
+  text-align: left;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+.upgrade-table th {
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.upgrade-table .lvl { font-variant-numeric: tabular-nums; color: var(--muted); white-space: nowrap; }
+.verdict-same { color: var(--muted); }
+.verdict-holds { color: var(--accent); }
+.verdict-chase { color: #f5c26b; }
+
+.talent-diff { font-size: 0.85rem; }
+.talent-diff dt { color: var(--muted); font-size: 0.7rem; letter-spacing: 0.06em; text-transform: uppercase; margin-top: 0.5rem; }
+.talent-diff dd { margin: 0.2rem 0 0; }
+
+.writeup p { margin: 0 0 0.8rem; line-height: 1.55; }
+.writeup h4 { margin: 1rem 0 0.4rem; font-size: 0.9rem; color: var(--accent); }
+
+@media (max-width: 48rem) {
+  .upload-row { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* Talents on the character card (spec 003, FR-033): the build, grouped the
+   way the game groups it, with a line saying where it came from. */
+.talents { margin-top: 1.25rem; }
+.talents-source { margin: 0 0 0.5rem; color: var(--muted); font-size: 0.85rem; }
+.talent-groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: 0.75rem;
+  margin: 0;
+}
+.talent-groups dt {
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.talent-groups dd { margin: 0.25rem 0 0; font-size: 0.85rem; line-height: 1.5; }
+.talent-groups .rank { color: var(--muted); font-size: 0.75rem; }
+
+.analysis-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 1.5rem;
+}
+.analysis-right { min-width: 0; }
+@media (max-width: 48rem) {
+  .analysis-grid { grid-template-columns: minmax(0, 1fr); }
+}

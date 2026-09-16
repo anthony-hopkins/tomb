@@ -92,3 +92,42 @@ func TestCSRFTokensDifferPerBrowser(t *testing.T) {
 		seen[token] = true
 	}
 }
+
+// TestCSRFVerifyHeader: a scripted request carries the token in a header
+// instead of a form field (spec 003's uploader), and the two are equivalent.
+func TestCSRFVerifyHeader(t *testing.T) {
+	tests := []struct {
+		name   string
+		cookie string
+		header string
+		field  string
+		want   bool
+	}{
+		{"header only", "abc", "abc", "", true},
+		{"field only", "abc", "", "abc", true},
+		{"both, matching", "abc", "abc", "abc", true},
+		{"header wrong, field right: header wins and fails", "abc", "nope", "abc", false},
+		{"header mismatch", "abc", "nope", "", false},
+		{"neither", "abc", "", "", false},
+		{"header without cookie", "", "abc", "", false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			form := url.Values{}
+			if tc.field != "" {
+				form.Set(CSRFFieldName, tc.field)
+			}
+			req := httptest.NewRequest(http.MethodPut, "/app/combatlogs/uploads/1/pieces/0", strings.NewReader(form.Encode()))
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			if tc.header != "" {
+				req.Header.Set(CSRFHeaderName, tc.header)
+			}
+			if tc.cookie != "" {
+				req.AddCookie(&http.Cookie{Name: CSRFCookieName, Value: tc.cookie})
+			}
+			if got := (&CSRF{}).Verify(req); got != tc.want {
+				t.Errorf("Verify() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}

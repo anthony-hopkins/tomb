@@ -52,6 +52,19 @@ type HTTPClient struct {
 
 	rosterMu    sync.Mutex
 	rosterCache map[string]rosterEntry
+
+	// ClientID and ClientSecret are the site's own Battle.net client, for
+	// Game Data lookups made with no member signed in (spec 003): the
+	// background worker resolving talent and item names. Same client that
+	// signs members in; the token it mints is the app's, not a member's.
+	ClientID     string
+	ClientSecret string
+
+	appMu     sync.Mutex
+	appToken  string
+	appExpiry time.Time
+	// now is the clock, replaceable by a test.
+	now func() time.Time
 }
 
 type rosterEntry struct {

@@ -1,0 +1,19 @@
+{
+  "_note": "HAND-WRITTEN: a known character with no ranks on this encounter and difficulty (research D9).",
+  "data": {
+    "characterData": {
+      "character": {
+        "id": 1234567,
+        "name": "Toptank",
+        "classID": 6,
+        "encounterRankings": {
+          "bestAmount": 0,
+          "totalKills": 0,
+          "difficulty": 5,
+          "metric": "dps",
+          "ranks": []
+        }
+      }
+    }
+  }
+}

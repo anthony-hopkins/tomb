@@ -1,0 +1,9 @@
+{
+  "_links": {"self": {"href": "https://us.api.blizzard.com/data/wow/talent/96301?namespace=static-12.0.1_58000-us"}},
+  "_note": "HAND-WRITTEN from Blizzard's documented Talent API shape; replace with a captured response (research D8, D11).",
+  "id": 96301,
+  "rank_descriptions": [{"rank": 1, "description": "Smash the target..."}],
+  "spell": {"key": {"href": "https://us.api.blizzard.com/data/wow/spell/195182?namespace=static-12.0.1_58000-us"}, "name": "Marrowrend", "id": 195182},
+  "playable_class": {"key": {"href": "https://us.api.blizzard.com/data/wow/playable-class/6?namespace=static-12.0.1_58000-us"}, "name": "Death Knight", "id": 6},
+  "playable_specialization": {"key": {"href": "https://us.api.blizzard.com/data/wow/playable-specialization/250?namespace=static-12.0.1_58000-us"}, "name": "Blood", "id": 250}
+}

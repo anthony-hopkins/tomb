@@ -90,6 +90,10 @@ func buildContentSecurityPolicy(formActions []string) string {
 		// that genuinely required it, which is the bar Technology Constraints
 		// sets. Everything the page DOES still works without it.
 		"script-src 'self'; " +
+		// The combat-log uploader sends pieces with fetch, to this origin
+		// only. Said outright rather than left to default-src 'none', which
+		// would refuse it (spec 003).
+		"connect-src 'self'; " +
 		"img-src 'self' https://render.worldofwarcraft.com; " +
 		"form-action " + strings.Join(sources, " ") + "; " +
 		"base-uri 'none'; " +

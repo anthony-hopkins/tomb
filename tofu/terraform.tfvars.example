@@ -23,6 +23,14 @@ acme_email = ""
 # CIDRs allowed to reach port 22 directly. Empty means SSH via IAP only.
 # ssh_source_ranges = ["203.0.113.4/32"]
 
+# --- Combat logs and the AI comparison -----------------------------------
+# A Warcraft Logs API client (warcraftlogs.com/api/clients), read-only. The
+# id goes here; the secret goes in Secret Manager as
+# <service_name>-wcl-client-secret. Empty leaves comparisons unavailable.
+# wcl_client_id = ""
+# ai_model      = "gemini-3.1-pro"
+# ai_region     = "us-central1"
+
 # --- Backups -------------------------------------------------------------
 # Daily snapshots of the Postgres data disk, kept 14 days by default.
 # snapshot_retention_days = 14

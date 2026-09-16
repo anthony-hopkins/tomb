@@ -39,8 +39,13 @@ TOMB_GUILD_ROSTER_TTL="$(meta tomb-guild-roster-ttl)"
 TOMB_GUILD_OFFICER_RANK="$(meta tomb-guild-officer-rank)"
 TOMB_TIMEZONE="$(meta tomb-timezone)"
 TOMB_ADMIN="$(meta tomb-admin)"
+TOMB_UPLOAD_DIR="$(meta tomb-upload-dir)"
+TOMB_AI_MODEL="$(meta tomb-ai-model)"
+TOMB_AI_REGION="$(meta tomb-ai-region)"
+WCL_CLIENT_ID="$(meta tomb-wcl-client-id)"
 DB_SECRET="$(meta tomb-db-secret)"
 BNET_SECRET="$(meta tomb-bnet-secret)"
+WCL_SECRET="$(meta tomb-wcl-secret)"
 
 TOKEN="$(curl -fsS -H 'Metadata-Flavor: Google' \
   'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token' |
@@ -66,6 +71,14 @@ if ! BNET_CLIENT_SECRET="$(fetch_secret "$BNET_SECRET" 2>/dev/null)"; then
   BNET_CLIENT_SECRET="unset"
 fi
 
+# The Warcraft Logs secret is optional in a stronger sense: without it the
+# app runs with comparisons unavailable and the character card says so. So
+# empty, not a placeholder.
+if ! WCL_CLIENT_SECRET="$(fetch_secret "$WCL_SECRET" 2>/dev/null)"; then
+  log "secret $WCL_SECRET has no version; combat-log comparisons will be unavailable"
+  WCL_CLIENT_SECRET=""
+fi
+
 # Holds the database password and the client secret.
 umask 077
 {
@@ -83,6 +96,11 @@ umask 077
   echo "TOMB_GUILD_OFFICER_RANK=$TOMB_GUILD_OFFICER_RANK"
   echo "TOMB_TIMEZONE=$TOMB_TIMEZONE"
   echo "TOMB_ADMIN=$TOMB_ADMIN"
+  echo "TOMB_UPLOAD_DIR=$TOMB_UPLOAD_DIR"
+  echo "TOMB_AI_MODEL=$TOMB_AI_MODEL"
+  echo "TOMB_AI_REGION=$TOMB_AI_REGION"
+  echo "WCL_CLIENT_ID=$WCL_CLIENT_ID"
+  echo "WCL_CLIENT_SECRET=$WCL_CLIENT_SECRET"
   echo "DB_PASSWORD=$DB_PASSWORD"
 } >"$APP_DIR/.env"
 chmod 600 "$APP_DIR/.env"

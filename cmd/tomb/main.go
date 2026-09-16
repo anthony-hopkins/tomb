@@ -20,14 +20,18 @@ import (
 	// be loaded there -- every time on the site depends on it.
 	_ "time/tzdata"
 
+	"github.com/anthony-hopkins/tomb/internal/ai"
 	"github.com/anthony-hopkins/tomb/internal/apps/calendar"
+	"github.com/anthony-hopkins/tomb/internal/apps/combatlogs"
 	"github.com/anthony-hopkins/tomb/internal/apps/comingsoon"
 	"github.com/anthony-hopkins/tomb/internal/apps/dashboard"
 	"github.com/anthony-hopkins/tomb/internal/apps/guild"
 	"github.com/anthony-hopkins/tomb/internal/apps/logs"
 	"github.com/anthony-hopkins/tomb/internal/auth"
 	"github.com/anthony-hopkins/tomb/internal/blizzard"
+	"github.com/anthony-hopkins/tomb/internal/fights"
 	"github.com/anthony-hopkins/tomb/internal/platform"
+	"github.com/anthony-hopkins/tomb/internal/wcl"
 )
 
 func main() {
@@ -81,6 +85,8 @@ func run() error {
 	// is fetched live on every view. A previously fetched roster is still kept,
 	// but only as a fallback for when Blizzard cannot be reached.
 	bnet.RosterTTL = cfg.GuildRosterTTL
+	// The site's own token, for Game Data lookups with nobody signed in.
+	bnet.ClientID, bnet.ClientSecret = cfg.BnetClientID, cfg.BnetClientSecret
 
 	store := &auth.Store{DB: db}
 	audit := &platform.AuditLog{DB: db}
@@ -105,6 +111,21 @@ func run() error {
 		TTL:    cfg.GuildRosterTTL,
 	}
 
+	// Warcraft Logs, read-only, only when a client is configured; the card
+	// says comparisons are unavailable otherwise. Vertex AI as the VM.
+	var wclReader wcl.Reader
+	if cfg.WCLClientID != "" && cfg.WCLClientSecret != "" {
+		wclReader = wcl.New(cfg.WCLClientID, cfg.WCLClientSecret)
+	} else {
+		logger.Warn("warcraft logs client not configured; comparisons unavailable")
+	}
+	vertex := ai.NewVertex(cfg.AIModel, cfg.AIRegion)
+	if err := vertex.Ready(ctx); err != nil {
+		logger.Warn("ai unavailable", "model", cfg.AIModel, "region", cfg.AIRegion, "error", err)
+	} else {
+		logger.Info("ai ready", "model", cfg.AIModel, "region", cfg.AIRegion)
+	}
+
 	core := &platform.Core{
 		Deps: platform.Deps{
 			DB:       db,
@@ -115,6 +136,8 @@ func run() error {
 			Roster:   roster,
 			Audit:    audit,
 			CSRF:     csrf,
+			WCL:      wclReader,
+			AI:       vertex,
 		},
 		Sessions: sessions,
 		Profiles: &platform.ProfileFetcher{
@@ -176,6 +199,15 @@ func run() error {
 		return fmt.Errorf("build calendar app: %w", err)
 	}
 
+	// Combat logs and the character card share one store: the app writes
+	// what it parses, the card reads the comparison (spec 003).
+	fightStore := &fights.SQLStore{DB: db}
+	combatLogs, err := combatlogs.New(core.Deps, fightStore)
+	if err != nil {
+		return fmt.Errorf("build combat logs app: %w", err)
+	}
+	characterDashboard.Fights = fightStore
+
 	// The single registration point. Adding an app means adding one line here
 	// and nothing else (Principle II, contracts/app-registration.md).
 	//
@@ -188,6 +220,7 @@ func run() error {
 		characterDashboard,
 		comingSoon,
 		schedule,
+		combatLogs,
 		auditLogs,
 	}
 
@@ -198,6 +231,9 @@ func run() error {
 	}
 
 	go sweepSessions(ctx, store, logger)
+	go combatLogs.Housekeep(ctx)
+	go combatLogs.RunParser(ctx)
+	go combatLogs.RunAnalyst(ctx)
 
 	srv := &http.Server{
 		Addr:    cfg.Addr,

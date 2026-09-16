@@ -489,3 +489,42 @@ history, everything in `tofu/bootstrap`, and the project itself.
   config creates networks, IAM bindings and a database. The mitigation is that
   it has no downloadable key and one repository can assume it. The role list is
   a plain list in `tofu/bootstrap/main.tf` if you want to narrow it.
+
+## Combat logs and the AI comparison
+
+Spec 003 adds two outside services. Neither needs anything on the VM beyond
+what OpenTofu applies, and one needs a one-time registration.
+
+**Vertex AI** is enabled by `tofu apply` (the `aiplatform` API and the
+`roles/aiplatform.user` binding on the VM's service account). The app calls it
+as the VM; there is no key. If the role is missing the app logs
+`ai unavailable` at startup and a member's card says an analysis could not be
+completed; nothing else is affected.
+
+**Warcraft Logs** is read-only: the site fetches a named player's parse, gear
+and talents to compare against, and never sends anything. It needs an API
+client, which is the same kind of bootstrap step as the Battle.net client:
+
+1. Sign in at <https://www.warcraftlogs.com> with the guild's account, open
+   **API Clients** under your profile, and create a client named "TOMB site"
+   with no redirect URL. Copy the client id and secret.
+2. Set the `WCL_CLIENT_ID` repository variable to the id (it is not a secret;
+   it reaches the app through the `wcl_client_id` OpenTofu variable).
+3. Add the secret, once per environment, against the container OpenTofu
+   created:
+
+   ```sh
+   printf '%s' "$WCL_CLIENT_SECRET" | \
+     gcloud secrets versions add tomb-platform-develop-wcl-client-secret --data-file=-
+   ```
+
+   (`tomb-platform-wcl-client-secret` for production.)
+
+Until both exist the app starts with comparisons unavailable, and the character
+card's Analyse panel says so. `configure.sh` logs it rather than treating it as
+fatal, the way it does the Battle.net secret.
+
+**The data disk** default grows from 10 to 20 GB with this feature, because
+uploaded logs wait on it between upload and parse. GCE grows the disk online
+and the startup script grows the filesystem on the next boot; an existing
+environment picks it up on its next `tofu apply` and reboot.

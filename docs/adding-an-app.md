@@ -122,6 +122,20 @@ mistake here should never reach a request.
   shown your headlines. Return a handful at most, already worded for a glance
   (`When: "Today 20:00"`), and return nothing on an error — the page is about
   something else, so say so on your own page instead.
+- **Outside services.** `Deps.WCL` reads Warcraft Logs (one method, a query;
+  nil when the site has no client, which an app reads as "unavailable") and
+  `Deps.AI` writes through Vertex AI as the VM. Both are lent like `Blizzard`
+  so a test hands in a fake. The Blizzard client also offers two optional
+  interfaces, `blizzard.SpecializationsReader` and `blizzard.GameData`, which
+  the live client satisfies and a fake need not: type-assert, and fall
+  through when they are absent.
+- **A scripted request.** A `fetch` call carries the CSRF token in the
+  `X-CSRF-Token` header instead of a form field; the core's verifier treats
+  the two alike. The uploader is the one such caller.
+- **Work in the background.** Create a row, run the work in a goroutine
+  started from `main.go`, and while the row is unsettled set a `Refresh: 5`
+  header on the page that shows it. No polling script; the header goes away
+  with the state.
 - **`Cache-Control: no-store`,** security headers, and structured request
   logging. All automatic.
 
@@ -161,6 +175,12 @@ tmpl, err = tmpl.ParseFS(armory.FS, "templates/armory.html")
 then `{{template "armory-panel" .Panel}}` in your page with an `*armory.Panel`,
 built by `armory.Builder`: `Of` when you already hold the `blizzard.Character`,
 `For` when you know only the name and realm and need the profile fetched first.
+
+`internal/fights` is the other shared package: the store the Combat logs app
+writes (uploads, fights, summaries, analyses) and the character card reads.
+Two apps needing one store is what makes a shared package rather than an app's
+own; neither app imports the other. `internal/combatlog` (the parser),
+`internal/wcl` and `internal/ai` are leaf packages the same way.
 
 Parse the partial in the same function your tests use to build the template. A
 test that parses only your page renders a template the app never uses, and goes
