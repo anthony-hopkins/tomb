@@ -38,16 +38,21 @@ func TestRoadmapIsListed(t *testing.T) {
 
 	for _, want := range []string{
 		"Ask TOMB Bot",
-		"Combat log analysis",
-		"Gear analysis",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("the roadmap is missing %q", want)
 		}
 	}
+	// Combat log analysis and gear analysis are built (spec 003) and must
+	// not be promised as coming.
+	for _, gone := range []string{"Combat log analysis", "Gear analysis"} {
+		if strings.Contains(body, gone) {
+			t.Errorf("the roadmap still promises %q, which is built", gone)
+		}
+	}
 
-	if n := strings.Count(raw, `class="tag-ai"`); n != 3 {
-		t.Errorf("found %d AI tags, want 3 (Ask TOMB Bot, combat log, gear)", n)
+	if n := strings.Count(raw, `class="tag-ai"`); n != 1 {
+		t.Errorf("found %d AI tags, want 1 (Ask TOMB Bot)", n)
 	}
 
 	if !strings.Contains(body, "None of this is built yet") {
@@ -60,9 +65,7 @@ func TestRoadmapIsListed(t *testing.T) {
 // entries carry it is asserted by name rather than by count alone.
 func TestOnlyAIEntriesAreTagged(t *testing.T) {
 	want := map[string]bool{
-		"Ask TOMB Bot":        true,
-		"Combat log analysis": true,
-		"Gear analysis":       true,
+		"Ask TOMB Bot": true,
 	}
 
 	if len(Roadmap) != len(want) {

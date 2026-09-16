@@ -19,6 +19,7 @@ import (
 
 	"github.com/anthony-hopkins/tomb/internal/armory"
 	"github.com/anthony-hopkins/tomb/internal/blizzard"
+	"github.com/anthony-hopkins/tomb/internal/fights"
 	"github.com/anthony-hopkins/tomb/internal/platform"
 )
 
@@ -31,6 +32,11 @@ const maxConcurrentProgressFetches = 8
 
 // App is the Character Dashboard.
 type App struct {
+	// Fights is the store the Combat logs app writes and this card reads:
+	// the character's parsed pulls, for the talents fallback and the
+	// comparison (spec 003). Set by main; nil leaves both out.
+	Fights fights.Store
+
 	deps platform.Deps
 	tmpl *template.Template
 }
@@ -79,6 +85,14 @@ type view struct {
 	// Selected is the character shown in the Armory-style panel: the most
 	// recently played one, or whichever the URL asks for.
 	Selected *armory.Panel
+
+	// Talents is the selected character's build (spec 003, FR-033): from
+	// Blizzard, from the log, or unavailable -- and says which.
+	Talents *talentsView
+
+	// Analysis is the comparison section (spec 003, FR-038): the form, the
+	// computed table and the write-up. Nil when the site has no fights store.
+	Analysis *analysisView
 
 	// Partial reports that some characters could not be loaded, so the page can
 	// say so rather than quietly showing an incomplete roster (research.md D9).
@@ -184,6 +198,13 @@ func (a *App) show(w http.ResponseWriter, r *http.Request) {
 
 	if chosen >= 0 {
 		v.Selected = a.panel(r, ranked[chosen])
+		v.Talents = a.talents(r, ranked[chosen])
+		v.Analysis = a.analysis(r, ranked[chosen])
+		if v.Analysis != nil && v.Analysis.Pending {
+			// The write-up is on its way; the page fetches itself again
+			// until it lands (research D7).
+			w.Header().Set("Refresh", "5")
+		}
 	}
 
 	var body bytes.Buffer

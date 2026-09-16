@@ -41,11 +41,24 @@ services:
       TOMB_GUILD_OFFICER_RANK: ${TOMB_GUILD_OFFICER_RANK:-}
       TOMB_TIMEZONE: ${TOMB_TIMEZONE:-}
       TOMB_ADMIN: ${TOMB_ADMIN:-}
+      # Combat logs and the AI comparison (spec 003). Leave TOMB_UPLOAD_DIR
+      # empty: the app's default is the path bound below. The Warcraft Logs
+      # pair empty means comparisons are unavailable, not a failure to start.
+      TOMB_UPLOAD_DIR: ${TOMB_UPLOAD_DIR:-}
+      TOMB_AI_MODEL: ${TOMB_AI_MODEL:-}
+      TOMB_AI_REGION: ${TOMB_AI_REGION:-}
+      WCL_CLIENT_ID: ${WCL_CLIENT_ID:-}
+      WCL_CLIENT_SECRET: ${WCL_CLIENT_SECRET:-}
       DATABASE_URL: postgres://tomb:${DB_PASSWORD:?}@db:5432/tomb?sslmode=disable
       # Caddy terminates TLS, so the browser is always on HTTPS even though
       # this hop is plaintext inside the host.
       SESSION_COOKIE_SECURE: "true"
       ADDR: ":8080"
+    volumes:
+      # Uploaded combat logs wait here between the first piece and the end of
+      # parsing, then are deleted. On the data disk, not the boot disk, so a
+      # raid night's worth cannot fill the root filesystem.
+      - /mnt/tomb-data/uploads:/var/lib/tomb/uploads
     depends_on:
       db:
         condition: service_healthy

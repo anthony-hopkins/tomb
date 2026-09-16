@@ -67,6 +67,26 @@ type Config struct {
 	// the interface ever says who this is.
 	Admin string
 
+	// UploadDir is where a combat log lives between the first piece arriving
+	// and parsing finishing, from TOMB_UPLOAD_DIR (spec 003, FR-030). On the
+	// VM it is the data disk; the file is deleted the moment parsing ends,
+	// so the directory is scratch, not storage.
+	UploadDir string
+
+	// WCLClientID and WCLClientSecret are the site's Warcraft Logs API
+	// client, from WCL_CLIENT_ID and WCL_CLIENT_SECRET. Read-only: the site
+	// fetches a named player's parse to compare against and sends nothing.
+	// Either empty means comparisons are unavailable, and the card says so.
+	WCLClientID     string
+	WCLClientSecret string
+
+	// AIModel and AIRegion name the Vertex AI model that writes a
+	// comparison and the region it is called in, from TOMB_AI_MODEL and
+	// TOMB_AI_REGION. The VM's own identity authenticates the call; there is
+	// no key to configure.
+	AIModel  string
+	AIRegion string
+
 	// SessionCookieSecure defaults to true. It may only be false for local
 	// plain-HTTP development (research.md D6).
 	SessionCookieSecure bool
@@ -113,6 +133,11 @@ func splitRanks(raw string) []string {
 	return ranks
 }
 
+// UploadLimitBytes is the most a combat log may be on the wire, compressed:
+// 500 MiB, which is several raid nights. A file over it is weeks of logging,
+// and the upload page says to clear the game's log file between nights.
+const UploadLimitBytes = 500 << 20
+
 // ErrMissingConfig reports one or more required variables being absent.
 var ErrMissingConfig = errors.New("missing required configuration")
 
@@ -131,6 +156,11 @@ func LoadConfig() (Config, error) {
 		DatabaseURL:      os.Getenv("DATABASE_URL"),
 		APIHost:          strings.TrimRight(os.Getenv("BNET_API_HOST"), "/"),
 		Addr:             envOr("ADDR", ":8080"),
+		UploadDir:        envOr("TOMB_UPLOAD_DIR", "/var/lib/tomb/uploads"),
+		WCLClientID:      strings.TrimSpace(os.Getenv("WCL_CLIENT_ID")),
+		WCLClientSecret:  strings.TrimSpace(os.Getenv("WCL_CLIENT_SECRET")),
+		AIModel:          envOr("TOMB_AI_MODEL", "gemini-3.1-pro"),
+		AIRegion:         envOr("TOMB_AI_REGION", "us-central1"),
 	}
 
 	// Secure by default: only an explicit "false" opts out, so a typo or an

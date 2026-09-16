@@ -63,3 +63,30 @@ resource "google_secret_manager_secret_iam_member" "vm_db_password" {
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.vm.email}"
 }
+
+# ---------------------------------------------------------------------------
+# Warcraft Logs client secret (spec 003).
+#
+# The same shape as the Battle.net secret, for the same reason: the value is
+# minted on warcraftlogs.com and no API can provision it. Added once:
+#
+#   printf '%s' "$WCL_CLIENT_SECRET" | \
+#     gcloud secrets versions add tomb-platform-wcl-client-secret --data-file=-
+#
+# Until a version exists the app starts with comparisons unavailable, and the
+# character card says so; nothing else is affected.
+# ---------------------------------------------------------------------------
+
+resource "google_secret_manager_secret" "wcl_client_secret" {
+  secret_id = "${local.name}-wcl-client-secret"
+
+  replication {
+    auto {}
+  }
+}
+
+resource "google_secret_manager_secret_iam_member" "vm_wcl_client_secret" {
+  secret_id = google_secret_manager_secret.wcl_client_secret.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.vm.email}"
+}

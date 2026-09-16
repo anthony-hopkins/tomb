@@ -45,6 +45,11 @@ type Headline struct {
     Live  bool   // happening right now
 }
 
+// Deps gained two lent clients with spec 003, composed in main.go like
+// Blizzard: WCL (wcl.Reader, read-only, nil when unconfigured) and AI
+// (ai.Writer). Apps that share a store do so through a shared package
+// (internal/fights), never by importing each other.
+
 // Registrar is the narrow slice of routing an app is allowed to touch.
 type Registrar interface {
     // Handle registers a handler at a path RELATIVE to the app's RoutePrefix.

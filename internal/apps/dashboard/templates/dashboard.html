@@ -75,6 +75,90 @@
       <p>Blizzard did not return any World of Warcraft characters for this account.</p>
     </section>
     {{end}}
+
+    {{with .Talents}}
+    {{/* The build (spec 003, FR-033): Blizzard's when it answers, the log's
+         record of the latest pull when it does not, and it says which. */}}
+    <section class="panel talents" aria-label="Talents">
+      <h3 class="gear-heading">Talents</h3>
+      {{if .Unavailable}}
+      <p class="talents-source">Talents are unavailable for this character: Blizzard returned no build, and no parsed pull records one.</p>
+      {{else}}
+      <p class="talents-source">{{.Source}}{{with .HeroTree}} &middot; {{.}}{{end}}</p>
+      <dl class="talent-groups">
+        {{if .Class}}<div><dt>Class</dt>{{range .Class}}<dd>{{.Name}}{{if gt .Rank 1}} <span class="rank">&times;{{.Rank}}</span>{{end}}</dd>{{end}}</div>{{end}}
+        {{if .Spec}}<div><dt>Specialization</dt>{{range .Spec}}<dd>{{.Name}}{{if gt .Rank 1}} <span class="rank">&times;{{.Rank}}</span>{{end}}</dd>{{end}}</div>{{end}}
+        {{if .Hero}}<div><dt>Hero</dt>{{range .Hero}}<dd>{{.Name}}{{if gt .Rank 1}} <span class="rank">&times;{{.Rank}}</span>{{end}}</dd>{{end}}</div>{{end}}
+      </dl>
+      {{end}}
+    </section>
+    {{end}}
+
+    {{with .Analysis}}
+    {{/* The comparison (spec 003): pick one of your pulls, name a player on
+         Warcraft Logs, and get the computed gear table on the left and the
+         write-up on the right. The form posts to the Combat logs app, which
+         owns the run; this card only shows the result. Nothing here sends
+         anything to Warcraft Logs. */}}
+    <section class="panel card-analysis" aria-label="Comparison">
+      <h3>Compare a pull against a top player</h3>
+      {{with .Msg}}<p class="notice" role="alert">{{.}}</p>{{end}}
+      <div class="analysis-grid">
+        <div class="analysis-left">
+          {{if not .Available}}
+          <p class="fineprint">Comparisons are not set up on this site yet.</p>
+          {{else if not .Fights}}
+          <p class="fineprint">No parsed raid pulls for this character yet. <a href="/app/combatlogs">Upload a combat log</a> to compare one.</p>
+          {{else}}
+          <form class="analyse-form" method="post" action="{{.Action}}">
+            <input type="hidden" name="{{.CSRF.Field}}" value="{{.CSRF.Token}}">
+            <label for="an-fight">Your pull</label>
+            <select id="an-fight" name="summary">
+              {{range .Fights}}<option value="{{.ID}}">{{.Label}}</option>{{end}}
+            </select>
+            <label for="an-link">Warcraft Logs link of the player to compare against</label>
+            <input id="an-link" name="link" type="url" required autocomplete="off"
+                   placeholder="https://www.warcraftlogs.com/character/us/area-52/name">
+            <div class="form-actions">
+              <button type="submit" class="primary">Analyse</button>
+            </div>
+          </form>
+          {{end}}
+          {{if .Pending}}<p class="notice" role="status">Analysing&hellip; this page will update itself.</p>{{end}}
+          {{with .Failure}}<p class="notice" role="alert">The last analysis could not be completed: {{.}}. Try again later.</p>{{end}}
+          {{with .Result}}
+          <p class="analysis-meta">Analysed {{.Analysed}} against <strong>{{.Against}}</strong></p>
+          <table class="upgrade-table">
+            <thead><tr><th>Slot</th><th>Yours</th><th>Theirs</th><th>Verdict</th></tr></thead>
+            <tbody>
+              {{range .Table}}
+              <tr>
+                <td>{{.Slot}}</td>
+                <td>{{.Yours}}{{if .YourLvl}} <span class="lvl">{{.YourLvl}}</span>{{end}}</td>
+                <td>{{.Theirs}}{{if .TheirLv}} <span class="lvl">{{.TheirLv}}</span>{{end}}</td>
+                <td class="verdict-{{.Verdict}}">{{if eq .Verdict "same"}}Same item{{else if eq .Verdict "holds"}}Yours holds up{{else if eq .Verdict "chase"}}Upgrade to chase (+{{.Gap}}){{end}}</td>
+              </tr>
+              {{end}}
+            </tbody>
+          </table>
+          <dl class="talent-diff">
+            <dt>Talents they take that you do not</dt>
+            <dd>{{if .Diff.TheirsOnly}}{{range $i, $t := .Diff.TheirsOnly}}{{if $i}}, {{end}}{{$t}}{{end}}{{else}}none{{end}}</dd>
+            <dt>Talents you take that they do not</dt>
+            <dd>{{if .Diff.YoursOnly}}{{range $i, $t := .Diff.YoursOnly}}{{if $i}}, {{end}}{{$t}}{{end}}{{else}}none{{end}}</dd>
+          </dl>
+          {{end}}
+        </div>
+        <div class="analysis-right writeup">
+          {{with .Result}}
+          {{range .Paragraphs}}{{if .Heading}}<h4>{{.Text}}</h4>{{else}}<p>{{.Text}}</p>{{end}}{{end}}
+          {{else}}
+          <p class="fineprint">The write-up appears here once an analysis has run.</p>
+          {{end}}
+        </div>
+      </div>
+    </section>
+    {{end}}
   </div>
 </div>
 {{end}}

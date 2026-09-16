@@ -240,3 +240,12 @@ func contains(haystack []string, needle string) bool {
 	}
 	return false
 }
+
+// TestCSPConnectSrcIsSelfOnly: the combat-log uploader sends pieces with
+// fetch, to this origin and nowhere else (spec 003).
+func TestCSPConnectSrcIsSelfOnly(t *testing.T) {
+	sources := directives(t, policyFromResponse(t))["connect-src"]
+	if len(sources) != 1 || sources[0] != "'self'" {
+		t.Errorf("connect-src = %v, want exactly ['self']", sources)
+	}
+}

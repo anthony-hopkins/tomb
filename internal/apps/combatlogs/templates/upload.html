@@ -1,0 +1,66 @@
+{{define "upload.html"}}
+{{/* One upload: its state, and once parsed its fights in the order they
+     happened, each with the member's own characters' numbers. */}}
+<section class="panel combatlogs" aria-label="{{.Filename}}">
+  <p class="fineprint"><a href="/app/combatlogs">&larr; Combat logs</a></p>
+  <h1>{{.Filename}}</h1>
+  <p class="upload-meta">
+    {{mib .RawSize}} &middot; uploaded {{.CreatedAt.Format "2 Jan 2006, 15:04"}}
+    &middot; <span class="upload-state {{.StateClass}}">{{.StateLabel}}</span>
+  </p>
+
+  {{if eq (print .State) "receiving"}}
+  <p class="notice" role="status">
+    This upload stopped at {{.PiecesReceived}} of {{.PiecesTotal}} pieces. Go back to
+    <a href="/app/combatlogs">Combat logs</a> and pick the same file again to continue it.
+  </p>
+  {{else if .Busy}}
+  <p class="notice" role="status">Reading the log. This page will update itself.</p>
+  {{else if eq (print .State) "failed"}}
+  <p class="notice" role="alert">
+    The log could not be read: {{.Failure}}. The file has been deleted; upload it again
+    from <a href="/app/combatlogs">Combat logs</a>.
+  </p>
+  {{else}}
+    {{if and .AdvancedLogging (not (deref .AdvancedLogging))}}
+    <p class="notice" role="status">
+      This log was recorded without Advanced Combat Logging, so gear and talents at
+      each pull were not recorded. Switch it on under Options &rarr; Network before
+      the next raid.
+    </p>
+    {{end}}
+    {{if not .Fights}}
+    <p class="fineprint">No boss fights were found in this log.</p>
+    {{end}}
+    {{range .Fights}}
+    <section class="fight" aria-label="{{.EncounterName}}">
+      <div class="fight-head">
+        <h2>{{.EncounterName}}</h2>
+        <span class="fight-result{{if .Kill}} is-kill{{end}}">{{if .Kill}}Kill{{else}}Wipe{{end}}</span>
+        <span class="upload-meta">{{.Difficulty}} &middot; {{seconds .Duration}} &middot; {{.StartedAt.Format "15:04"}} &middot; {{.GroupSize}} players</span>
+      </div>
+      {{range .Summaries}}
+      <div class="fight-summary">
+        <div><span class="stat-label">Character</span><span class="stat-value">{{.Name}}</span></div>
+        <div><span class="stat-label">Damage</span><span class="stat-value">{{kilo .Damage}}</span></div>
+        <div><span class="stat-label">Healing</span><span class="stat-value">{{kilo .Healing}}</span></div>
+        <div><span class="stat-label">Deaths</span><span class="stat-value">{{.Deaths}}</span></div>
+        <div><span class="stat-label">Active</span><span class="stat-value">{{seconds .Active}}</span></div>
+        {{if .TopCasts}}
+        <p class="fight-casts">
+          Most used: {{range $i, $c := .TopCasts}}{{if $i}}, {{end}}{{$c.Name}} &times;{{$c.Count}}{{end}}
+        </p>
+        {{end}}
+        {{if .NoSnapshot}}<p class="fight-casts">Gear and talents at the pull were not recorded.</p>{{end}}
+      </div>
+      {{end}}
+    </section>
+    {{end}}
+  {{end}}
+
+  <form class="upload-remove" method="post" action="/app/combatlogs/uploads/{{.ID}}/remove" style="margin-top:1.5rem">
+    <input type="hidden" name="{{.CSRF.Field}}" value="{{.CSRF.Token}}">
+    <button type="submit">Remove this upload</button>
+  </form>
+</section>
+{{end}}

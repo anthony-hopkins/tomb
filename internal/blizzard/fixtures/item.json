@@ -1,0 +1,18 @@
+{
+  "_links": {"self": {"href": "https://us.api.blizzard.com/data/wow/item/212345?namespace=static-12.0.1_58000-us"}},
+  "_note": "HAND-WRITTEN from Blizzard's documented Item API shape; replace with a captured response (research D11).",
+  "id": 212345,
+  "name": "Baleful Grave-Knight's Casque",
+  "quality": {"type": "EPIC", "name": "Epic"},
+  "level": 311,
+  "required_level": 80,
+  "media": {"key": {"href": "https://us.api.blizzard.com/data/wow/media/item/212345?namespace=static-12.0.1_58000-us"}, "id": 212345},
+  "item_class": {"key": {"href": "https://us.api.blizzard.com/data/wow/item-class/4?namespace=static-12.0.1_58000-us"}, "name": "Armor", "id": 4},
+  "item_subclass": {"key": {"href": "https://us.api.blizzard.com/data/wow/item-class/4/item-subclass/4?namespace=static-12.0.1_58000-us"}, "name": "Plate", "id": 4},
+  "inventory_type": {"type": "HEAD", "name": "Head"},
+  "purchase_price": 0,
+  "sell_price": 123456,
+  "max_count": 0,
+  "is_equippable": true,
+  "is_stackable": false
+}

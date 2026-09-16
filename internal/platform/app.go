@@ -6,7 +6,9 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/anthony-hopkins/tomb/internal/ai"
 	"github.com/anthony-hopkins/tomb/internal/blizzard"
+	"github.com/anthony-hopkins/tomb/internal/wcl"
 )
 
 // App is implemented by every feature module on the platform.
@@ -131,6 +133,18 @@ type Deps struct {
 	// changing anything; the token to put in the form is CSRFTokenFrom, the
 	// field name CSRFFieldName.
 	CSRF CSRFVerifier
+
+	// WCL reads Warcraft Logs: a named player's best parse on a boss, with
+	// the gear and talents they used, for the combat-log comparison (spec
+	// 003). Read-only by construction -- the interface has one method and it
+	// is a query -- and nil when the site has no Warcraft Logs client
+	// configured, which an app reads as "comparisons are unavailable".
+	WCL wcl.Reader
+
+	// AI writes the comparison's narrative through Vertex AI, authenticated
+	// as the VM. Lent like Blizzard so an app never constructs its own
+	// client and a test can hand it a fake.
+	AI ai.Writer
 
 	// RenderInLayout draws an app's rendered body inside the shared page
 	// shell, so apps own their own content without owning the site chrome,

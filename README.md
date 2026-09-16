@@ -135,6 +135,27 @@ eight weeks ahead; a one-off is shown however far off it is. Officers can
 skip one night of a repeating event without touching the rest; Edit and
 Remove act on the whole series.
 
+## Combat logs
+
+Upload the game's combat log from a raid night under **Combat logs** and the
+site reads it into your pulls: each boss, kill or wipe, and your own numbers on
+every one. The file is compressed and sent in pieces from your browser, resumes
+if the connection drops, and is deleted the moment it has been read. A log
+contains everyone in the raid; only your own characters are kept.
+
+On **My Characters**, a character with parsed pulls gains a comparison: pick a
+pull, paste the Warcraft Logs link of a player to measure against, and press
+Analyse. The site fetches that player's best parse, gear and talents on the same
+boss, works out a slot-by-slot upgrade table and a talent difference itself, and
+has a model write the review. Nothing is ever sent to Warcraft Logs. A member may
+run one every two hours; officers are not limited. Every run is in the Logs.
+
+Configuration: `WCL_CLIENT_ID` and `WCL_CLIENT_SECRET` (a read-only Warcraft
+Logs API client; without them the card says comparisons are unavailable),
+`TOMB_AI_MODEL` and `TOMB_AI_REGION` (Vertex AI, called as the VM), and
+`TOMB_UPLOAD_DIR` (where a log waits between upload and parse). See
+[docs/deployment.md](docs/deployment.md).
+
 ## Logs (guild master and officers)
 
 Officers have a **Logs** entry in the navigation that nobody else sees or can

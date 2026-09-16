@@ -102,6 +102,18 @@ Used by the guild overview (FR-018), not by the membership check: the check
 still reads `guild` off each character's profile (research D4). See the
 `GuildRoster` method.
 
+### Spec 003 additions
+
+Optional on `Client` -- the live client satisfies `blizzard.SpecializationsReader`
+and `blizzard.GameData`; callers type-assert.
+
+| Endpoint | Namespace | Token | Read | Used for |
+|---|---|---|---|---|
+| `GET /profile/wow/character/{realmSlug}/{name}/specializations` | `profile-{region}` | member's | `active_specialization.id`; the active loadout's `selected_class_talents[]`, `selected_spec_talents[]`, `selected_hero_talents[]` (`tooltip.talent.name`, `rank`), `talent_loadout_code`, `selected_hero_talent_tree.name` | FR-033, the card's Talents block. `loadouts` has been absent since patch 11.2: `ErrNoLoadout`, and the card falls back to the log |
+| `GET /data/wow/talent/{id}` | `static-{region}` | the site's own (client credentials) | `spell.name`, `spell.id` | Naming `COMBATANT_INFO` talent entries |
+| `GET /data/wow/item/{id}` | `static-{region}` | the site's own | `name`, `quality.type`, `inventory_type.type`, `level` | Naming gear ids from the log and Warcraft Logs |
+| `POST https://oauth.battle.net/token` (`grant_type=client_credentials`, basic auth) | — | — | `access_token`, `expires_in` | The site's own token, cached until a minute before expiry |
+
 ## Rate limits and concurrency
 
 Documented limits: **36,000 requests/hour, 100 requests/second** per client.

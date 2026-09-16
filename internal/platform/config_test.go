@@ -30,6 +30,7 @@ func setEnv(t *testing.T, overrides map[string]string) {
 		"BNET_CLIENT_ID", "BNET_CLIENT_SECRET", "BNET_REDIRECT_URL", "BNET_REGION",
 		"TOMB_GUILD_NAME", "TOMB_GUILD_REALM", "DATABASE_URL",
 		"SESSION_COOKIE_SECURE", "BNET_API_HOST", "ADDR", "TOMB_GUILD_OFFICER_RANK", "TOMB_TIMEZONE",
+		"TOMB_UPLOAD_DIR", "WCL_CLIENT_ID", "WCL_CLIENT_SECRET", "TOMB_AI_MODEL", "TOMB_AI_REGION",
 	} {
 		t.Setenv(k, "")
 	}
@@ -243,5 +244,43 @@ func TestTimezoneDefaultsToEastern(t *testing.T) {
 	setEnv(t, map[string]string{"TOMB_TIMEZONE": "Mars/Olympus_Mons"})
 	if _, err := LoadConfig(); err == nil {
 		t.Error("an unknown zone was accepted")
+	}
+}
+
+// TestLoadConfigCombatLogs: the combat-log comparison's settings have
+// defaults that need no configuration, and the Warcraft Logs client is
+// optional -- empty is "comparisons unavailable", not a refusal to start.
+func TestLoadConfigCombatLogs(t *testing.T) {
+	type settings struct{ UploadDir, WCLClientID, WCLClientSecret, AIModel, AIRegion string }
+	tests := []struct {
+		name      string
+		overrides map[string]string
+		want      settings
+	}{
+		{
+			name: "defaults",
+			want: settings{UploadDir: "/var/lib/tomb/uploads", AIModel: "gemini-3.1-pro", AIRegion: "us-central1"},
+		},
+		{
+			name: "overrides",
+			overrides: map[string]string{
+				"TOMB_UPLOAD_DIR": "/tmp/logs", "WCL_CLIENT_ID": " abc ", "WCL_CLIENT_SECRET": "s3",
+				"TOMB_AI_MODEL": "gemini-3.5-flash", "TOMB_AI_REGION": "europe-west1",
+			},
+			want: settings{UploadDir: "/tmp/logs", WCLClientID: "abc", WCLClientSecret: "s3", AIModel: "gemini-3.5-flash", AIRegion: "europe-west1"},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			setEnv(t, tc.overrides)
+			cfg, err := LoadConfig()
+			if err != nil {
+				t.Fatalf("LoadConfig() error = %v", err)
+			}
+			got := settings{cfg.UploadDir, cfg.WCLClientID, cfg.WCLClientSecret, cfg.AIModel, cfg.AIRegion}
+			if got != tc.want {
+				t.Errorf("got %+v, want %+v", got, tc.want)
+			}
+		})
 	}
 }

@@ -2,6 +2,7 @@ package blizzard
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/url"
 	"sort"
@@ -470,4 +471,62 @@ func (c Character) InGuild(name, realmSlug string) bool {
 	}
 	return strings.EqualFold(strings.TrimSpace(c.Guild.Name), strings.TrimSpace(name)) &&
 		strings.EqualFold(strings.TrimSpace(c.Guild.RealmSlug), strings.TrimSpace(realmSlug))
+}
+
+// Loadout is a character's active talent build, from the specializations
+// endpoint (spec 003, FR-033).
+type Loadout struct {
+	Spec string
+	Code string // the in-game import string
+	// Class, SpecTalents and Hero are the chosen talents, by name, in the
+	// order Blizzard lists them.
+	Class       []TalentChoice
+	SpecTalents []TalentChoice
+	Hero        []TalentChoice
+	HeroTree    string
+}
+
+// TalentChoice is one chosen talent.
+type TalentChoice struct {
+	ID   int
+	Name string
+	Rank int
+}
+
+// ErrNoLoadout is the specializations endpoint answering with no active
+// loadout -- the shape it has had since patch 11.2 (research D8). Not a
+// failure: the caller falls back to the log's own record.
+var ErrNoLoadout = errors.New("blizzard returned no talent loadout")
+
+// SpecializationsReader is the talents read, optional on a Client: the
+// live client has it; a fake need not. Callers type-assert.
+type SpecializationsReader interface {
+	// CharacterSpecializations fetches the character's active loadout, or
+	// ErrNoLoadout when Blizzard has none to give.
+	CharacterSpecializations(ctx context.Context, token string, ref CharacterRef) (Loadout, error)
+}
+
+// TalentInfo is a talent as Game Data names it.
+type TalentInfo struct {
+	ID      int
+	Name    string
+	SpellID int
+}
+
+// ItemInfo is an item as Game Data names it.
+type ItemInfo struct {
+	ID       int
+	Name     string
+	Quality  string // "EPIC"
+	SlotType string // "HEAD"
+	Level    int
+}
+
+// GameData is the static lookups the comparison needs to turn the numbers
+// in a combat log into names. Optional on a Client, like
+// SpecializationsReader. Made with the site's own token, so they work in a
+// background worker with nobody signed in.
+type GameData interface {
+	Talent(ctx context.Context, id int) (TalentInfo, error)
+	Item(ctx context.Context, id int) (ItemInfo, error)
 }
