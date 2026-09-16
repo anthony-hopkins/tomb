@@ -108,6 +108,20 @@ mistake here should never reach a request.
   viewer, where sign-in lands, and where the brand link goes. Give that app an
   empty `NavLabel`, or it is listed beside a link that already goes there.
   `Mount` refuses two apps claiming it.
+- **The header ticker.** An app with something worth saying on every page
+  (the calendar: the next two events) implements `platform.Headliner`
+  alongside `App`:
+
+  ```go
+  func (a *App) Headlines(r *http.Request) []platform.Headline
+  ```
+
+  The core asks every mounted Headliner while it draws the shell and shows
+  the lines in the header, between the navigation and the sign-out. It is
+  gated the way your pages are: a viewer who could not reach your app is not
+  shown your headlines. Return a handful at most, already worded for a glance
+  (`When: "Today 20:00"`), and return nothing on an error — the page is about
+  something else, so say so on your own page instead.
 - **`Cache-Control: no-store`,** security headers, and structured request
   logging. All automatic.
 

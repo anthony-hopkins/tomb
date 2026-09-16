@@ -476,3 +476,78 @@ func TestNothingSaysAdministrator(t *testing.T) {
 		}
 	}
 }
+
+// headlineStub is a stubApp with something to say in the header.
+type headlineStub struct {
+	*stubApp
+	lines []Headline
+}
+
+func (h *headlineStub) Headlines(*http.Request) []Headline { return h.lines }
+
+// TestHeadlinesInTheHeader: an app that implements Headliner has its lines
+// drawn in the shell of every page the viewer may see them on -- including
+// another app's page -- and a viewer who could not reach the app is not
+// shown them.
+func TestHeadlinesInTheHeader(t *testing.T) {
+	tests := []struct {
+		name          string
+		member        bool
+		requiresGuild bool
+		officerOnly   bool
+		wantTicker    bool
+	}{
+		{"member sees a gated app's headlines", true, true, false, true},
+		{"non-member does not see a gated app's headlines", false, true, false, false},
+		{"non-member sees an ungated app's headlines", false, false, false, true},
+		{"member below officer does not see an officer-only app's headlines", true, true, true, false},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			talker := newStub("calendar", "Calendar", "calendar-body", tc.requiresGuild)
+			talker.meta.OfficerOnly = tc.officerOnly
+			loud := &headlineStub{stubApp: talker, lines: []Headline{
+				{When: "Today 20:00", Title: "Raid night", Href: "/app/calendar"},
+				{When: "Now", Title: "Keys", Href: "/app/calendar", Live: true},
+			}}
+			// The page under test is another app's. Gated for a member, since
+			// a gated page is what carries the profile that vouches for
+			// them (every real app is gated); ungated for a non-member, so
+			// they still render a page with a header on it.
+			other := newStub("dashboard", "My Character", "other-body", tc.member)
+
+			_, handler := sessionedCore(t, tc.member, loud, other)
+
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app/dashboard", nil))
+			body := rec.Body.String()
+
+			if !strings.Contains(body, "other-body") {
+				t.Fatalf("page did not render: %d", rec.Code)
+			}
+			hasTicker := strings.Contains(body, `class="ticker"`)
+			if hasTicker != tc.wantTicker {
+				t.Fatalf("ticker shown = %v, want %v", hasTicker, tc.wantTicker)
+			}
+			if !tc.wantTicker {
+				if strings.Contains(body, "Raid night") {
+					t.Error("a headline leaked without its ticker")
+				}
+				return
+			}
+			for _, want := range []string{"Today 20:00", "Raid night", `<li class="is-live">`, "Keys", `href="/app/calendar"`} {
+				if !strings.Contains(body, want) {
+					t.Errorf("header is missing %q", want)
+				}
+			}
+			// The ticker sits between the navigation and the sign-out.
+			nav := strings.Index(body, `<nav aria-label="Apps">`)
+			ticker := strings.Index(body, `class="ticker"`)
+			logout := strings.Index(body, `class="logout"`)
+			if nav >= ticker || ticker >= logout {
+				t.Errorf("header order nav=%d ticker=%d logout=%d, want nav < ticker < logout", nav, ticker, logout)
+			}
+		})
+	}
+}

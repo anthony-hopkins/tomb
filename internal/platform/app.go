@@ -60,6 +60,36 @@ type AppMeta struct {
 	OfficerOnly bool
 }
 
+// Headliner is implemented by an app that has something to say on every
+// page: the calendar, with what is coming next. The core asks each mounted
+// Headliner while it draws the page shell and shows what comes back in the
+// header, as a small ticker beside the sign-out.
+//
+// It is optional -- an App that does not implement it is simply not asked --
+// and it is gated the way the app's pages are: a viewer who could not reach
+// the app is not shown its headlines either.
+//
+// This is the second thing an app may contribute besides its routes, added
+// when the calendar needed it (Principle VII: a concrete need, not a
+// speculative one). An app returns few headlines, ordered as it wants them
+// read; the header shows them all, in that order.
+type Headliner interface {
+	Headlines(r *http.Request) []Headline
+}
+
+// Headline is one line in the header's ticker.
+type Headline struct {
+	// When is the time, already worded for a glance: "Now", "Today 20:00",
+	// "Thu 20:00". The app words it, because the app knows its zone.
+	When string
+	// Title is what is happening.
+	Title string
+	// Href is where the line leads, usually the app itself.
+	Href string
+	// Live marks a headline as happening right now.
+	Live bool
+}
+
 // CSRFVerifier is the one method of the core's CSRF guard an app needs.
 type CSRFVerifier interface {
 	Verify(r *http.Request) bool

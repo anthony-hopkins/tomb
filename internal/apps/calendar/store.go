@@ -26,6 +26,10 @@ var ErrNotFound = errors.New("no such event")
 type Store interface {
 	// Upcoming lists events starting at or after from, soonest first.
 	Upcoming(ctx context.Context, from time.Time) ([]Event, error)
+	// Next lists at most n events that have not finished by at, soonest
+	// first: one still running counts, one with no set end only until it
+	// starts. It is what the header's ticker reads.
+	Next(ctx context.Context, at time.Time, n int) ([]Event, error)
 	// Get fetches one event, or ErrNotFound.
 	Get(ctx context.Context, id int64) (Event, error)
 	// Create adds an event, returning its id. by is the officer's user id.
@@ -56,7 +60,11 @@ func (s *SQLStore) Upcoming(ctx context.Context, from time.Time) ([]Event, error
 		return nil, fmt.Errorf("list events: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
+	return scanEvents(rows)
+}
 
+// scanEvents reads every row of a SELECT in the events column order.
+func scanEvents(rows *sql.Rows) ([]Event, error) {
 	var out []Event
 	for rows.Next() {
 		var e Event
@@ -74,6 +82,22 @@ func (s *SQLStore) Upcoming(ctx context.Context, from time.Time) ([]Event, error
 		return nil, fmt.Errorf("read events: %w", err)
 	}
 	return out, nil
+}
+
+func (s *SQLStore) Next(ctx context.Context, at time.Time, n int) ([]Event, error) {
+	const q = `
+		SELECT id, title, starts_at, ends_at, location, notes
+		  FROM events
+		 WHERE deleted_at IS NULL AND COALESCE(ends_at, starts_at) >= $1
+		 ORDER BY starts_at, id
+		 LIMIT $2`
+
+	rows, err := s.DB.QueryContext(ctx, q, at, n)
+	if err != nil {
+		return nil, fmt.Errorf("list next events: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	return scanEvents(rows)
 }
 
 func (s *SQLStore) Get(ctx context.Context, id int64) (Event, error) {

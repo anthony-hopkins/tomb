@@ -122,6 +122,103 @@ body::before {
 
 .battletag { color: var(--muted); font-size: 0.9rem; }
 
+/* Next up: what the calendar has coming, in the header, so nobody has to go
+   looking for raid night. It takes the spare room between the nav and the
+   sign-out; the sign-out gives up its own auto margin when the ticker is
+   there, or the two would split the space and the ticker would float in the
+   middle. Each line is a pill, so two events read as two things and not one
+   run-on sentence. */
+.ticker {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+  font-size: 0.85rem;
+}
+
+.ticker + .logout { margin-left: 0; }
+
+.ticker-label {
+  color: var(--accent);
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.ticker-items {
+  display: flex;
+  gap: 0.5rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+
+.ticker-items li { min-width: 0; }
+
+.ticker-items a {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  max-width: 18rem;
+  padding: 0.25rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel-veil);
+  color: var(--ink);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.ticker-items a:hover { border-color: var(--accent-2); color: var(--accent-2); }
+
+.ticker-when {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+  flex: none;
+}
+
+.ticker-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Happening now: the time is lit, with a dot that breathes. */
+.is-live .ticker-when { color: var(--accent); }
+
+.is-live .ticker-when::before {
+  content: "";
+  display: inline-block;
+  width: 0.45em;
+  height: 0.45em;
+  margin-right: 0.4em;
+  border-radius: 50%;
+  background: var(--accent);
+  vertical-align: 0.1em;
+  animation: ticker-pulse 2s ease-in-out infinite;
+}
+
+@keyframes ticker-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .is-live .ticker-when::before { animation: none; }
+}
+
+/* On a narrow screen the ticker takes a row of its own beneath the rest of
+   the header, and the sign-out gets its margin back. */
+@media (max-width: 48rem) {
+  .ticker { margin-left: 0; flex-basis: 100%; order: 1; }
+  .ticker + .logout { margin-left: auto; }
+  .ticker-items { flex-wrap: wrap; }
+}
+
 /* flex: 1 is what pushes the footer down; width still comes from the max-width
    and the auto margins, which keep working inside a column flex container.
    min-height: 0 lets it shrink below its content rather than overflowing. */

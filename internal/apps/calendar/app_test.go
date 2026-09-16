@@ -39,6 +39,23 @@ func (m *memStore) Upcoming(_ context.Context, from time.Time) ([]Event, error) 
 	return out, nil
 }
 
+func (m *memStore) Next(_ context.Context, at time.Time, n int) ([]Event, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	var out []Event
+	for _, e := range m.events {
+		end := e.StartsAt
+		if e.EndsAt != nil {
+			end = *e.EndsAt
+		}
+		if !end.Before(at) && len(out) < n {
+			out = append(out, e)
+		}
+	}
+	return out, nil
+}
+
 func (m *memStore) Get(_ context.Context, id int64) (Event, error) {
 	for _, e := range m.events {
 		if e.ID == id {

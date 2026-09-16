@@ -17,6 +17,10 @@ type PageData struct {
 	// Message carries an explanatory or error string where the page needs one.
 	Message string
 
+	// Ticker is what the apps have to say in the header -- the calendar's
+	// next events -- for the viewer this page is for.
+	Ticker []Headline
+
 	// Content is an app's rendered body, injected into the shared shell.
 	Content template.HTML
 }
@@ -57,10 +61,11 @@ func (c *Core) RenderInLayout(w http.ResponseWriter, r *http.Request, status int
 	writeHTML(w, status, &buf)
 }
 
-// decorate fills in what every page shares: the navigation, the CSRF token for
-// the logout form, and who is signed in.
+// decorate fills in what every page shares: the navigation, the header's
+// ticker, the CSRF token for the logout form, and who is signed in.
 func (c *Core) decorate(r *http.Request, data *PageData) {
 	data.Nav = c.navFor(r)
+	data.Ticker = c.tickerFor(r)
 	data.CSRFToken = CSRFTokenFrom(r.Context())
 	if sess, ok := SessionFrom(r.Context()); ok {
 		data.SignedIn = true
