@@ -205,6 +205,16 @@ func (a *App) show(w http.ResponseWriter, r *http.Request) {
 			// until it lands (research D7).
 			w.Header().Set("Refresh", "5")
 		}
+		// The comparison's controls go under the render, inside the panel
+		// (fourth amendment): rendered here, placed by the shared template.
+		if v.Analysis != nil && v.Selected != nil {
+			var controls bytes.Buffer
+			if err := a.tmpl.ExecuteTemplate(&controls, "analysis-controls", v.Analysis); err != nil {
+				a.deps.Logger.Error("render analysis controls", "error", err)
+			} else {
+				v.Selected.Aside = template.HTML(controls.String())
+			}
+		}
 	}
 
 	var body bytes.Buffer

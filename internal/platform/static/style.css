@@ -306,17 +306,10 @@ main:has(.dashboard) { max-width: none; }
 .dashboard.is-empty { grid-template-columns: minmax(0, 1fr); }
 
 /* With a comparison on the page (spec 003, fourth amendment) there are three
-   columns: the rail with the controls under the character list, the card,
-   and the result. The rail column stretches to the row so the sticky list
-   inside it has somewhere to stick; the controls sit under it, not in it. */
+   columns: the character list, the card (with the comparison's controls
+   under the render), and the result. */
 .dashboard.has-analysis {
-  grid-template-columns: minmax(13rem, 19rem) minmax(0, 46rem) minmax(18rem, 1fr);
-}
-.dashboard-rail {
-  align-self: stretch;
-  display: grid;
-  gap: 1.5rem;
-  align-content: start;
+  grid-template-columns: minmax(13rem, 17rem) minmax(0, 46rem) minmax(18rem, 1fr);
 }
 
 /* Everything that is prose stays at a readable measure even though main no
@@ -1658,10 +1651,11 @@ a.log-kind:focus { border-color: var(--accent); }
 .fight-summary .stat-value { font-variant-numeric: tabular-nums; }
 .fight-casts { grid-column: 1 / -1; color: var(--muted); font-size: 0.85rem; }
 
-/* The comparison (spec 003, fourth amendment): the controls in the rail
-   under the character list, the result in its own column right of the card
-   -- the table, the talent difference, then the write-up. */
-.card-analysis,
+/* The comparison (spec 003, fourth amendment): the controls under the
+   render inside the Armory panel, the result in its own column right of the
+   card -- the table, the talent difference, then the write-up. */
+.armory-aside { margin-top: 1.25rem; }
+.card-analysis { padding: 1rem 0 0; border-top: 1px solid var(--line); min-width: 0; }
 .analysis-results { padding: 1.25rem; min-width: 0; }
 .card-analysis h3,
 .analysis-results h3 {

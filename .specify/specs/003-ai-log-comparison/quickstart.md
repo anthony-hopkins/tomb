@@ -101,8 +101,8 @@ core and exercises begin → pieces → finish → parsed with a fake store.
 
 ### 6. Run a comparison (US3, scenarios 1, 2, 6; amended: the whole raid, from Warcraft Logs first)
 
-The controls are in the left rail under your character list; the result is the
-column to the right of the card (fourth amendment).
+The controls are inside the character's panel under the render; the result is
+the column to the right of the card (fourth amendment).
 
 1. On the card, leave the source as **My latest raid on Warcraft Logs** and press
    **Analyse**. Nothing needs uploading: the site reads your ranked kills in the
