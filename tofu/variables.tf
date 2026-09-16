@@ -73,7 +73,7 @@ variable "data_disk_size" {
     prevent_destroy.
   EOT
   type        = number
-  default     = 20  # was 10; combat logs wait here between upload and parse (spec 003)
+  default     = 20 # was 10; combat logs wait here between upload and parse (spec 003)
 }
 
 variable "disk_type" {
