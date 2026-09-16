@@ -49,6 +49,7 @@ type Ranking struct {
 	Amount      float64 // DPS or HPS, per Metric
 	Metric      string
 	Duration    time.Duration
+	StartedAt   time.Time // when the ranked kill was
 	ReportCode  string
 	FightID     int
 
@@ -56,8 +57,37 @@ type Ranking struct {
 	Talents []Talent
 }
 
-// Reader is what the site asks of Warcraft Logs, and all of it: two reads.
+// Zone is what Warcraft Logs holds for a character in the current raid:
+// which bosses they have ranked kills on, at which difficulty, as which
+// spec, and how many.
+type Zone struct {
+	Name       string
+	ClassID    int
+	Class      string
+	Spec       string // of the best parses; the spec the comparison is made as
+	Difficulty int    // Warcraft Logs' numbering
+	Metric     string
+	Encounters []ZoneEncounter
+}
+
+// ZoneEncounter is one boss in a character's zone rankings.
+type ZoneEncounter struct {
+	ID          int
+	Name        string
+	Kills       int
+	RankPercent float64
+	BestAmount  float64
+}
+
+// Reader is what the site asks of Warcraft Logs, and all of it: four reads.
 type Reader interface {
+	// ZoneRankings is the character's standing in the current raid:
+	// ErrNoCharacter when Warcraft Logs knows no such player, ErrNoLogs
+	// when it knows them but they have no ranked kill there.
+	ZoneRankings(ctx context.Context, ref CharacterRef) (Zone, error)
+	// LatestRank fetches ref's most recent ranked kill on encounterID at
+	// wclDifficulty by metric, with gear and talents. ErrNoRank when none.
+	LatestRank(ctx context.Context, ref CharacterRef, encounterID, wclDifficulty int, metric string) (Ranking, error)
 	// BestRank fetches ref's best recorded performance on encounterID at
 	// wclDifficulty by metric, with gear and talents. ErrNoCharacter when
 	// Warcraft Logs knows no such player; ErrNoRank when it knows them but
@@ -97,6 +127,8 @@ var (
 	// ErrNoRank is a known player with no recorded fight on that boss and
 	// difficulty.
 	ErrNoRank = errors.New("no recorded fight on that boss at that difficulty")
+	// ErrNoLogs is a known player with no ranked kill in the current raid.
+	ErrNoLogs = errors.New("no ranked kills in the current raid")
 	// ErrBusy is Warcraft Logs asking the site to slow down.
 	ErrBusy = errors.New("warcraft logs is busy; try again later")
 	// ErrUnsupportedDifficulty is a fight that is not a raid.
@@ -135,6 +167,19 @@ var healerSpecs = map[int]bool{
 // top tank's is what the guild master did by hand, and what this reproduces.
 func MetricFor(specID int) string {
 	if healerSpecs[specID] {
+		return "hps"
+	}
+	return "dps"
+}
+
+// healerSpecNames are the healing specs by the name Warcraft Logs uses.
+var healerSpecNames = map[string]bool{
+	"Holy": true, "Discipline": true, "Restoration": true, "Mistweaver": true, "Preservation": true,
+}
+
+// MetricForSpec is MetricFor by spec name, for a spec Warcraft Logs named.
+func MetricForSpec(spec string) string {
+	if healerSpecNames[spec] {
 		return "hps"
 	}
 	return "dps"

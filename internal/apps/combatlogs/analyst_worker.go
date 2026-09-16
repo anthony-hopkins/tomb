@@ -19,9 +19,10 @@ import (
 // analystParallel is how many analyses may be in flight at once.
 const analystParallel = 2
 
-// RunAnalyst is the background worker for comparisons: the top player's
-// parses on every boss of the night, the computed table and diff, then the
-// model's write-up (research D6, D10, D11).
+// RunAnalyst is the background worker for comparisons: the member's side
+// from Warcraft Logs or an upload, the top player's parses on every boss,
+// the computed table and diff, then the model's write-up (research D6,
+// D10, D11).
 func (a *App) RunAnalyst(ctx context.Context) {
 	sem := make(chan struct{}, analystParallel)
 	for {
@@ -62,16 +63,29 @@ func (a *App) AnalyseOnce(ctx context.Context) bool {
 	return true
 }
 
+// yourSide is the member's half of the comparison, whichever source it
+// came from: the night as the model reads it, and what to put in the table.
+type yourSide struct {
+	Class, Spec string
+	Raid        ai.Raid
+	Bosses      []ai.Boss
+	BossIDs     []int // in Bosses' order, for fetching their parses
+	Damage      int64
+	Healing     int64
+	Deaths      int
+	Gear        []fights.GearNamed
+	GearNote    string
+	Talents     []string
+	Label       string // for the audit entry
+}
+
 // run does one analysis. Every way out settles the row; a panic settles it
 // as failed rather than taking the worker down.
 func (a *App) run(ctx context.Context, an fights.Analysis) {
-	log := a.deps.Logger.With("analysis", an.ID, "user", an.UserID, "character", an.Name)
+	log := a.deps.Logger.With("analysis", an.ID, "user", an.UserID, "character", an.Name, "source", an.Source)
 	started := a.now()
 	cp := an.Comparison
-	tag := ""
-	if u, err := a.store.Upload(ctx, an.UploadID, an.UserID); err == nil {
-		tag = u.BattleTag
-	}
+	tag := a.tagOf(ctx, an)
 	against := "?"
 	if cp != nil {
 		against = cp.Name
@@ -81,7 +95,7 @@ func (a *App) run(ctx context.Context, an fights.Analysis) {
 		if err := a.store.FailAnalysis(ctx, an.ID, reason); err != nil {
 			log.Error("mark analysis failed", "error", err)
 		}
-		a.audit(ctx, an.UserID, tag, "combatlogs.analyse", an.Name, fmt.Sprintf("night against %s: failed: %s", against, reason))
+		a.audit(ctx, an.UserID, tag, "combatlogs.analyse", an.Name, fmt.Sprintf("against %s: failed: %s", against, reason))
 		log.Warn("analysis failed", "reason", reason)
 	}
 	defer func() {
@@ -90,15 +104,14 @@ func (a *App) run(ctx context.Context, an fights.Analysis) {
 			fail("something went wrong on the site's side")
 		}
 	}()
-	if cp == nil || len(an.Summaries) == 0 {
-		fail("the night or the player could not be read")
+	if cp == nil {
+		fail("the player could not be read")
 		return
 	}
 	if a.deps.AI == nil {
 		fail("the site has no model configured")
 		return
 	}
-
 	var top wcl.Ranking
 	if err := json.Unmarshal(cp.Payload, &top); err != nil {
 		fail("the player's parse could not be read")
@@ -106,40 +119,58 @@ func (a *App) run(ctx context.Context, an fights.Analysis) {
 	}
 	against = top.Name
 	healer := cp.Metric == "hps"
-	n, ok := nightOf(an.Summaries, healer)
-	if !ok {
-		fail("the upload has no raid pulls for this character")
-		return
+
+	var you yourSide
+	var err error
+	if an.Source == fights.SourceWCL {
+		you, err = a.fromWCL(ctx, an, cp, healer)
+	} else {
+		you, err = a.fromUpload(ctx, an, healer)
 	}
-	yourClass, yourSpec := wcl.SpecName(n.SpecID)
-	ref := wcl.CharacterRef{Region: cp.Region, Slug: cp.RealmSlug, Name: top.Name}
-	if cp.Region == "id" {
-		ref = wcl.CharacterRef{ID: parseID(cp.Name)}
+	if err != nil {
+		fail(err.Error())
+		return
 	}
 
 	// Their parse on every boss of the night, from the cache or Warcraft
 	// Logs; a boss they have no ranked kill on is noted, not fatal.
+	ref := wcl.CharacterRef{Region: cp.Region, Slug: cp.RealmSlug, Name: top.Name}
+	if cp.Region == "id" {
+		ref = wcl.CharacterRef{ID: parseID(cp.Name)}
+	}
 	theirs := map[int]*wcl.Ranking{cp.Encounter: &top}
-	for _, b := range n.Bosses {
-		if _, have := theirs[b.EncounterID]; have {
+	for _, id := range you.BossIDs {
+		if _, have := theirs[id]; have {
 			continue
 		}
-		row, err := a.comparison(ctx, ref, b.EncounterID, cp.WCLDiff, cp.Metric)
+		row, err := a.comparison(ctx, ref, id, cp.WCLDiff, cp.Metric)
 		if err != nil {
-			log.Warn("their parse on a boss", "encounter", b.EncounterID, "error", err)
+			log.Warn("their parse on a boss", "encounter", id, "error", err)
 			continue
 		}
 		var rk wcl.Ranking
 		if json.Unmarshal(row.Payload, &rk) == nil {
-			theirs[b.EncounterID] = &rk
+			theirs[id] = &rk
+		}
+	}
+	for i, id := range you.BossIDs {
+		if rk := theirs[id]; rk != nil {
+			you.Bosses[i].TheirRankPercent, you.Bosses[i].TheirDuration = rk.RankPercent, seconds(rk.Duration)
+			if healer {
+				you.Bosses[i].TheirHPS = rk.Amount
+			} else {
+				you.Bosses[i].TheirDPS = rk.Amount
+			}
+		} else {
+			you.Bosses[i].Note = "the top player has no ranked kill of this boss at this difficulty"
 		}
 	}
 	// Their gear and talents: from the main boss, else the first boss that
 	// carried them.
 	theirGear, theirTalents := top.Gear, top.Talents
 	if len(theirGear) == 0 {
-		for _, b := range n.Bosses {
-			if rk := theirs[b.EncounterID]; rk != nil && len(rk.Gear) > 0 {
+		for _, id := range you.BossIDs {
+			if rk := theirs[id]; rk != nil && len(rk.Gear) > 0 {
 				theirGear, theirTalents = rk.Gear, rk.Talents
 				break
 			}
@@ -147,7 +178,6 @@ func (a *App) run(ctx context.Context, an fights.Analysis) {
 	}
 
 	gd, _ := a.deps.Blizzard.(blizzard.GameData)
-	yours, yourNote := a.yourGear(ctx, an.Name, an.RealmSlug, n.Gear)
 	theirNamed := make([]fights.GearNamed, 0, len(theirGear))
 	var missingItems []int
 	for i, g := range theirGear {
@@ -164,44 +194,27 @@ func (a *App) run(ctx context.Context, an fights.Analysis) {
 			}
 		}
 	}
+	theirTalentNames := a.talentNames(ctx, theirTalents)
 
-	var yourTalents []string
-	if len(n.Talents) > 0 {
-		ids := make([]int, 0, len(n.Talents))
-		for _, t := range n.Talents {
-			ids = append(ids, t.Entry)
-		}
-		names := fights.ResolveTalents(ctx, a.store, gd, ids)
-		for _, t := range n.Talents {
-			yourTalents = append(yourTalents, names[t.Entry])
-		}
-	}
-	var theirTalentNames []string
-	var missingTalents []int
-	for _, t := range theirTalents {
-		if t.Name == "" {
-			missingTalents = append(missingTalents, t.ID)
-		}
-	}
-	names := fights.ResolveTalents(ctx, a.store, gd, missingTalents)
-	for _, t := range theirTalents {
-		if t.Name != "" {
-			theirTalentNames = append(theirTalentNames, t.Name)
-		} else {
-			theirTalentNames = append(theirTalentNames, names[t.ID])
-		}
-	}
-
-	table := fights.UpgradeTable(yours, theirNamed)
-	diff := fights.DiffTalents(yourTalents, theirTalentNames)
+	table := fights.UpgradeTable(you.Gear, theirNamed)
+	diff := fights.DiffTalents(you.Talents, theirTalentNames)
 	theirClass := top.Class
 	if theirClass == "" {
 		theirClass = wcl.ClassName(top.ClassID)
 	}
-	mismatch := (yourSpec != "" && top.Spec != "" && !strings.EqualFold(yourSpec, top.Spec)) ||
-		(yourClass != "" && theirClass != "" && !strings.EqualFold(yourClass, theirClass))
+	mismatch := (you.Spec != "" && top.Spec != "" && !strings.EqualFold(you.Spec, top.Spec)) ||
+		(you.Class != "" && theirClass != "" && !strings.EqualFold(you.Class, theirClass))
 
-	in := a.input(n, yours, yourNote, yourTalents, theirNamed, theirTalentNames, theirs, top, an, yourClass, yourSpec, theirClass, table, diff, mismatch)
+	in := ai.Input{
+		Raid:   you.Raid,
+		Bosses: you.Bosses,
+		You: ai.Player{Name: an.Name, Class: you.Class, Spec: you.Spec, Damage: you.Damage, Healing: you.Healing, Deaths: you.Deaths,
+			Gear: gearLines(you.Gear), Talents: orEmptyStrings(you.Talents), Note: you.GearNote},
+		Them:     ai.Player{Name: top.Name, Class: theirClass, Spec: top.Spec, Gear: gearLines(theirNamed), Talents: orEmptyStrings(theirTalentNames)},
+		Table:    table,
+		Diff:     diff,
+		Mismatch: mismatch,
+	}
 
 	callCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
@@ -223,38 +236,122 @@ func (a *App) run(ctx context.Context, an fights.Analysis) {
 		log.Error("finish analysis", "error", err)
 		return
 	}
-	a.audit(ctx, an.UserID, tag, "combatlogs.analyse", an.Name,
-		fmt.Sprintf("night of %s, %s, %d pulls on %d bosses against %s: done",
-			n.Pulls[0].Fight.StartedAt.In(a.deps.Config.Timezone).Format("2 Jan 2006"), fights.DifficultyName(n.Difficulty), len(n.Pulls), len(n.Bosses), top.Name))
-	log.Info("analysis done", "against", top.Name, "bosses", len(n.Bosses), "pulls", len(n.Pulls),
+	a.audit(ctx, an.UserID, tag, "combatlogs.analyse", an.Name, fmt.Sprintf("%s against %s: done", you.Label, top.Name))
+	log.Info("analysis done", "against", top.Name, "bosses", len(you.Bosses),
 		"prompt_tokens", usage.PromptTokens, "output_tokens", usage.OutputTokens, "took", a.now().Sub(started).Round(time.Millisecond))
 }
 
-// input assembles what the model is given.
-func (a *App) input(n night, yours []fights.GearNamed, yourNote string, yourTalents []string, theirs []fights.GearNamed, theirTalents []string,
-	theirParses map[int]*wcl.Ranking, top wcl.Ranking, an fights.Analysis, yourClass, yourSpec, theirClass string,
-	table []fights.UpgradeRow, diff fights.TalentDiff, mismatch bool) ai.Input {
-	healer := top.Metric == "hps"
-	in := ai.Input{
+// tagOf is the member's battletag for the audit entry: from the upload
+// when there is one, else from the most recent upload of theirs, else empty.
+func (a *App) tagOf(ctx context.Context, an fights.Analysis) string {
+	if an.UploadID != 0 {
+		if u, err := a.store.Upload(ctx, an.UploadID, an.UserID); err == nil {
+			return u.BattleTag
+		}
+	}
+	if us, err := a.store.ListUploads(ctx, an.UserID); err == nil && len(us) > 0 {
+		return us[0].BattleTag
+	}
+	return ""
+}
+
+// fromWCL is the member's side from Warcraft Logs: their latest ranked
+// kill on each boss of the current raid, at the difficulty Warcraft Logs
+// ranks them at, with the gear and talents from the most recent of them.
+func (a *App) fromWCL(ctx context.Context, an fights.Analysis, cp *fights.ComparisonPlayer, healer bool) (yourSide, error) {
+	if a.deps.WCL == nil {
+		return yourSide{}, errors.New("the site has no warcraft logs client")
+	}
+	ref := a.selfRef(fights.CharacterRef{Name: an.Name, RealmSlug: an.RealmSlug})
+	zone, err := a.deps.WCL.ZoneRankings(ctx, ref)
+	switch {
+	case errors.Is(err, wcl.ErrNoCharacter), errors.Is(err, wcl.ErrNoLogs):
+		return yourSide{}, errors.New("warcraft logs has no ranked kills for this character in the current raid")
+	case err != nil:
+		return yourSide{}, errors.New("warcraft logs could not be reached")
+	}
+	you := yourSide{
+		Class: zone.Class, Spec: zone.Spec,
+		Raid: ai.Raid{
+			Difficulty: fights.DifficultyName(wcl.GameDifficulty(zone.Difficulty)),
+			Note:       "your side is your latest ranked kill on each boss as recorded on Warcraft Logs; wipes, pull counts and ability use are not known from it",
+		},
+		Label: "latest ranked kills on Warcraft Logs",
+	}
+	var latest wcl.Ranking
+	for _, e := range zone.Encounters {
+		rk, err := a.deps.WCL.LatestRank(ctx, ref, e.ID, cp.WCLDiff, cp.Metric)
+		if err != nil {
+			a.deps.Logger.Warn("your latest kill on a boss", "encounter", e.ID, "error", err)
+			continue
+		}
+		line := ai.Boss{Name: e.Name, Pulls: e.Kills, Kills: e.Kills, YourBestDuration: seconds(rk.Duration), YourBestWasKill: true,
+			YourRankPercent: rk.RankPercent, YourDate: rk.StartedAt.In(a.deps.Config.Timezone).Format("2 Jan 2006")}
+		if healer {
+			line.YourBestHPS = rk.Amount
+			you.Healing += int64(rk.Amount * rk.Duration.Seconds())
+		} else {
+			line.YourBestDPS = rk.Amount
+			you.Damage += int64(rk.Amount * rk.Duration.Seconds())
+		}
+		you.Bosses = append(you.Bosses, line)
+		you.BossIDs = append(you.BossIDs, e.ID)
+		you.Raid.Pulls += e.Kills
+		you.Raid.Kills += e.Kills
+		if rk.StartedAt.After(latest.StartedAt) && len(rk.Gear) > 0 {
+			latest = rk
+		}
+		if you.Raid.Date == "" || rk.StartedAt.After(latestDate(you.Raid.Date, a)) {
+			you.Raid.Date = rk.StartedAt.In(a.deps.Config.Timezone).Format("2 Jan 2006")
+		}
+	}
+	if len(you.Bosses) == 0 {
+		return yourSide{}, errors.New("none of the character's ranked kills could be read from warcraft logs")
+	}
+	if len(latest.Gear) == 0 {
+		you.GearNote = "warcraft logs recorded no gear for these kills"
+	}
+	for i, g := range latest.Gear {
+		you.Gear = append(you.Gear, fights.GearNamed{Slot: i, ID: g.ID, Name: g.Name, Level: g.ItemLevel})
+	}
+	you.Talents = a.talentNames(ctx, latest.Talents)
+	return you, nil
+}
+
+// latestDate reads a date the way fromWCL wrote it, for comparison.
+func latestDate(s string, a *App) time.Time {
+	t, _ := time.ParseInLocation("2 Jan 2006", s, a.deps.Config.Timezone)
+	return t
+}
+
+// fromUpload is the member's side from one of their uploads: the night as
+// nightOf reads it.
+func (a *App) fromUpload(ctx context.Context, an fights.Analysis, healer bool) (yourSide, error) {
+	if len(an.Summaries) == 0 {
+		return yourSide{}, errors.New("the night could not be read")
+	}
+	n, ok := nightOf(an.Summaries, healer)
+	if !ok {
+		return yourSide{}, errors.New("the upload has no raid pulls for this character")
+	}
+	class, spec := wcl.SpecName(n.SpecID)
+	you := yourSide{
+		Class: class, Spec: spec,
 		Raid: ai.Raid{
 			Difficulty: fights.DifficultyName(n.Difficulty),
 			Date:       n.Pulls[0].Fight.StartedAt.In(a.deps.Config.Timezone).Format("2 Jan 2006"),
 			Pulls:      len(n.Pulls),
 		},
-		You:      ai.Player{Name: an.Name, Class: yourClass, Spec: yourSpec, Gear: gearLines(yours), Talents: orEmptyStrings(yourTalents), Note: yourNote},
-		Them:     ai.Player{Name: top.Name, Class: theirClass, Spec: top.Spec, Gear: gearLines(theirs), Talents: orEmptyStrings(theirTalents)},
-		Table:    table,
-		Diff:     diff,
-		Mismatch: mismatch,
+		Label: fmt.Sprintf("night of %s, %s, %d pulls on %d bosses", n.Pulls[0].Fight.StartedAt.In(a.deps.Config.Timezone).Format("2 Jan 2006"), fights.DifficultyName(n.Difficulty), len(n.Pulls), len(n.Bosses)),
 	}
 	if n.LeftOut > 0 {
-		in.Raid.Note = fmt.Sprintf("%d pulls at another difficulty were left out", n.LeftOut)
+		you.Raid.Note = fmt.Sprintf("%d pulls at another difficulty were left out", n.LeftOut)
 	}
 	for _, b := range n.Bosses {
-		in.Raid.Kills += b.Kills
-		in.You.Damage += b.Damage
-		in.You.Healing += b.Healing
-		in.You.Deaths += b.Deaths
+		you.Raid.Kills += b.Kills
+		you.Damage += b.Damage
+		you.Healing += b.Healing
+		you.Deaths += b.Deaths
 		line := ai.Boss{
 			Name: b.Name, Pulls: b.Pulls, Kills: b.Kills, YourDeaths: b.Deaths,
 			YourBestDuration: seconds(b.Best.Fight.Duration), YourBestWasKill: b.Best.Fight.Kill,
@@ -265,20 +362,45 @@ func (a *App) input(n night, yours []fights.GearNamed, yourNote string, yourTale
 		} else {
 			line.YourBestDPS = perSecond(b.Best.Damage, b.Best.Fight.Duration)
 		}
-		if rk := theirParses[b.EncounterID]; rk != nil {
-			line.TheirRankPercent, line.TheirDuration = rk.RankPercent, seconds(rk.Duration)
-			if healer {
-				line.TheirHPS = rk.Amount
-			} else {
-				line.TheirDPS = rk.Amount
-			}
-		} else {
-			line.Note = "the top player has no ranked kill of this boss at this difficulty"
-		}
-		in.Bosses = append(in.Bosses, line)
+		you.Bosses = append(you.Bosses, line)
+		you.BossIDs = append(you.BossIDs, b.EncounterID)
 	}
-	in.Raid.Wipes = in.Raid.Pulls - in.Raid.Kills
-	return in
+	you.Raid.Wipes = you.Raid.Pulls - you.Raid.Kills
+	you.Gear, you.GearNote = a.yourGear(ctx, an.Name, an.RealmSlug, n.Gear)
+	if len(n.Talents) > 0 {
+		gd, _ := a.deps.Blizzard.(blizzard.GameData)
+		ids := make([]int, 0, len(n.Talents))
+		for _, t := range n.Talents {
+			ids = append(ids, t.Entry)
+		}
+		names := fights.ResolveTalents(ctx, a.store, gd, ids)
+		for _, t := range n.Talents {
+			you.Talents = append(you.Talents, names[t.Entry])
+		}
+	}
+	return you, nil
+}
+
+// talentNames names Warcraft Logs talents, resolving any that came as a
+// bare id.
+func (a *App) talentNames(ctx context.Context, ts []wcl.Talent) []string {
+	var missing []int
+	for _, t := range ts {
+		if t.Name == "" {
+			missing = append(missing, t.ID)
+		}
+	}
+	gd, _ := a.deps.Blizzard.(blizzard.GameData)
+	names := fights.ResolveTalents(ctx, a.store, gd, missing)
+	out := make([]string, 0, len(ts))
+	for _, t := range ts {
+		if t.Name != "" {
+			out = append(out, t.Name)
+		} else {
+			out = append(out, names[t.ID])
+		}
+	}
+	return out
 }
 
 // yourGear names the member's gear for the table: the night's latest

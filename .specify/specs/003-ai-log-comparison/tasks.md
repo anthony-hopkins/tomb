@@ -205,6 +205,16 @@ fetched in the worker, the prompt is a night with per-boss lines, and the card's
 form picks an upload instead of a pull and a link. Tests updated throughout. The
 link parser and per-pull plumbing stay for the drill-down to come.
 
+## Second amendment, 2026-09-16: the member's side from Warcraft Logs first
+
+Also done the same day, after the guild master's next direction (spec → Second
+amendment): Analyse needs no upload. `wcl.ZoneRankings` and `wcl.LatestRank`
+read the character's own standing and latest kill per boss; migration `0007`
+records each analysis's `source`; the route takes `source=wcl` (default) or
+`source=upload:<id>`; the worker builds the member's side from either; the card's
+picker offers Warcraft Logs first, then uploads. Tests updated throughout; the
+zone-rankings fixture is hand-written and UNCONFIRMED like the others.
+
 ## Phase 6: Polish & cross-cutting
 
 - [X] T069 [P] `docs/adding-an-app.md`: document `Deps.WCL` / `Deps.AI`, the shared-store pattern (`internal/fights` beside `internal/armory`), the CSRF header form for scripted requests, and the "meta refresh, not polling" convention for background work.

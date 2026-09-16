@@ -22,9 +22,11 @@ import (
 type analysisView struct {
 	Available bool   // a Warcraft Logs client is configured
 	Character string // "realm/name", what the form posts
-	Uploads   []uploadOption
-	Action    string
-	CSRF      struct{ Field, Token string }
+	// Sources are what the form offers: the character's latest raid on
+	// Warcraft Logs first, then any upload with raid pulls for them.
+	Sources []sourceOption
+	Action  string
+	CSRF    struct{ Field, Token string }
 
 	// Msg is the one-shot message from the analyse route, worded here.
 	Msg string
@@ -34,8 +36,8 @@ type analysisView struct {
 	Result  *resultView
 }
 
-type uploadOption struct {
-	ID    int64
+type sourceOption struct {
+	Value string // "wcl" or "upload:<id>"
 	Label string
 }
 
@@ -57,6 +59,7 @@ type paragraph struct {
 // messages are the analyse route's codes, worded for the card. The route
 // never sends text; a code that is not here renders nothing.
 var messages = map[string]string{
+	"nologs":      "Warcraft Logs has no ranked kills for this character in the current raid. Log your raids with the Warcraft Logs uploader, or upload a combat log here and pick it as the source.",
 	"nopulls":     "That upload has no raid pulls for this character.",
 	"nospec":      "The log did not record this character's specialization, so there is nothing to compare against. Switch on Advanced Combat Logging before the next raid.",
 	"norank":      "Warcraft Logs has no ranked player of this class and specialization on that boss at that difficulty yet.",
@@ -94,6 +97,8 @@ func (a *App) analysis(r *http.Request, c blizzard.Character) *analysisView {
 		v.Msg = messages[code]
 	}
 
+	v.Sources = append(v.Sources, sourceOption{Value: fights.SourceWCL, Label: "My latest raid on Warcraft Logs"})
+
 	// The uploads with raid pulls for this character, newest first.
 	uploads, err := a.Fights.ListUploads(ctx, sess.User.ID)
 	if err != nil {
@@ -121,7 +126,7 @@ func (a *App) analysis(r *http.Request, c blizzard.Character) *analysisView {
 		if pulls == 0 {
 			continue
 		}
-		v.Uploads = append(v.Uploads, uploadOption{ID: u.ID, Label: fmt.Sprintf("%s · %s · %d raid pull%s",
+		v.Sources = append(v.Sources, sourceOption{Value: fmt.Sprintf("upload:%d", u.ID), Label: fmt.Sprintf("My upload %s · %s · %d raid pull%s",
 			u.Filename, u.CreatedAt.In(a.deps.Config.Timezone).Format("2 Jan 2006"), pulls, plural(pulls))})
 	}
 

@@ -4,9 +4,10 @@
 
 **Created**: 2026-09-16
 
-**Status**: Implemented on `003-ai-log-comparison`, 2026-09-16; **amended the same
-day** (see the Amendment section) so the comparison is a whole night against the
-top-ranked player rather than one pull against a pasted link.
+**Status**: Implemented on `003-ai-log-comparison`, 2026-09-16; **amended twice the
+same day** (see the Amendment sections): the comparison is a whole raid against the
+top-ranked player rather than one pull against a pasted link, and the member's side
+comes from Warcraft Logs first, with an upload as the alternative.
 
 **Depends on**: 001-battlenet-sso-character-dashboard (sessions, the guild gate, the
 character card and its equipment), 002-officer-tools (officer standing, the audit
@@ -404,3 +405,28 @@ User Story 3 and FR-034..FR-038 it contradicts; everything else stands.
   pulled most, and that player's best parse on each boss of the night". **FR-037**
   and **FR-038** read "night" for "fight". The per-pull comparison remains a
   later feature, over the same stored pulls.
+
+## Second amendment, 2026-09-16: the member's side from Warcraft Logs first
+
+The guild master then directed that the site should take the character's latest
+raid parses from Warcraft Logs itself, and not rely on an upload initially.
+
+- **Default source: Warcraft Logs.** On the card, Analyse offers "My latest raid on
+  Warcraft Logs" first, for every character, whether or not anything was ever
+  uploaded. The site reads, read-only, the character's standing in the current
+  raid — which bosses they have ranked kills on, as which specialization, at which
+  difficulty — and their most recent ranked kill on each of those bosses, with the
+  gear and talents from the newest of them. The top player is found on the boss
+  they have killed most.
+- **What that side can and cannot say.** A ranked kill carries the parse (DPS or
+  HPS, rank percent, duration, date), gear and talents. It does not carry wipes,
+  pull counts or ability use, and the write-up is told so. Those come only from
+  an uploaded log, which stays available as the other choice in the same picker
+  ("My upload … · N raid pulls").
+- **Refusals.** A character Warcraft Logs does not know, or knows with no ranked
+  kill in the current raid, is refused with a message that names the two ways to
+  get one: log raids with the Warcraft Logs uploader, or upload a combat log here
+  and pick it as the source.
+- **Everything else holds**: the allowance, officers unlimited, the trail, the
+  computed table and diff, the newest result on the card, nothing ever sent to
+  Warcraft Logs. Every analysis records its source.

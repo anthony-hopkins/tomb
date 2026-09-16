@@ -27,6 +27,14 @@ func (noWCL) TopPlayer(context.Context, int, int, string, string, string) (wcl.C
 	return wcl.CharacterRef{}, wcl.Ranking{}, wcl.ErrNoRank
 }
 
+func (noWCL) ZoneRankings(context.Context, wcl.CharacterRef) (wcl.Zone, error) {
+	return wcl.Zone{}, wcl.ErrNoLogs
+}
+
+func (noWCL) LatestRank(context.Context, wcl.CharacterRef, int, int, string) (wcl.Ranking, error) {
+	return wcl.Ranking{}, wcl.ErrNoRank
+}
+
 // stackAnalysis mounts the dashboard with a fights store and, when asked, a
 // Warcraft Logs client.
 func stackAnalysis(t *testing.T, store fights.Store, withWCL bool) http.Handler {
@@ -121,10 +129,11 @@ func TestAnalysisSection(t *testing.T) {
 		wantNot []string
 		refresh bool
 	}{
-		{"no uploads", fights.NewMemStore(), true, "/app/dashboard",
-			[]string{"No parsed raid nights", "/app/combatlogs"}, []string{"analyse-form"}, false},
+		{"no uploads: Warcraft Logs is the source", fights.NewMemStore(), true, "/app/dashboard",
+			[]string{`action="/app/combatlogs/analyses"`, `<option value="wcl">My latest raid on Warcraft Logs</option>`, `name="source"`, `name="character" value="area-52/nekromoo"`},
+			[]string{"upload:"}, false},
 		{"upload, no analysis", storeWith(t, nil), true, "/app/dashboard",
-			[]string{`action="/app/combatlogs/analyses"`, "WoWCombatLog.txt", "1 raid pull<", `name="upload"`, `name="character" value="area-52/nekromoo"`, `name="csrf_token"`, "top-ranked player of your class", "appears here once an analysis has run"},
+			[]string{`action="/app/combatlogs/analyses"`, `<option value="wcl">`, `<option value="upload:1">My upload WoWCombatLog.txt`, "1 raid pull<", `name="csrf_token"`, "top-ranked player of your class", "appears here once an analysis has run"},
 			[]string{"Some Dungeon Boss", "Analysed"}, false},
 		{"comparisons not set up", storeWith(t, nil), false, "/app/dashboard",
 			[]string{"not set up on this site"}, []string{"analyse-form"}, false},
@@ -140,6 +149,8 @@ func TestAnalysisSection(t *testing.T) {
 			[]string{"could not be completed: the model is busy", "Old Casque"}, nil, false},
 		{"message: no spec", storeWith(t, nil), true, "/app/dashboard?c=area-52/nekromoo&msg=nospec",
 			[]string{"did not record this character"}, nil, false},
+		{"message: no logs", storeWith(t, nil), true, "/app/dashboard?c=area-52/nekromoo&msg=nologs",
+			[]string{"no ranked kills for this character"}, nil, false},
 		{"message: wait", storeWith(t, nil), true, "/app/dashboard?msg=wait&min=90",
 			[]string{"another analysis in 90 minutes"}, nil, false},
 		{"message: unknown code renders nothing", storeWith(t, nil), true, "/app/dashboard?msg=<script>",

@@ -631,7 +631,7 @@ func (s *SQLStore) PutComparisonPlayer(ctx context.Context, p ComparisonPlayer) 
 
 // analysisColumns are bare, not aliased: every analysis query reads one
 // table, so there is nothing to disambiguate.
-const analysisColumns = `id, user_id, upload_id, summary_id, character_name, realm_slug, comparison_id, state, failure,
+const analysisColumns = `id, user_id, source, upload_id, summary_id, character_name, realm_slug, comparison_id, state, failure,
 	table_json, talent_diff, writeup, model, prompt_tokens, output_tokens, created_at, started_at, finished_at`
 
 func scanAnalysis(row interface{ Scan(...any) error }) (Analysis, error) {
@@ -641,7 +641,7 @@ func scanAnalysis(row interface{ Scan(...any) error }) (Analysis, error) {
 	var writeup sql.NullString
 	var uploadID, summaryID, pt, ot sql.NullInt64
 	var started, finished sql.NullTime
-	err := row.Scan(&a.ID, &a.UserID, &uploadID, &summaryID, &a.Name, &a.RealmSlug, &a.ComparisonID, &state, &a.Failure,
+	err := row.Scan(&a.ID, &a.UserID, &a.Source, &uploadID, &summaryID, &a.Name, &a.RealmSlug, &a.ComparisonID, &state, &a.Failure,
 		&table, &diff, &writeup, &a.Model, &pt, &ot, &a.CreatedAt, &started, &finished)
 	if err != nil {
 		return Analysis{}, err
@@ -699,8 +699,8 @@ func (s *SQLStore) CreateAnalysis(ctx context.Context, a Analysis, unlimited boo
 		}
 	}
 	const q = `
-		INSERT INTO analyses (user_id, upload_id, summary_id, character_name, realm_slug, comparison_id, state)
-		VALUES ($1, $2, $3, $4, $5, $6, 'pending')
+		INSERT INTO analyses (user_id, source, upload_id, summary_id, character_name, realm_slug, comparison_id, state)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending')
 		RETURNING ` + analysisColumns
 	var uploadID, summaryID any
 	if a.UploadID != 0 {
@@ -709,7 +709,14 @@ func (s *SQLStore) CreateAnalysis(ctx context.Context, a Analysis, unlimited boo
 	if a.SummaryID != 0 {
 		summaryID = a.SummaryID
 	}
-	out, err := scanAnalysis(tx.QueryRowContext(ctx, q, a.UserID, uploadID, summaryID, a.Name, a.RealmSlug, a.ComparisonID))
+	source := a.Source
+	if source == "" {
+		source = SourceUpload
+		if a.UploadID == 0 {
+			source = SourceWCL
+		}
+	}
+	out, err := scanAnalysis(tx.QueryRowContext(ctx, q, a.UserID, source, uploadID, summaryID, a.Name, a.RealmSlug, a.ComparisonID))
 	if err != nil {
 		return Analysis{}, fmt.Errorf("create analysis: %w", err)
 	}

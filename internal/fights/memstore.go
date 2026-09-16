@@ -386,6 +386,12 @@ func (m *MemStore) CreateAnalysis(_ context.Context, a Analysis, unlimited bool)
 	a.ID = m.id()
 	a.State = Pending
 	a.CreatedAt = m.Now()
+	if a.Source == "" {
+		a.Source = SourceUpload
+		if a.UploadID == 0 {
+			a.Source = SourceWCL
+		}
+	}
 	ac := a
 	m.Analyses[a.ID] = &ac
 	return a, nil

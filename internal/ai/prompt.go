@@ -55,6 +55,10 @@ type Boss struct {
 	YourBestWasKill  bool    `json:"your_best_pull_was_kill"`
 	YourDeaths       int     `json:"your_deaths_across_pulls"`
 	YourCasts        []Cast  `json:"your_casts_on_best_pull,omitempty"`
+	// YourRankPercent and YourDate are known when your side came from
+	// Warcraft Logs rather than an upload.
+	YourRankPercent float64 `json:"your_rank_percent,omitempty"`
+	YourDate        string  `json:"your_kill_date,omitempty"`
 
 	TheirDPS         float64 `json:"their_dps,omitempty"`
 	TheirHPS         float64 `json:"their_hps,omitempty"`

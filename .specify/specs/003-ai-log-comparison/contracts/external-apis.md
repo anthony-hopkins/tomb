@@ -20,8 +20,23 @@ type Reader interface {
 }
 ```
 
-Read-only by construction: these are the only two methods, and the package has no
-other request path (FR-035). The second, added by the 2026-09-16 amendment:
+Read-only by construction: these are the only four methods, and the package has
+no other request path (FR-035). Added by the 2026-09-16 amendments:
+
+```go
+    // ZoneRankings is the character's standing in the current raid: bosses
+    // with ranked kills, spec, difficulty, metric. ErrNoLogs when none.
+    ZoneRankings(ctx context.Context, ref CharacterRef) (Zone, error)
+    // LatestRank is the character's most recent ranked kill on a boss.
+    LatestRank(ctx context.Context, ref CharacterRef, encounterID, wclDifficulty int, metric string) (Ranking, error)
+```
+
+`ZoneRankings` queries `character(...){ classID zoneRankings }` with no zone or
+difficulty given, taking Warcraft Logs' default of the current raid at the
+highest difficulty the character has rankings in (**UNCONFIRMED**; fixture
+`zone-rankings.json`); `LatestRank` is `encounterRankings` picking the rank with
+the latest `startTime`. The member's own reference is the configured region,
+Blizzard's realm slug and the character name, which Warcraft Logs shares.
 
 ```go
     // TopPlayer finds the highest-ranked player of a class and spec on an

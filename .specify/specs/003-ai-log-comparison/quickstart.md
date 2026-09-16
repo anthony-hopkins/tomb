@@ -93,11 +93,13 @@ core and exercises begin → pieces → finish → parsed with a fake store.
 2. Pick a character never seen in a log, whose Blizzard talents are absent.
    Expected: the rest of the card renders; Talents says "unavailable".
 
-### 6. Run a comparison (US3, scenarios 1, 2, 6; amended: the whole night)
+### 6. Run a comparison (US3, scenarios 1, 2, 6; amended: the whole raid, from Warcraft Logs first)
 
-1. On the card, press **Analyse**: pick the night's upload and confirm. There is
-   no link to paste; the site finds the top-ranked player of your class and spec
-   on the boss you pulled most. Expected: back on the card, "analysing…", the page
+1. On the card, leave the source as **My latest raid on Warcraft Logs** and press
+   **Analyse**. Nothing needs uploading: the site reads your ranked kills in the
+   current raid from Warcraft Logs and finds the top-ranked player of your class
+   and spec on the boss you have killed most. To compare an uploaded night
+   instead, pick it in the same picker. Expected: back on the card, "analysing…", the page
    refreshing itself; within SC-004's two minutes the left panel shows the upgrade
    table (one row per slot, your item and level, theirs, verdict) and the right panel
    the write-up naming the boss and the player and ending with three prioritised
@@ -113,6 +115,7 @@ core and exercises begin → pieces → finish → parsed with a fake store.
 
 | Do | Expected |
 |---|---|
+| Analyse from Warcraft Logs on a character with no logs there | "no ranked kills for this character"; nothing created |
 | Analyse an upload recorded without Advanced Combat Logging | "did not record this character's specialization"; nothing created |
 | Analyse a night on a boss where nobody of your class and spec is ranked yet (a brand-new tier) | Refused with the message; allowance untouched (scenario 3) |
 | As a member (not officer), run one, then try again | "You can run another in N minutes" (scenario 4); as an officer it runs |
@@ -121,8 +124,8 @@ core and exercises begin → pieces → finish → parsed with a fake store.
 
 ### 8. Nothing goes to Warcraft Logs (US3, scenario 7; FR-035)
 
-Code review check, not a runtime one: `internal/wcl` has one method, `BestRank`,
-and one request path; `grep -rn "warcraftlogs" internal/` shows only the token
+Code review check, not a runtime one: `internal/wcl` has four read methods and
+one request path; `grep -rn "warcraftlogs" internal/` shows only the token
 URL, the client endpoint and the link parser. No page mentions uploading to
 Warcraft Logs.
 
