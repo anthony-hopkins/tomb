@@ -19,6 +19,16 @@
       </ul>
     </nav>
     {{end}}
+    {{if .Ticker}}
+    {{/* What is coming next, from whichever app has something to say. A
+         list, so a reader with a screen reader hears how many there are. */}}
+    <aside class="ticker" aria-label="Next up">
+      <span class="ticker-label">Next up</span>
+      <ol class="ticker-items">
+        {{range .Ticker}}<li{{if .Live}} class="is-live"{{end}}><a href="{{.Href}}"><span class="ticker-when">{{.When}}</span><span class="ticker-title">{{.Title}}</span></a></li>{{end}}
+      </ol>
+    </aside>
+    {{end}}
     {{if .SignedIn}}
     <form class="logout" method="post" action="/auth/logout">
       <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">

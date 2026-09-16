@@ -101,6 +101,12 @@ fi
 mkdir -p "$DATA_MOUNT/postgres"
 chown -R 999:999 "$DATA_MOUNT/postgres"
 
+# Uploaded combat logs wait here between upload and parse (spec 003). The app
+# image is distroless nonroot, uid 65532; nothing else reads the directory.
+mkdir -p "$DATA_MOUNT/uploads"
+chown 65532:65532 "$DATA_MOUNT/uploads"
+chmod 700 "$DATA_MOUNT/uploads"
+
 # ---------------------------------------------------------------------------
 # Configuration from instance metadata and Secret Manager
 # ---------------------------------------------------------------------------

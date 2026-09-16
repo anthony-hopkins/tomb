@@ -46,6 +46,23 @@ resource "google_project_iam_member" "vm_metrics" {
   member  = "serviceAccount:${google_service_account.vm.email}"
 }
 
+# Vertex AI, for the combat-log comparison's write-up (spec 003). The VM
+# calls it as itself -- the cloud-platform scope below plus this role -- so
+# there is no API key anywhere. The API is project-wide and both environments
+# live in one project, so each workspace enables it and neither disables it on
+# destroy: tearing down develop must not switch production's model off.
+resource "google_project_service" "aiplatform" {
+  project            = var.project_id
+  service            = "aiplatform.googleapis.com"
+  disable_on_destroy = false
+}
+
+resource "google_project_iam_member" "vm_aiplatform" {
+  project = var.project_id
+  role    = "roles/aiplatform.user"
+  member  = "serviceAccount:${google_service_account.vm.email}"
+}
+
 # ---------------------------------------------------------------------------
 # Postgres data disk.
 #
@@ -126,8 +143,13 @@ resource "google_compute_instance" "main" {
     tomb-guild-officer-rank = var.guild_officer_rank
     tomb-timezone           = var.timezone
     tomb-admin              = var.admin
+    tomb-upload-dir         = var.upload_dir
+    tomb-ai-model           = var.ai_model
+    tomb-ai-region          = var.ai_region
+    tomb-wcl-client-id      = var.wcl_client_id
     tomb-db-secret          = google_secret_manager_secret.db_password.secret_id
     tomb-bnet-secret        = google_secret_manager_secret.bnet_client_secret.secret_id
+    tomb-wcl-secret         = google_secret_manager_secret.wcl_client_secret.secret_id
 
     # OS Login so the pipeline authenticates with IAM rather than managed keys.
     enable-oslogin = "TRUE"

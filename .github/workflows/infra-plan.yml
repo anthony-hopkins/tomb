@@ -105,6 +105,10 @@ jobs:
             -var="guild_officer_rank=${{ vars.TOMB_GUILD_OFFICER_RANK }}" \
             -var="timezone=${{ vars.TOMB_TIMEZONE }}" \
             -var="admin=${{ vars.TOMB_ADMIN }}" \
+            -var="upload_dir=${{ vars.TOMB_UPLOAD_DIR }}" \
+            -var="ai_model=${{ vars.TOMB_AI_MODEL }}" \
+            -var="ai_region=${{ vars.TOMB_AI_REGION }}" \
+            -var="wcl_client_id=${{ vars.WCL_CLIENT_ID }}" \
             -var="domain=${{ steps.ws.outputs.domain }}" \
             -var="enable_snapshots=${{ steps.ws.outputs.snapshots }}" \
             -var="enable_auto_stop=${{ steps.ws.outputs.auto_stop }}" \

@@ -32,24 +32,13 @@ type Item struct {
 }
 
 // Roadmap is placeholder copy. Nothing here is wired to anything and none of it
-// carries a date.
+// carries a date. Combat log analysis and gear analysis came off it with spec
+// 003: they are Combat logs and the comparison on the character card.
 var Roadmap = []Item{
 	{
 		Title: "Ask TOMB Bot",
 		AI:    true,
 		Blurb: "Ask about the guild, the schedule, what is running this week, or just for advice.",
-	},
-	{
-		Title: "Combat log analysis",
-		AI:    true,
-		Blurb: "Compare your logs against the top performers of your class, see exactly where " +
-			"the differences are and what each one costs you, with suggested fixes.",
-	},
-	{
-		Title: "Gear analysis",
-		AI:    true,
-		Blurb: "Compare your gear to the top performers and get the path of least resistance to " +
-			"your next upgrades, prioritised so your resources always go where they matter most.",
 	},
 }
 

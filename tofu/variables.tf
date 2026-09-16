@@ -73,7 +73,7 @@ variable "data_disk_size" {
     prevent_destroy.
   EOT
   type        = number
-  default     = 10
+  default     = 20  # was 10; combat logs wait here between upload and parse (spec 003)
 }
 
 variable "disk_type" {
@@ -306,6 +306,32 @@ variable "admin" {
 
 variable "timezone" {
   description = "The IANA zone every time is shown in. Empty is the app's default, America/New_York. Reaches the app as TOMB_TIMEZONE."
+  type        = string
+  default     = ""
+}
+
+# --- Combat logs and the AI comparison (spec 003) --------------------------
+
+variable "upload_dir" {
+  description = "Where an uploaded combat log sits until it is parsed. Empty is the app's default, /var/lib/tomb/uploads, which compose.yaml binds to the data disk. Reaches the app as TOMB_UPLOAD_DIR."
+  type        = string
+  default     = ""
+}
+
+variable "ai_model" {
+  description = "The Vertex AI model that writes a comparison. Empty is the app's default, gemini-3.1-pro. Reaches the app as TOMB_AI_MODEL."
+  type        = string
+  default     = ""
+}
+
+variable "ai_region" {
+  description = "The region the model is called in. Empty is the app's default, us-central1. Reaches the app as TOMB_AI_REGION."
+  type        = string
+  default     = ""
+}
+
+variable "wcl_client_id" {
+  description = "Warcraft Logs API client id, read-only use. Not a secret. Empty leaves comparisons unavailable. Reaches the app as WCL_CLIENT_ID; the secret is in Secret Manager."
   type        = string
   default     = ""
 }

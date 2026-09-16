@@ -49,14 +49,23 @@ func (c *CSRF) Token(w http.ResponseWriter, r *http.Request) string {
 	return token
 }
 
-// Verify reports whether the request carries a matching cookie and form value.
-// An empty token on either side fails.
+// CSRFHeaderName carries the token on a scripted request, where there is no
+// form to put a field in. The combat-log uploader sends pieces with fetch
+// and is the one caller (spec 003); the header and the field are equivalent.
+const CSRFHeaderName = "X-CSRF-Token"
+
+// Verify reports whether the request carries a matching cookie and token.
+// The token is the form field, or -- for a request with no form body, a
+// scripted one -- the header. An empty token on either side fails.
 func (c *CSRF) Verify(r *http.Request) bool {
 	cookie, err := r.Cookie(CSRFCookieName)
 	if err != nil || cookie.Value == "" {
 		return false
 	}
-	submitted := r.PostFormValue(CSRFFieldName)
+	submitted := r.Header.Get(CSRFHeaderName)
+	if submitted == "" {
+		submitted = r.PostFormValue(CSRFFieldName)
+	}
 	if submitted == "" {
 		return false
 	}

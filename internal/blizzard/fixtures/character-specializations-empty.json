@@ -1,0 +1,11 @@
+{
+  "_links": {"self": {"href": "https://us.api.blizzard.com/profile/wow/character/area-52/nekromoo/specializations?namespace=profile-us"}},
+  "_note": "HAND-WRITTEN: the shape observed since patch 11.2, where the loadouts array is absent (research D8).",
+  "specializations": [
+    {
+      "specialization": {"key": {"href": "https://us.api.blizzard.com/data/wow/playable-specialization/250?namespace=static-us"}, "name": "Blood", "id": 250}
+    }
+  ],
+  "active_specialization": {"key": {"href": "https://us.api.blizzard.com/data/wow/playable-specialization/250?namespace=static-us"}, "name": "Blood", "id": 250},
+  "character": {"name": "Nekromoo", "id": 123456789, "realm": {"name": "Area 52", "id": 1168, "slug": "area-52"}}
+}
