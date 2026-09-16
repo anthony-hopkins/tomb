@@ -191,6 +191,7 @@ locals {
     "roles/resourcemanager.projectIamAdmin", # project-level IAM bindings
     "roles/iap.tunnelResourceAccessor",      # SSH to the VM through IAP
     "roles/compute.osAdminLogin",            # run the deploy script with sudo
+    "roles/serviceusage.serviceUsageAdmin",  # enable project APIs (Vertex AI, spec 003)
   ]
 }
 
