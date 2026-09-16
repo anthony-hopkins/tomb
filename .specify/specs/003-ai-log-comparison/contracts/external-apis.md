@@ -20,8 +20,20 @@ type Reader interface {
 }
 ```
 
-Read-only by construction: this is the only method, and the package has no other
-request path (FR-035).
+Read-only by construction: these are the only two methods, and the package has no
+other request path (FR-035). The second, added by the 2026-09-16 amendment:
+
+```go
+    // TopPlayer finds the highest-ranked player of a class and spec on an
+    // encounter at a difficulty, with their parse there.
+    TopPlayer(ctx context.Context, encounterID, wclDifficulty int, class, spec, metric string) (CharacterRef, Ranking, error)
+```
+
+It queries `worldData.encounter(id:).characterRankings(difficulty:, className:,
+specName:, metric:, includeCombatantInfo: true, page: 1)` and reads the first of
+`rankings[]` (**UNCONFIRMED** field names, fixture `character-rankings.json`;
+`server.region` and `server.name`/`slug` give the character reference). Class names
+are spelled without spaces in the query (`DeathKnight`).
 
 **Authentication**: `POST https://www.warcraftlogs.com/oauth/token`, HTTP basic auth
 with `WCL_CLIENT_ID` / `WCL_CLIENT_SECRET`, body `grant_type=client_credentials`.

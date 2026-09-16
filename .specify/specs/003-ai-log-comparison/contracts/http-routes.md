@@ -82,23 +82,26 @@ while `queued` or `parsing`.
 Form, CSRF field. Sets `removed`, cascades fights, summaries and analyses, writes
 `combatlogs.remove`, redirects to `/app/combatlogs` (FR-031).
 
-### `POST /app/combatlogs/analyses` — run a comparison
+### `POST /app/combatlogs/analyses` — run a comparison *(amended 2026-09-16)*
 
-Form fields: `summary` (a `fight_summaries.id` of one of the member's characters),
-`link` (a Warcraft Logs character URL), CSRF field. Posted from the character card.
+Form fields: `upload` (an upload id of the member's, parsed), `character`
+(`realm-slug/name`, one of the account's characters as the upload recorded them),
+CSRF field. Posted from the character card.
 
 | Condition | Status | Result |
 |---|---|---|
-| Valid, allowance available | 303 | Analysis created `pending`; → `/app/dashboard?c=<character key>` where the card shows "analysing" with the meta refresh |
-| Link not a Warcraft Logs character link | 303 | → the card with the message "…looks like https://www.warcraftlogs.com/character/us/area-52/name" (FR-034); nothing created |
-| Comparison player has no rank on this boss and difficulty | 303 | → the card with the message; nothing created; allowance untouched (FR-035, scenario 3) |
-| Warcraft Logs cannot be reached | 303 | → the card with "could not be completed, try later"; nothing created (FR-041) |
-| Inside the 120-minute window (member, not officer) | 303 | → the card with "you can run another in N minutes" (FR-039) |
-| `summary` not one of this member's | 404 | |
+| Valid, allowance available | 303 | Analysis created `pending` for the whole night; → `/app/dashboard?c=<character key>` where the card shows "analysing" with the `Refresh` header |
+| The upload has no raid pulls for the character | 303 | → the card with `msg=nopulls`; nothing created |
+| The log recorded no specialization (advanced logging off) | 303 | → the card with `msg=nospec`; nothing created |
+| Nobody of that class and spec is ranked on the main boss at that difficulty | 303 | → the card with `msg=norank`; nothing created; allowance untouched |
+| Warcraft Logs cannot be reached, or no client configured | 303 | → the card with `msg=unavailable`; nothing created (FR-041) |
+| Inside the 120-minute window (member, not officer) | 303 | → the card with `msg=wait&min=N` (FR-039) |
+| Upload not this member's or not parsed; character not on the upload | 404 | |
 
-The Warcraft Logs fetch happens **in the request** (about a second, cached a day)
-so the two refusals above can be given before anything is created; only the model
-call runs in the background worker. Every outcome that creates a row writes
+The leaderboard lookup for the top player happens **in the request** (about a
+second) so the refusals above can be given before anything is created; that
+player's parses on the night's other bosses (cached a day each) and the model
+call run in the background worker. Every outcome that creates a row writes
 `combatlogs.analyse` when the worker finishes (FR-040).
 
 ---
@@ -111,9 +114,9 @@ The selected character's card gains:
 
 - a **Talents** block under Equipped: from Blizzard's active loadout, or from the
   character's latest parsed pull with the date, or "unavailable" (FR-033, D8);
-- an **Analyse** form in the left panel: a fight picker listing this character's
-  parsed fights (boss, difficulty, kill/wipe, date), a link field, and the button.
-  With no parsed fights the panel says so and links to Combat logs;
+- an **Analyse** form in the left panel: a picker of this member's uploads with
+  raid pulls for the character (file, date, pull count), a hidden character field,
+  and the button. With none the panel says so and links to Combat logs;
 - the **upgrade table** in the left panel and the **write-up** in the right, from the
   newest `done` analysis for this character, with "Analysed <time> against <name>";
   a `pending` newest analysis shows "analysing…" and the meta refresh; a `failed`

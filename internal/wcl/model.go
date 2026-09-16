@@ -10,6 +10,7 @@ package wcl
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 )
 
@@ -41,6 +42,7 @@ type Talent struct {
 type Ranking struct {
 	Name    string // display case, as Warcraft Logs has it
 	ClassID int
+	Class   string // the class name, when the answer carried one
 	Spec    string
 
 	RankPercent float64
@@ -54,13 +56,39 @@ type Ranking struct {
 	Talents []Talent
 }
 
-// Reader is what the site asks of Warcraft Logs, and all of it.
+// Reader is what the site asks of Warcraft Logs, and all of it: two reads.
 type Reader interface {
 	// BestRank fetches ref's best recorded performance on encounterID at
 	// wclDifficulty by metric, with gear and talents. ErrNoCharacter when
 	// Warcraft Logs knows no such player; ErrNoRank when it knows them but
 	// they have no recorded fight there.
 	BestRank(ctx context.Context, ref CharacterRef, encounterID, wclDifficulty int, metric string) (Ranking, error)
+	// TopPlayer finds the highest-ranked player of a class and spec on
+	// encounterID at wclDifficulty by metric, with their parse there.
+	// class is Warcraft Logs' spelling, without spaces (ClassSlug).
+	// ErrNoRank when nobody of that class and spec is ranked there.
+	TopPlayer(ctx context.Context, encounterID, wclDifficulty int, class, spec, metric string) (CharacterRef, Ranking, error)
+}
+
+// ClassSlug is a class name the way Warcraft Logs' API spells it in a
+// query: "Death Knight" is "DeathKnight".
+func ClassSlug(class string) string {
+	return strings.ReplaceAll(class, " ", "")
+}
+
+// ServerSlug is a realm name the way Warcraft Logs slugs it: "Area 52" is
+// "area-52", "Kel'Thuzad" is "kelthuzad".
+func ServerSlug(name string) string {
+	var b strings.Builder
+	for _, r := range strings.ToLower(name) {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
+			b.WriteRune(r)
+		case r == ' ' || r == '-':
+			b.WriteByte('-')
+		}
+	}
+	return b.String()
 }
 
 var (

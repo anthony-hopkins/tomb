@@ -143,11 +143,12 @@ every one. The file is compressed and sent in pieces from your browser, resumes
 if the connection drops, and is deleted the moment it has been read. A log
 contains everyone in the raid; only your own characters are kept.
 
-On **My Characters**, a character with parsed pulls gains a comparison: pick a
-pull, paste the Warcraft Logs link of a player to measure against, and press
-Analyse. The site fetches that player's best parse, gear and talents on the same
-boss, works out a slot-by-slot upgrade table and a talent difference itself, and
-has a model write the review. Nothing is ever sent to Warcraft Logs. A member may
+On **My Characters**, a character with parsed raid pulls gains a comparison: pick
+the night's upload and press Analyse. The site finds the top-ranked player of your
+class and specialization on the boss you pulled most, at the difficulty you
+raided, fetches their best parse, gear and talents on every boss of the night,
+works out a slot-by-slot upgrade table and a talent difference itself, and has a
+model write the review, boss by boss and as a whole. Nothing is ever sent to Warcraft Logs. A member may
 run one every two hours; officers are not limited. Every run is in the Logs.
 
 Configuration: `WCL_CLIENT_ID` and `WCL_CLIENT_SECRET` (a read-only Warcraft

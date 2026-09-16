@@ -93,10 +93,11 @@ core and exercises begin → pieces → finish → parsed with a fake store.
 2. Pick a character never seen in a log, whose Blizzard talents are absent.
    Expected: the rest of the card renders; Talents says "unavailable".
 
-### 6. Run a comparison (US3, scenarios 1, 2, 6)
+### 6. Run a comparison (US3, scenarios 1, 2, 6; amended: the whole night)
 
-1. On the card, press **Analyse**: pick a kill from the night, paste the top
-   player's link, confirm. Expected: back on the card, "analysing…", the page
+1. On the card, press **Analyse**: pick the night's upload and confirm. There is
+   no link to paste; the site finds the top-ranked player of your class and spec
+   on the boss you pulled most. Expected: back on the card, "analysing…", the page
    refreshing itself; within SC-004's two minutes the left panel shows the upgrade
    table (one row per slot, your item and level, theirs, verdict) and the right panel
    the write-up naming the boss and the player and ending with three prioritised
@@ -112,8 +113,8 @@ core and exercises begin → pieces → finish → parsed with a fake store.
 
 | Do | Expected |
 |---|---|
-| Paste a report link or a random URL | "…looks like https://www.warcraftlogs.com/character/us/area-52/name"; nothing created |
-| Paste a valid player who has never killed that boss at that difficulty | Refused with the message; allowance untouched (scenario 3) |
+| Analyse an upload recorded without Advanced Combat Logging | "did not record this character's specialization"; nothing created |
+| Analyse a night on a boss where nobody of your class and spec is ranked yet (a brand-new tier) | Refused with the message; allowance untouched (scenario 3) |
 | As a member (not officer), run one, then try again | "You can run another in N minutes" (scenario 4); as an officer it runs |
 | Temporarily revoke `roles/aiplatform.user` on develop's VM account, run one | The card says it could not be completed; the previous result stays; the allowance is not spent (scenario 5); the app log shows the reason. Restore the role |
 | Restart the app container while an analysis is pending | The analysis shows "the site restarted"; the allowance is not spent |
