@@ -1019,21 +1019,6 @@ func TestBoardsRankAndCut(t *testing.T) {
 	}
 }
 
-// TestStandingFloorsAndTies: one entry, or a board where everyone is level,
-// gets the full row; nobody gets less than the floor.
-func TestStandingFloorsAndTies(t *testing.T) {
-	for _, tc := range []struct{ score, lo, hi, want int }{
-		{300, 300, 300, 100},
-		{7, 7, 69, barFloor},
-		{69, 7, 69, 100},
-		{38, 7, 69, 63},
-	} {
-		if got := standing(tc.score, tc.lo, tc.hi); got != tc.want {
-			t.Errorf("standing(%d, %d, %d) = %d, want %d", tc.score, tc.lo, tc.hi, got, tc.want)
-		}
-	}
-}
-
 // TestNoDetailNoBoards: a snapshot with no member detail yet gives no boards,
 // and the page shows the summary without an empty leaderboard column.
 func TestNoDetailNoBoards(t *testing.T) {

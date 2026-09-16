@@ -17,12 +17,10 @@ import (
 	"net/http"
 	"net/url"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
 
-	"golang.org/x/sync/errgroup"
 	"golang.org/x/sync/singleflight"
 
 	"github.com/anthony-hopkins/tomb/internal/armory"
@@ -98,12 +96,9 @@ type rosterSnapshot struct {
 	fetched time.Time
 }
 
-// memberDetail is what the roster does not carry about a member: their
-// profile summary, and their season standing.
-type memberDetail struct {
-	blizzard.Character
-	blizzard.Progress
-}
+// memberDetail is the shared shape (armory.MemberDetail): the front door
+// holds the same snapshot, so the two pages agree on what a member is.
+type memberDetail = armory.MemberDetail
 
 // parseTemplates builds this app's template set.
 //
@@ -276,29 +271,9 @@ type roleCount struct {
 	Count int
 }
 
-// boardView is one leaderboard: a title and its top entries, best first.
-type boardView struct {
-	Title   string
-	Entries []boardEntry
-}
-
-// boardEntry is one placing on a leaderboard.
-type boardEntry struct {
-	Rank  int
-	Name  string
-	Key   string // for the link to the member's Armory panel
-	Class string // CSS slug; the name is written in the class's colour
-	Value string // already formatted: "311", "2431", "3M · 8H"
-
-	// Pct is the length of the bar behind the row, as a percentage of the
-	// row: the entry's standing within its board, see standing.
-	Pct int
-
-	// RankIndex is the member's guild rank, for the authority mark beside
-	// the name: a guild master or officer stays recognisable on a board
-	// where the rank headings of the rail are not there to say so.
-	RankIndex int
-}
+// boardView is the shared leaderboard shape (armory.Board); the boards
+// themselves are computed in internal/armory, once for both pages.
+type boardView = armory.Board
 
 // boardSize is how many places each leaderboard shows. Ten, because five was
 // asked for and then found too short: a top ten is the list people expect,
@@ -516,44 +491,11 @@ func (a *App) load(ctx context.Context, token string) (*rosterSnapshot, error) {
 	}, nil
 }
 
-// details fetches each member's profile summary and season standing, bounded
-// and in parallel: three calls per member, the profile first and the two
-// standing calls together behind it.
-//
-// A member whose profile Blizzard will not serve -- renamed, transferred, or
-// just not right now -- keeps their roster row and loses the detail. That is
-// counted and logged once per refresh rather than once per member: at roster
-// scale, a line each is a page of warnings nobody reads.
+// details fetches each member's profile summary and season standing,
+// bounded and in parallel, through the shared fan-out (armory.Details).
 func (a *App) details(ctx context.Context, token string, members []blizzard.GuildMember) map[string]memberDetail {
-	fetched := make([]*memberDetail, len(members))
 	b := &armory.Builder{Client: a.deps.Blizzard, Logger: a.deps.Logger, Zone: a.deps.Config.Timezone}
-
-	g, gctx := errgroup.WithContext(ctx)
-	g.SetLimit(maxConcurrentProfileFetches)
-	for i, m := range members {
-		g.Go(func() error {
-			ref := blizzard.CharacterRef{Name: m.Name, RealmSlug: m.RealmSlug}
-			c, err := a.deps.Blizzard.CharacterProfile(gctx, token, ref)
-			if err != nil {
-				return nil
-			}
-			fetched[i] = &memberDetail{Character: c, Progress: b.Progress(gctx, token, ref)}
-			return nil
-		})
-	}
-	_ = g.Wait()
-
-	out := make(map[string]memberDetail, len(members))
-	for i, m := range members {
-		if fetched[i] != nil {
-			out[memberKey(m)] = *fetched[i]
-		}
-	}
-	if missing := len(members) - len(out); missing > 0 {
-		a.deps.Logger.Warn("guild member profiles unavailable",
-			"missing", missing, "of", len(members))
-	}
-	return out
+	return b.Details(ctx, token, members, maxConcurrentProfileFetches)
 }
 
 // group turns the sorted roster into rank groups, filling each card from the
@@ -699,7 +641,7 @@ func (a *App) summarise(members []blizzard.GuildMember, groups []rankGroup, deta
 	if s.Total > 0 {
 		s.CapPct = (s.AtCap*100 + s.Total/2) / s.Total
 	}
-	s.Boards = a.boards(members, details)
+	s.Boards = armory.Boards(members, details, boardSize)
 
 	return s
 }
@@ -766,157 +708,6 @@ func scaleBars(bars []barView) {
 	for i := range bars {
 		bars[i].Pct = (bars[i].Count*100 + longest/2) / longest
 	}
-}
-
-// contender is one member with what the boards rank them on, pulled together
-// once so each board is a sort and a slice rather than a fresh walk.
-type contender struct {
-	member blizzard.GuildMember
-	detail memberDetail
-
-	// Bosses down at each difficulty, summed across the current raids. The
-	// boards prize mythic over heroic over normal, so these are compared in
-	// that order rather than added together: three mythic kills outrank eight
-	// heroic ones, which is how players themselves would rank them.
-	mythic, heroic, normal int
-}
-
-// boards builds the leaderboards from the snapshot's member detail.
-//
-// A member with nothing to rank on -- no item level fetched, no rating, no
-// kills -- is simply absent from that board rather than placed last with a
-// zero. A board nobody qualifies for is left out altogether, which is what
-// happens on a fresh snapshot before any detail has arrived.
-func (a *App) boards(members []blizzard.GuildMember, details map[string]memberDetail) []boardView {
-	var cs []contender
-	for _, m := range members {
-		d, ok := details[memberKey(m)]
-		if !ok {
-			continue
-		}
-		c := contender{member: m, detail: d}
-		for _, r := range d.Raids {
-			for _, mode := range r.Modes {
-				switch mode.Difficulty {
-				case "MYTHIC":
-					c.mythic += mode.Completed
-				case "HEROIC":
-					c.heroic += mode.Completed
-				case "NORMAL":
-					c.normal += mode.Completed
-				}
-			}
-		}
-		cs = append(cs, c)
-	}
-
-	var out []boardView
-	add := func(title string, keep func(contender) bool, less func(x, y contender) bool, value func(contender) string, score func(contender) int) {
-		var pool []contender
-		for _, c := range cs {
-			if keep(c) {
-				pool = append(pool, c)
-			}
-		}
-		if len(pool) == 0 {
-			return
-		}
-		// Best first; ties break on name so the board is stable between
-		// refreshes rather than shuffling two equal characters.
-		sort.SliceStable(pool, func(i, j int) bool {
-			if less(pool[j], pool[i]) {
-				return true
-			}
-			if less(pool[i], pool[j]) {
-				return false
-			}
-			return strings.ToLower(pool[i].member.Name) < strings.ToLower(pool[j].member.Name)
-		})
-		top := pool[:min(boardSize, len(pool))]
-		lo, hi := score(top[0]), score(top[0])
-		for _, c := range top[1:] {
-			lo, hi = min(lo, score(c)), max(hi, score(c))
-		}
-		b := boardView{Title: title}
-		for i, c := range top {
-			b.Entries = append(b.Entries, boardEntry{
-				Rank:      i + 1,
-				Name:      c.member.Name,
-				Key:       memberKey(c.member),
-				Class:     armory.ClassSlug(c.detail.Class),
-				Value:     value(c),
-				Pct:       standing(score(c), lo, hi),
-				RankIndex: c.member.Rank,
-			})
-		}
-		out = append(out, b)
-	}
-
-	add("Top item level",
-		func(c contender) bool { return c.detail.AverageItemLevel > 0 },
-		func(x, y contender) bool { return x.detail.AverageItemLevel < y.detail.AverageItemLevel },
-		func(c contender) string { return strconv.Itoa(c.detail.AverageItemLevel) },
-		func(c contender) int { return c.detail.AverageItemLevel },
-	)
-	add("Top Mythic+ rating",
-		func(c contender) bool { return c.detail.MythicPlusRating > 0 },
-		func(x, y contender) bool { return x.detail.MythicPlusRating < y.detail.MythicPlusRating },
-		func(c contender) string { return strconv.Itoa(c.detail.MythicPlusRating) },
-		func(c contender) int { return c.detail.MythicPlusRating },
-	)
-	// The bosses board is ordered by difficulty -- mythic, then heroic, then
-	// normal -- but its bar is bosses down altogether, since that is what the
-	// board is called. So a bar can be longer than the one above it: the
-	// order says how hard, the bar says how many.
-	add("Most raid bosses down",
-		func(c contender) bool { return c.mythic+c.heroic+c.normal > 0 },
-		func(x, y contender) bool {
-			if x.mythic != y.mythic {
-				return x.mythic < y.mythic
-			}
-			if x.heroic != y.heroic {
-				return x.heroic < y.heroic
-			}
-			return x.normal < y.normal
-		},
-		func(c contender) string { return bossesLabel(c) },
-		func(c contender) int { return c.mythic + c.heroic + c.normal },
-	)
-	return out
-}
-
-// barFloor is the shortest bar on a board, as a percentage of the row.
-const barFloor = 25
-
-// standing is how long a board row's bar is: the row's place between the
-// board's lowest score (barFloor) and its highest (the full row).
-//
-// Not a measurement from zero, on purpose. A top ten's item levels differ by
-// a few points in three hundred and its ratings by a few hundred in three
-// thousand; bars from zero would all be the same length, and the point of
-// the bar is to tell the rows apart at a glance. The number beside it is the
-// measurement.
-func standing(score, lo, hi int) int {
-	if hi <= lo {
-		return 100
-	}
-	span := hi - lo
-	return barFloor + ((100-barFloor)*(score-lo)*2+span)/(2*span)
-}
-
-// bossesLabel is the compact form a leaderboard row has room for: the two
-// hardest difficulties with any kills, hardest first -- "3M · 8H".
-func bossesLabel(c contender) string {
-	var parts []string
-	for _, t := range []struct {
-		n     int
-		short string
-	}{{c.mythic, "M"}, {c.heroic, "H"}, {c.normal, "N"}} {
-		if t.n > 0 && len(parts) < 2 {
-			parts = append(parts, strconv.Itoa(t.n)+t.short)
-		}
-	}
-	return strings.Join(parts, " · ")
 }
 
 // findMembers resolves what was typed into the search box to roster members.
@@ -986,12 +777,9 @@ func (a *App) views(groups []rankGroup, members []blizzard.GuildMember) []member
 	return out
 }
 
-// memberKey identifies a roster member in a URL. Realm first, because a
-// character name is only unique within one realm -- the same shape My
-// Characters uses, so the two lists behave identically.
-func memberKey(m blizzard.GuildMember) string {
-	return m.RealmSlug + "/" + strings.ToLower(m.Name)
-}
+// memberKey identifies a roster member in a URL and in the detail map;
+// the shape is shared with the front door (armory.MemberKey).
+func memberKey(m blizzard.GuildMember) string { return armory.MemberKey(m) }
 
 // selectMember resolves ?c= to a roster member and builds their Armory panel.
 //

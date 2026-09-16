@@ -60,6 +60,20 @@ type AppMeta struct {
 	// configured officer rank (FR-021). It implies RequiresGuild; Mount
 	// refuses an app that sets this without that.
 	OfficerOnly bool
+
+	// Public opens the app to anonymous visitors (spec 004, FR-042): the core
+	// applies no session gate, so its handlers run with no viewer in the
+	// context and must not assume one. It cannot be combined with
+	// RequiresGuild or OfficerOnly, which need a viewer to check; Mount
+	// refuses that.
+	Public bool
+
+	// Landing marks the Public app whose root page also answers "/" for an
+	// anonymous visitor, in place of the core's plain sign-in page. The
+	// core's own notices for that page -- signed out, authorize again --
+	// reach it through LandingMessage. At most one app may set it, and it
+	// implies Public; Mount refuses otherwise.
+	Landing bool
 }
 
 // Headliner is implemented by an app that has something to say on every

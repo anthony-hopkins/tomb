@@ -1,6 +1,7 @@
 package platform
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"sort"
@@ -29,6 +30,11 @@ type Core struct {
 	// home is the route a signed-in viewer is sent to from "/", taken from the
 	// app that declares AppMeta.Home.
 	home string
+
+	// front is the route whose page answers "/" for an anonymous visitor,
+	// taken from the app that declares AppMeta.Landing; empty means the
+	// core's own sign-in page.
+	front string
 }
 
 // headliner is one app's contribution to the header, and who may see it.
@@ -105,13 +111,26 @@ func Mount(c *Core, authHandlers *auth.Handlers, apps []App) (http.Handler, erro
 		if meta.OfficerOnly && !meta.RequiresGuild {
 			return nil, fmt.Errorf("app registration: app %q is OfficerOnly but not RequiresGuild", meta.Slug)
 		}
+		// Public is the other direction -- no viewer at all -- so it cannot
+		// sit beside a gate that needs one to check (spec 004, FR-042).
+		if meta.Public && (meta.RequiresGuild || meta.OfficerOnly) {
+			return nil, fmt.Errorf("app registration: app %q is Public but guild-gated", meta.Slug)
+		}
+		if meta.Landing && !meta.Public {
+			return nil, fmt.Errorf("app registration: app %q is Landing but not Public", meta.Slug)
+		}
 		seenSlug[meta.Slug] = true
 		seenPrefix[meta.RoutePrefix] = true
 
 		// Guarantee 3: session and guild gating are applied by the core, before
-		// the app's handler runs. An app never implements its own auth.
+		// the app's handler runs. An app never implements its own auth. A
+		// Public app gets neither gate, and nothing else: its handlers see a
+		// viewer when there is one and nobody when there is not.
 		wrap := func(h http.Handler) http.Handler {
 			h = noStore(h)
+			if meta.Public {
+				return h
+			}
 			if meta.RequiresGuild {
 				h = c.requireGuild(meta, h)
 			}
@@ -140,6 +159,17 @@ func Mount(c *Core, authHandlers *auth.Handlers, apps []App) (http.Handler, erro
 			return nil, fmt.Errorf("two apps claim to be Home: %q and %q", c.home, meta.RoutePrefix)
 		}
 		c.home = meta.RoutePrefix
+	}
+	// The front door likewise: the one Public app that answers "/" for
+	// everyone else (spec 004, FR-042).
+	for _, meta := range c.registry {
+		if !meta.Landing {
+			continue
+		}
+		if c.front != "" {
+			return nil, fmt.Errorf("two apps claim the landing page: %q and %q", c.front, meta.RoutePrefix)
+		}
+		c.front = meta.RoutePrefix
 	}
 
 	// Navigation order is declared (FR-019): by NavOrder, then by label for
@@ -196,14 +226,46 @@ func (c *Core) landing(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data := PageData{Title: "TOMB"}
+	var msg string
 	switch {
 	case r.URL.Query().Get("reauth") == "1":
-		data.Message = "Your Battle.net authorization is no longer valid. Please sign in again."
+		msg = "Your Battle.net authorization is no longer valid. Please sign in again."
 	case r.URL.Query().Get("signed_out") == "1":
-		data.Message = "You have been signed out. Sign in again to see your current character."
+		msg = "You have been signed out. Sign in again to see your current character."
 	}
-	c.renderPage(w, r, http.StatusOK, "landing.html", data)
+
+	// An app that claims the front door draws it (spec 004, FR-042). The
+	// request is served again through the mux at the app's own root, with
+	// the notice riding in the context, so the app registers nothing
+	// outside its prefix and the core still owns "/". The query string
+	// stays on the request, which is how the notice was asked for.
+	if c.front != "" {
+		req := r.Clone(ContextWithLandingMessage(r.Context(), msg))
+		req.URL.Path, req.URL.RawPath = c.front, ""
+		c.mux.ServeHTTP(w, req)
+		return
+	}
+	c.renderPage(w, r, http.StatusOK, "landing.html", PageData{Title: "TOMB", Message: msg})
+}
+
+// landingMessageKey carries the core's notice for the front door.
+type landingMessageKey struct{}
+
+// ContextWithLandingMessage attaches the core's notice for the landing page
+// -- signed out, authorize again -- to a request bound for the Landing app.
+func ContextWithLandingMessage(ctx context.Context, msg string) context.Context {
+	if msg == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, landingMessageKey{}, msg)
+}
+
+// LandingMessage is the core's notice for the front door, when the request
+// arrived by way of "/" with one to show; empty otherwise. A Landing app
+// puts it above its sign-in action.
+func LandingMessage(r *http.Request) string {
+	msg, _ := r.Context().Value(landingMessageKey{}).(string)
+	return msg
 }
 
 // homePath is where a signed-in viewer is sent from "/".
@@ -215,8 +277,12 @@ func (c *Core) homePath() string {
 	if c.home != "" {
 		return c.home
 	}
-	if len(c.registry) > 0 {
-		return c.registry[0].RoutePrefix
+	// Never a Public app: the front door is where a signed-in viewer is
+	// leaving from, not somewhere to send them.
+	for _, meta := range c.registry {
+		if !meta.Public {
+			return meta.RoutePrefix
+		}
 	}
 	return "/"
 }

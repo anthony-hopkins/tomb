@@ -310,6 +310,12 @@ variable "timezone" {
   default     = ""
 }
 
+variable "discord_invite" {
+  description = "The guild's Discord invite link, shown on the public front door (spec 004). A public https:// link, not a secret. Empty means the page says to ask an officer. Reaches the app as TOMB_DISCORD_INVITE."
+  type        = string
+  default     = ""
+}
+
 # --- Combat logs and the AI comparison (spec 003) --------------------------
 
 variable "upload_dir" {

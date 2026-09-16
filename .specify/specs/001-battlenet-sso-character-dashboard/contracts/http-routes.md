@@ -26,8 +26,8 @@ Public landing page.
 
 | Condition | Status | Result |
 |---|---|---|
-| No session | 200 | Landing page with a "Sign in with Battle.net" action (FR-001) |
-| Valid session | 302 | → `/app/dashboard` |
+| No session | 200 | Landing page with a "Sign in with Battle.net" action (FR-001). Since spec 004 the page is the welcome app's (`/app/welcome`, `public`), served here by the core with its notice (`?signed_out=1`, `?reauth=1`) handed over; the core's own plain page is the fallback when no app claims `Landing` |
+| Valid session | 302 | → the Home app (the guild overview) |
 
 ---
 

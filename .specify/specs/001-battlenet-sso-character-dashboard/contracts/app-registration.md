@@ -27,7 +27,14 @@ type AppMeta struct {
     OfficerOnly   bool   // true => hidden from and refused to non-officers; implies RequiresGuild (002 FR-021)
     RoutePrefix   string // Must be "/app/" + Slug
     RequiresGuild bool   // true => core enforces the FR-013a guild gate
+    Public        bool   // true => no session gate at all; refused with RequiresGuild/OfficerOnly (004 FR-042)
+    Landing       bool   // the one Public app whose root also answers GET / for anonymous visitors (004 FR-042)
 }
+
+// LandingMessage is the core's notice for the front door (signed out,
+// authorize again) when the request came by way of "/"; the Landing app
+// shows it above its sign-in action. Empty otherwise.
+func LandingMessage(r *http.Request) string
 
 // Headliner is optional: an app with something to say on every page (the
 // calendar's next events) implements it alongside App. The core asks each
@@ -122,5 +129,8 @@ Table-driven tests, using two trivial stub apps rather than the real dashboard:
 | `RoutePrefix` inconsistent with `Slug` | Startup error |
 | `RequiresGuild: true`, non-member viewer | Handler never invoked; non-member response |
 | `RequiresGuild: false`, non-member viewer | Handler invoked |
+| `Public: true`, no session | Handler invoked; every other app still redirects to `/` (004) |
+| `Public: true` with `RequiresGuild` or `OfficerOnly`; `Landing` without `Public`; two `Landing` apps | Startup error (004) |
+| `Landing: true`, `GET /` with no session | The app's root page, with the core's notice in `LandingMessage`; a signed-in viewer is still sent home (004) |
 | Nav rendering | Only reachable apps listed for the viewer |
 | **Adding a second app touches no auth/session code** | Scenario 6: stub app mounts and serves with zero changes to core auth files |

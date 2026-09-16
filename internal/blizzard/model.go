@@ -530,3 +530,12 @@ type GameData interface {
 	Talent(ctx context.Context, id int) (TalentInfo, error)
 	Item(ctx context.Context, id int) (ItemInfo, error)
 }
+
+// AppTokenSource mints the site's own token: client credentials, no member
+// behind it. Optional on a Client like GameData; the live client has it, a
+// fake need not. It is what lets a page with nobody signed in -- the front
+// door -- read the guild's public standing (spec 004, FR-044). It reads;
+// nothing about a member's account can be reached with it.
+type AppTokenSource interface {
+	AppToken(ctx context.Context) (string, error)
+}
