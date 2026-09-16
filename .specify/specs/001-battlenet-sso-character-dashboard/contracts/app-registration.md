@@ -29,6 +29,22 @@ type AppMeta struct {
     RequiresGuild bool   // true => core enforces the FR-013a guild gate
 }
 
+// Headliner is optional: an app with something to say on every page (the
+// calendar's next events) implements it alongside App. The core asks each
+// mounted Headliner while drawing the shell and shows the lines in the header,
+// gated exactly as the app's own pages are.
+type Headliner interface {
+    Headlines(r *http.Request) []Headline
+}
+
+// Headline is one line in the header's ticker.
+type Headline struct {
+    When  string // worded by the app, for a glance: "Now", "Today 20:00"
+    Title string
+    Href  string // where the line leads, usually the app itself
+    Live  bool   // happening right now
+}
+
 // Registrar is the narrow slice of routing an app is allowed to touch.
 type Registrar interface {
     // Handle registers a handler at a path RELATIVE to the app's RoutePrefix.
@@ -69,6 +85,10 @@ The core MUST:
    gate **before** the app's handler runs — so an app never implements its own auth.
 4. Build navigation from `Meta()` alone, showing only apps the current viewer may reach.
 5. Pass `Deps` at construction, never via package-level globals.
+6. Show a `Headliner`'s lines in the header of every page whose viewer may reach
+   the app — for a guild-gated app, only with a profile in hand that proves
+   membership; for an officer-only app, only to an officer — and never to anyone
+   else. An app that does not implement `Headliner` is simply not asked.
 
 An app MUST:
 

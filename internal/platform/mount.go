@@ -21,9 +21,20 @@ type Core struct {
 	mux      *http.ServeMux
 	registry []AppMeta
 
+	// headliners are the mounted apps with something to say in the header,
+	// each with its own meta so the same gate that guards its pages guards
+	// its headlines.
+	headliners []headliner
+
 	// home is the route a signed-in viewer is sent to from "/", taken from the
 	// app that declares AppMeta.Home.
 	home string
+}
+
+// headliner is one app's contribution to the header, and who may see it.
+type headliner struct {
+	meta AppMeta
+	app  Headliner
 }
 
 // appRegistrar adapts a ServeMux to the narrow Registrar an app may touch,
@@ -109,6 +120,10 @@ func Mount(c *Core, authHandlers *auth.Handlers, apps []App) (http.Handler, erro
 
 		app.Routes(&appRegistrar{mux: c.mux, prefix: meta.RoutePrefix, wrap: wrap})
 		c.registry = append(c.registry, meta)
+
+		if h, ok := app.(Headliner); ok {
+			c.headliners = append(c.headliners, headliner{meta: meta, app: h})
+		}
 	}
 
 	// Home is declared, not positional.
@@ -239,6 +254,30 @@ func (c *Core) navFor(r *http.Request) []NavItem {
 		items = append(items, NavItem{Label: meta.NavLabel, Href: meta.RoutePrefix})
 	}
 	return items
+}
+
+// tickerFor gathers the header's headlines from every app the viewer could
+// reach. The rule is navFor's, but stricter on one point: a guild-gated
+// app's headlines need a profile that proves membership, where its nav entry
+// is shown on trust. A nav entry is a link to a page that will check for
+// itself; a headline is the schedule, already on the page.
+func (c *Core) tickerFor(r *http.Request) []Headline {
+	if _, signedIn := SessionFrom(r.Context()); !signedIn {
+		return nil
+	}
+	profile, haveProfile := ProfileFrom(r.Context())
+
+	var lines []Headline
+	for _, h := range c.headliners {
+		if h.meta.RequiresGuild && (!haveProfile || !profile.Membership.IsMember) {
+			continue
+		}
+		if h.meta.OfficerOnly && (!haveProfile || !profile.Membership.IsOfficer) {
+			continue
+		}
+		lines = append(lines, h.app.Headlines(r)...)
+	}
+	return lines
 }
 
 // Admit satisfies auth.Gate: the post-login guild check (FR-013a).
