@@ -63,6 +63,18 @@ part of it, because the character profile does not carry rank — only the roste
   who the administrator is. Administration is a fact about running the site, not
   a standing in the guild.
 
+- **FR-026 (recurring events)**: An event MAY repeat: every day, every week or every
+  two weeks, on chosen days of the week — raid days are one event, Tuesday and
+  Thursday, not one event a week — until a last day, or until it is removed. The
+  event holds the first time it happens; the schedule works out the rest when it is
+  read, showing a repeating event eight weeks ahead where a one-off is shown however
+  far off it is. Times hold to the wall clock in the guild's zone across a
+  daylight-saving change: a raid at 20:00 is at 20:00 in November too. An officer MAY
+  skip one occurrence of a repeating event without touching the rest; a skip names
+  a day, so it survives the event's time being changed. Editing or removing acts on
+  the whole series. Creating, editing, removing and skipping each write an audit
+  entry, and each says how the event repeats.
+
 ## Registration and gating (constitution, Development Workflow)
 
 Calendar registers as an ordinary guild-gated app (`RequiresGuild`) and decides
@@ -72,5 +84,7 @@ and refuses it for everyone else. Neither app touches authentication or another 
 
 ## Out of scope
 
-Rank names still come from `TOMB_GUILD_RANKS`. Recurring events, reminders and Discord
-integration are the roadmap's business, not this feature's.
+Rank names still come from `TOMB_GUILD_RANKS`. Reminders and Discord integration are
+the roadmap's business, not this feature's. One occurrence of a repeating event can be
+skipped but not moved or edited on its own; a raid that moves for one week is a skip
+and a one-off.

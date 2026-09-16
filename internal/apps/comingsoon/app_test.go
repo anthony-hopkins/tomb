@@ -37,7 +37,6 @@ func TestRoadmapIsListed(t *testing.T) {
 	body := html.UnescapeString(raw)
 
 	for _, want := range []string{
-		"Guild calendar",
 		"Ask TOMB Bot",
 		"Combat log analysis",
 		"Gear analysis",
@@ -61,7 +60,6 @@ func TestRoadmapIsListed(t *testing.T) {
 // entries carry it is asserted by name rather than by count alone.
 func TestOnlyAIEntriesAreTagged(t *testing.T) {
 	want := map[string]bool{
-		"Guild calendar":      false,
 		"Ask TOMB Bot":        true,
 		"Combat log analysis": true,
 		"Gear analysis":       true,

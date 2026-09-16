@@ -1441,7 +1441,8 @@ a.log-kind:focus { border-color: var(--accent); }
 .form-row--split { grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: 0.75rem; }
 .form-row--split > div { display: grid; gap: 0.3rem; }
 
-.form-row label {
+.form-row label,
+.form-label {
   font-size: 0.78rem;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -1449,6 +1450,7 @@ a.log-kind:focus { border-color: var(--accent); }
 }
 
 .event-form input,
+.event-form select,
 .event-form textarea {
   font: inherit;
   color: var(--ink);
@@ -1460,6 +1462,7 @@ a.log-kind:focus { border-color: var(--accent); }
 }
 
 .event-form input:focus,
+.event-form select:focus,
 .event-form textarea:focus {
   outline: none;
   border-color: var(--accent);
@@ -1468,7 +1471,23 @@ a.log-kind:focus { border-color: var(--accent); }
 
 /* datetime-local's picker icon is drawn by the browser in its own colour;
    invert it so it shows on the dark field. */
-.event-form input[type="datetime-local"]::-webkit-calendar-picker-indicator { filter: invert(0.8); }
+.event-form input[type="datetime-local"]::-webkit-calendar-picker-indicator,
+.event-form input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0.8); }
+.event-form select option { background: var(--panel); color: var(--ink); }
+
+/* The days a series falls on: a row of ticks, in plain case unlike the
+   field labels above them. */
+.weekdays { display: flex; flex-wrap: wrap; gap: 0.4rem 1rem; }
+.weekdays .weekday {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.9rem;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--ink);
+}
+.weekdays input[type="checkbox"] { accent-color: var(--accent); margin: 0; }
 
 .form-actions { display: flex; align-items: center; gap: 1rem; }
 .form-cancel { color: var(--muted); }
@@ -1499,12 +1518,13 @@ a.log-kind:focus { border-color: var(--accent); }
 .cal-time { font-variant-numeric: tabular-nums; color: var(--ink); white-space: nowrap; }
 .cal-title { margin: 0; font-size: 1.05rem; }
 .cal-where { margin: 0.15rem 0 0; color: var(--muted); font-size: 0.9rem; }
+.cal-repeats { margin: 0.15rem 0 0; color: var(--accent-2); font-size: 0.85rem; }
 .cal-notes { margin: 0.35rem 0 0; font-size: 0.9rem; white-space: pre-line; }
 
 .cal-actions { display: flex; align-items: center; gap: 0.5rem; }
 .cal-edit { color: var(--accent); font-size: 0.9rem; }
-.cal-delete { margin: 0; }
-.cal-delete button { padding: 0.3rem 0.6rem; font-size: 0.85rem; }
+.cal-delete, .cal-skip { margin: 0; }
+.cal-delete button, .cal-skip button { padding: 0.3rem 0.6rem; font-size: 0.85rem; }
 
 @media (max-width: 40rem) {
   .cal-event { grid-template-columns: minmax(0, 1fr); }

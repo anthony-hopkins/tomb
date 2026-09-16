@@ -16,14 +16,14 @@ func TestHeadlineWhen(t *testing.T) {
 	loc := time.FixedZone("EDT", -4*60*60)
 	// Monday 14 Sep 2026, 12:00 EDT.
 	now := time.Date(2026, 9, 14, 12, 0, 0, 0, loc)
-	at := func(day, hour, min int) Event {
-		return Event{StartsAt: time.Date(2026, 9, day, hour, min, 0, 0, loc)}
+	at := func(day, hour, min int) time.Time {
+		return time.Date(2026, 9, day, hour, min, 0, 0, loc)
 	}
 
 	tests := []struct {
-		name string
-		e    Event
-		want string
+		name  string
+		start time.Time
+		want  string
 	}{
 		{"later today", at(14, 20, 0), "Today 20:00"},
 		{"just after midnight tomorrow", at(15, 0, 30), "Tomorrow 00:30"},
@@ -36,10 +36,26 @@ func TestHeadlineWhen(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := headlineWhen(tc.e, now, loc); got != tc.want {
+			if got := headlineWhen(tc.start, now, loc); got != tc.want {
 				t.Errorf("headlineWhen() = %q, want %q", got, tc.want)
 			}
 		})
+	}
+}
+
+func headlinesOf(store *memStore) []platform.Headline {
+	return newApp(store, &memAudit{}, true).Headlines(httptest.NewRequest(http.MethodGet, "/app/dashboard", nil))
+}
+
+func wantHeadlines(t *testing.T, got, want []platform.Headline) {
+	t.Helper()
+	if len(got) != len(want) {
+		t.Fatalf("Headlines() = %+v, want %+v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("Headlines()[%d] = %+v, want %+v", i, got[i], want[i])
+		}
 	}
 }
 
@@ -52,21 +68,31 @@ func TestHeadlines(t *testing.T) {
 		{ID: 2, Title: "Mythic+ push", StartsAt: clock.Add(30 * time.Hour)},
 		{ID: 3, Title: "Guild meeting", StartsAt: clock.Add(72 * time.Hour)},
 	}}
-	a := newApp(store, &memAudit{}, true)
-
-	got := a.Headlines(as(httptest.NewRequest(http.MethodGet, "/app/dashboard", nil), false))
-	want := []platform.Headline{
+	wantHeadlines(t, headlinesOf(store), []platform.Headline{
 		{When: "Now", Title: "Raid night", Href: "/app/calendar", Live: true},
 		{When: "Tomorrow 18:00", Title: "Mythic+ push", Href: "/app/calendar"},
+	})
+}
+
+// TestHeadlinesFollowASeries: a weekly raid that started weeks ago is still
+// what is next, on its next night; a skipped night is passed over, the way
+// the schedule passes over it. The clock is Monday 14 Sep 2026.
+func TestHeadlinesFollowASeries(t *testing.T) {
+	raid := Event{
+		ID: 1, Title: "Raid", Repeat: RepeatWeekly,
+		StartsAt: time.Date(2026, 8, 4, 20, 0, 0, 0, time.UTC), // a Tuesday
+		Weekdays: []time.Weekday{time.Tuesday, time.Thursday},
 	}
-	if len(got) != len(want) {
-		t.Fatalf("Headlines() = %+v, want %+v", got, want)
-	}
-	for i := range want {
-		if got[i] != want[i] {
-			t.Errorf("Headlines()[%d] = %+v, want %+v", i, got[i], want[i])
-		}
-	}
+	wantHeadlines(t, headlinesOf(&memStore{events: []Event{raid}}), []platform.Headline{
+		{When: "Tomorrow 20:00", Title: "Raid", Href: "/app/calendar"},
+		{When: "Thu 20:00", Title: "Raid", Href: "/app/calendar"},
+	})
+
+	raid.Skips = []string{"2026-09-15"}
+	wantHeadlines(t, headlinesOf(&memStore{events: []Event{raid}}), []platform.Headline{
+		{When: "Thu 20:00", Title: "Raid", Href: "/app/calendar"},
+		{When: "22 Sep 20:00", Title: "Raid", Href: "/app/calendar"},
+	})
 }
 
 // TestHeadlinesSkipWhatIsOver: an event without a set end is over once it
@@ -78,17 +104,15 @@ func TestHeadlinesSkipWhatIsOver(t *testing.T) {
 		{ID: 2, Title: "Ended", StartsAt: clock.Add(-4 * time.Hour), EndsAt: &endedEnd},
 		{ID: 3, Title: "Tonight", StartsAt: clock.Add(8 * time.Hour)},
 	}}
-	got := newApp(store, &memAudit{}, true).Headlines(httptest.NewRequest(http.MethodGet, "/", nil))
-	if len(got) != 1 || got[0].Title != "Tonight" || got[0].When != "Today 20:00" {
-		t.Errorf("Headlines() = %+v, want only Tonight", got)
-	}
+	wantHeadlines(t, headlinesOf(store), []platform.Headline{
+		{When: "Today 20:00", Title: "Tonight", Href: "/app/calendar"},
+	})
 }
 
 // TestHeadlinesQuietWhenUnavailable: a calendar that cannot be read says
 // nothing in the header rather than breaking every page.
 func TestHeadlinesQuietWhenUnavailable(t *testing.T) {
-	store := &memStore{err: errors.New("database is away")}
-	if got := newApp(store, &memAudit{}, true).Headlines(httptest.NewRequest(http.MethodGet, "/", nil)); got != nil {
+	if got := headlinesOf(&memStore{err: errors.New("database is away")}); got != nil {
 		t.Errorf("Headlines() = %+v, want nil", got)
 	}
 }

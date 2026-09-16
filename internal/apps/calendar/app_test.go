@@ -32,24 +32,9 @@ func (m *memStore) Upcoming(_ context.Context, from time.Time) ([]Event, error) 
 	}
 	var out []Event
 	for _, e := range m.events {
-		if !e.StartsAt.Before(from) {
-			out = append(out, e)
-		}
-	}
-	return out, nil
-}
-
-func (m *memStore) Next(_ context.Context, at time.Time, n int) ([]Event, error) {
-	if m.err != nil {
-		return nil, m.err
-	}
-	var out []Event
-	for _, e := range m.events {
-		end := e.StartsAt
-		if e.EndsAt != nil {
-			end = *e.EndsAt
-		}
-		if !end.Before(at) && len(out) < n {
+		// The same rule as the SQL: a one-off from from, a series until
+		// it is over.
+		if !e.StartsAt.Before(from) || (e.Repeat.Recurring() && (e.Until == nil || e.Until.After(from))) {
 			out = append(out, e)
 		}
 	}
@@ -90,6 +75,21 @@ func (m *memStore) Delete(_ context.Context, id int64, _ int64) error {
 		}
 	}
 	return ErrNotFound
+}
+
+func (m *memStore) Skip(_ context.Context, id int64, day string, _ int64) error {
+	for i := range m.events {
+		if m.events[i].ID != id {
+			continue
+		}
+		for _, d := range m.events[i].Skips {
+			if d == day {
+				return nil
+			}
+		}
+		m.events[i].Skips = append(m.events[i].Skips, day)
+	}
+	return nil
 }
 
 // memAudit records what was recorded.
@@ -321,7 +321,12 @@ func TestEditFormIsPrefilled(t *testing.T) {
 	rec := httptest.NewRecorder()
 	a.editForm(rec, r)
 	body := rec.Body.String()
-	for _, want := range []string{`value="Raid night"`, `value="2026-09-18T20:00"`, `value="2026-09-18T23:00"`, `action="/app/calendar/1/edit"`, "Save changes"} {
+	for _, want := range []string{
+		`value="Raid night"`, `value="2026-09-18T20:00"`, `value="2026-09-18T23:00"`,
+		`action="/app/calendar/1/edit"`, "Save changes",
+		// The end cannot be picked earlier than the start.
+		`type="datetime-local" value="2026-09-18T23:00" min="2026-09-18T20:00"`,
+	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("the edit form is missing %s", want)
 		}
@@ -387,5 +392,24 @@ func TestFormTimesAreReadInTheGuildZone(t *testing.T) {
 		if !strings.Contains(body, want) {
 			t.Errorf("the calendar is missing %q", want)
 		}
+	}
+}
+
+// TestEndInputIsBoundedByTheStart: a rejected form comes back with the end's
+// min set to the start that was typed, and the blank add form carries no min
+// at all -- an empty min is not "no earlier than nothing", it is invalid.
+func TestEndInputIsBoundedByTheStart(t *testing.T) {
+	a := newApp(&memStore{}, &memAudit{}, true)
+
+	rec := post(a, true, a.create, "/app/calendar/new", "", url.Values{
+		"title": {"Backwards"}, "starts": {"2026-09-20T19:30"}, "ends": {"2026-09-20T18:00"},
+	})
+	if !strings.Contains(rec.Body.String(), `min="2026-09-20T19:30"`) {
+		t.Error("the re-rendered form does not bound the end by the start")
+	}
+
+	body := get(a, true, "/app/calendar").Body.String()
+	if strings.Contains(body, `min=""`) || strings.Contains(body, ` min=`) {
+		t.Error("the blank add form carries a min it cannot mean")
 	}
 }

@@ -9,7 +9,8 @@
   <h1>Calendar</h1>
   <p class="fineprint">
     What is happening, and when. All times are {{.ZoneName}}.
-    {{if .Officer}}As an officer you can add, change and remove events; every change is recorded.{{end}}
+    A repeating event is shown {{.HorizonWeeks}} weeks ahead.
+    {{if .Officer}}As an officer you can add, change and remove events, or skip one night of a repeating one; every change is recorded.{{end}}
   </p>
   {{end}}
 
@@ -29,7 +30,30 @@
       </div>
       <div>
         <label for="ev-ends">Ends ({{$.ZoneName}}, optional)</label>
-        <input id="ev-ends" name="ends" type="datetime-local" value="{{.Ends}}">
+        {{/* min is the start, so the picker offers nothing earlier. The
+             server still refuses an end at or before the start; this keeps a
+             person from being able to try. tooltip.js moves min as the start
+             is typed and adds a validity message; without it, min is what the
+             server last rendered. */}}
+        <input id="ev-ends" name="ends" type="datetime-local" value="{{.Ends}}"{{if .Starts}} min="{{.Starts}}"{{end}}>
+      </div>
+    </div>
+    <div class="form-row form-row--split">
+      <div>
+        <label for="ev-repeat">Repeats</label>
+        <select id="ev-repeat" name="repeat">
+          {{range .Repeats}}<option value="{{.Value}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>{{end}}
+        </select>
+      </div>
+      <div>
+        <label for="ev-until">Last day (optional, when it repeats)</label>
+        <input id="ev-until" name="until" type="date" value="{{.Until}}">
+      </div>
+    </div>
+    <div class="form-row">
+      <span class="form-label" id="ev-days-label">On (every week or two; the start's day if none are ticked)</span>
+      <div class="weekdays" role="group" aria-labelledby="ev-days-label">
+        {{range .Weekdays}}<label class="weekday"><input type="checkbox" name="weekday" value="{{.Value}}"{{if .Checked}} checked{{end}}> {{.Short}}</label>{{end}}
       </div>
     </div>
     <div class="form-row">
@@ -62,15 +86,23 @@
         <span class="cal-time">{{.Time}}</span>
         <div class="cal-body">
           <h3 class="cal-title">{{.Title}}</h3>
+          {{with .Repeats}}<p class="cal-repeats">{{.}}</p>{{end}}
           {{with .Location}}<p class="cal-where">{{.}}</p>{{end}}
           {{with .Notes}}<p class="cal-notes">{{.}}</p>{{end}}
         </div>
         {{if $.Officer}}
         <div class="cal-actions">
-          <a class="cal-edit" href="{{.EditPath}}">Edit</a>
+          <a class="cal-edit" href="{{.EditPath}}">{{if .Repeats}}Edit series{{else}}Edit{{end}}</a>
+          {{if .Repeats}}
+          <form method="post" action="{{$.Home}}/{{.ID}}/skip" class="cal-skip">
+            <input type="hidden" name="{{$.CSRF.Field}}" value="{{$.CSRF.Token}}">
+            <input type="hidden" name="on" value="{{.On}}">
+            <button type="submit" aria-label="Skip {{.Title}} on {{.On}}">Skip this one</button>
+          </form>
+          {{end}}
           <form method="post" action="{{$.Home}}/{{.ID}}/delete" class="cal-delete">
             <input type="hidden" name="{{$.CSRF.Field}}" value="{{$.CSRF.Token}}">
-            <button type="submit" aria-label="Remove {{.Title}}">Remove</button>
+            <button type="submit" aria-label="Remove {{.Title}}">{{if .Repeats}}Remove series{{else}}Remove{{end}}</button>
           </form>
         </div>
         {{end}}

@@ -7,6 +7,11 @@
 // accepted one is written to the audit trail before the viewer is sent back
 // to the schedule.
 //
+// An event may repeat (FR-026): every day, every week or every two weeks on
+// chosen days, until a last day or until it is removed. The row holds the
+// first time; the occurrences are worked out when the schedule is listed, and
+// an officer can skip one of them without touching the rest.
+//
 // Times are in the guild's zone throughout -- TOMB_TIMEZONE, Eastern by
 // default -- both shown and typed. The zone's name is on the page, so a
 // schedule never silently means somebody else's local time.
@@ -19,6 +24,7 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -77,15 +83,22 @@ func (a *App) Routes(r platform.Registrar) {
 	r.Handle("GET /{id}/edit", http.HandlerFunc(a.editForm))
 	r.Handle("POST /{id}/edit", http.HandlerFunc(a.update))
 	r.Handle("POST /{id}/delete", http.HandlerFunc(a.remove))
+	r.Handle("POST /{id}/skip", http.HandlerFunc(a.skip))
 }
 
-// eventView is one event, formatted.
+// eventView is one occurrence of an event, formatted.
 type eventView struct {
 	ID       int64
 	Title    string
 	Time     string // "20:00", or "20:00–23:00"
 	Location string
 	Notes    string
+
+	// Repeats says how the series repeats, "Every week on Tuesday and
+	// Thursday"; "" for a one-off, which the page reads as "not a series".
+	Repeats string
+	// On is this occurrence's day, dateLayout, for the skip form.
+	On       string
 	EditPath string
 }
 
@@ -103,8 +116,45 @@ type formView struct {
 	Ends     string
 	Location string
 	Notes    string
-	Action   string // where it posts
+	Repeat   string         // the chosen Repeat, as posted
+	Days     []time.Weekday // the days ticked
+	Until    string         // dateLayout: the last day, or ""
+	Action   string         // where it posts
 	Error    string
+
+	// Repeats and Weekdays are the choices offered, with the chosen ones
+	// marked; prepare fills them from Repeat and Days.
+	Repeats  []choice
+	Weekdays []weekdayChoice
+}
+
+type choice struct {
+	Value, Label string
+	Selected     bool
+}
+
+type weekdayChoice struct {
+	Value, Short string // "Tuesday", "Tue"
+	Checked      bool
+}
+
+// prepare fills the form's choices from what is chosen.
+func (f *formView) prepare() {
+	if f.Repeat == "" {
+		f.Repeat = RepeatNone.String()
+	}
+	f.Repeats = f.Repeats[:0]
+	for _, r := range repeats {
+		f.Repeats = append(f.Repeats, choice{Value: r.String(), Label: r.Label(), Selected: r.String() == f.Repeat})
+	}
+	ticked := map[time.Weekday]bool{}
+	for _, d := range f.Days {
+		ticked[d] = true
+	}
+	f.Weekdays = f.Weekdays[:0]
+	for _, d := range weekOrder {
+		f.Weekdays = append(f.Weekdays, weekdayChoice{Value: d.String(), Short: d.String()[:3], Checked: ticked[d]})
+	}
 }
 
 type view struct {
@@ -114,9 +164,11 @@ type view struct {
 	// ZoneName is the zone's abbreviation right now -- "EDT", "EST" -- for
 	// the page to say which zone its times are in.
 	ZoneName string
-	CSRF     struct{ Field, Token string }
-	Days     []dayView
-	Form     *formView // the add form on the schedule, or the edit form alone
+	// HorizonWeeks is how far ahead a series is listed, for the page to say.
+	HorizonWeeks int
+	CSRF         struct{ Field, Token string }
+	Days         []dayView
+	Form         *formView // the add form on the schedule, or the edit form alone
 
 	// Editing is true on the edit page, which shows the form and not the
 	// schedule.
@@ -132,28 +184,36 @@ func (a *App) zone() *time.Location {
 
 func (a *App) base(r *http.Request) view {
 	profile, _ := platform.ProfileFrom(r.Context())
-	v := view{Home: routePrefix, Officer: profile.Membership.IsOfficer}
+	v := view{Home: routePrefix, Officer: profile.Membership.IsOfficer, HorizonWeeks: horizonDays / 7}
 	v.ZoneName = a.now().In(a.zone()).Format("MST")
 	v.CSRF.Field = platform.CSRFFieldName
 	v.CSRF.Token = platform.CSRFTokenFrom(r.Context())
 	return v
 }
 
+// putForm puts a form on the page with its choices filled in.
+func putForm(v *view, form formView) {
+	form.prepare()
+	v.Form = &form
+}
+
 func (a *App) show(w http.ResponseWriter, r *http.Request) {
 	v := a.base(r)
 	if v.Officer {
-		v.Form = &formView{Action: routePrefix + "/new"}
+		putForm(&v, formView{Action: routePrefix + "/new"})
 	}
 	a.fillDays(r, &v)
 	a.render(w, r, http.StatusOK, v)
 }
 
 // fillDays lists what is coming from the start of today -- today in the
-// guild's zone -- grouped by day.
+// guild's zone -- grouped by day. A series is listed as far as the horizon;
+// a one-off however far off it is.
 func (a *App) fillDays(r *http.Request, v *view) {
 	loc := a.zone()
 	now := a.now().In(loc)
 	from := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc)
+	to := from.AddDate(0, 0, horizonDays)
 
 	events, err := a.store.Upcoming(r.Context(), from)
 	if err != nil {
@@ -161,38 +221,40 @@ func (a *App) fillDays(r *http.Request, v *view) {
 		v.Unavailable = true
 		return
 	}
-	v.Days = groupByDay(events, loc)
+	v.Days = groupByDay(expand(events, from, to, loc), loc)
 }
 
 // groupByDay turns a soonest-first list into days, in order, in the zone.
-func groupByDay(events []Event, loc *time.Location) []dayView {
+func groupByDay(occs []occurrence, loc *time.Location) []dayView {
 	var days []dayView
 	current := ""
-	for _, e := range events {
-		day := e.StartsAt.In(loc).Format("Monday, 2 Jan 2006")
+	for _, o := range occs {
+		day := o.Start.In(loc).Format("Monday, 2 Jan 2006")
 		if day != current {
 			current = day
 			days = append(days, dayView{Label: day})
 		}
 		d := &days[len(days)-1]
 		d.Events = append(d.Events, eventView{
-			ID:       e.ID,
-			Title:    e.Title,
-			Time:     timeRange(e, loc),
-			Location: e.Location,
-			Notes:    e.Notes,
-			EditPath: fmt.Sprintf("%s/%d/edit", routePrefix, e.ID),
+			ID:       o.Event.ID,
+			Title:    o.Event.Title,
+			Time:     timeRange(o.Start, o.End, loc),
+			Location: o.Event.Location,
+			Notes:    o.Event.Notes,
+			Repeats:  capitalise(describeRepeat(o.Event, loc)),
+			On:       o.Date,
+			EditPath: fmt.Sprintf("%s/%d/edit", routePrefix, o.Event.ID),
 		})
 	}
 	return days
 }
 
-func timeRange(e Event, loc *time.Location) string {
-	s := e.StartsAt.In(loc).Format("15:04")
-	if e.EndsAt == nil {
+func timeRange(start time.Time, end *time.Time, loc *time.Location) string {
+	s := start.In(loc).Format("15:04")
+	if end == nil {
 		return s
 	}
-	return s + "–" + e.EndsAt.In(loc).Format("15:04")
+	return s + "–" + end.In(loc).Format("15:04")
 }
 
 // officer refuses anyone below the rank, with the same page the core uses
@@ -229,7 +291,7 @@ func (a *App) create(w http.ResponseWriter, r *http.Request) {
 		v := a.base(r)
 		form.Action = routePrefix + "/new"
 		form.Error = err.Error()
-		v.Form = &form
+		putForm(&v, form)
 		a.fillDays(r, &v)
 		a.render(w, r, http.StatusBadRequest, v)
 		return
@@ -257,8 +319,7 @@ func (a *App) editForm(w http.ResponseWriter, r *http.Request) {
 	}
 	v := a.base(r)
 	v.Editing = true
-	form := formOf(e, a.zone())
-	v.Form = &form
+	putForm(&v, formOf(e, a.zone()))
 	a.render(w, r, http.StatusOK, v)
 }
 
@@ -277,7 +338,7 @@ func (a *App) update(w http.ResponseWriter, r *http.Request) {
 		form.ID = before.ID
 		form.Action = fmt.Sprintf("%s/%d/edit", routePrefix, before.ID)
 		form.Error = err.Error()
-		v.Form = &form
+		putForm(&v, form)
 		a.render(w, r, http.StatusBadRequest, v)
 		return
 	}
@@ -306,6 +367,33 @@ func (a *App) remove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.audit(r, "calendar.delete", e.Title, describe(e, a.zone()))
+	http.Redirect(w, r, routePrefix, http.StatusSeeOther)
+}
+
+// skip cancels one occurrence of a series: the day named in the form, which
+// must be a day the series actually falls on and has not already skipped.
+func (a *App) skip(w http.ResponseWriter, r *http.Request) {
+	if !a.guarded(w, r) {
+		return
+	}
+	e, ok := a.load(w, r)
+	if !ok {
+		return
+	}
+	loc := a.zone()
+	day := strings.TrimSpace(r.PostFormValue("on"))
+	occ, ok := occurrenceOn(e, day, loc)
+	if !ok {
+		http.Error(w, "That is not a day this event happens.", http.StatusBadRequest)
+		return
+	}
+	if err := a.store.Skip(r.Context(), e.ID, day, a.who(r).ID); err != nil {
+		a.deps.Logger.Error("skip event", "id", e.ID, "on", day, "error", err)
+		http.Error(w, "The event could not be skipped.", http.StatusInternalServerError)
+		return
+	}
+	detail := "skipped " + when(occ.Start, occ.End, e.Location, loc) + " (" + describeRepeat(e, loc) + ")"
+	a.audit(r, "calendar.skip", e.Title, detail)
 	http.Redirect(w, r, routePrefix, http.StatusSeeOther)
 }
 
@@ -358,6 +446,10 @@ func (a *App) audit(r *http.Request, action, subject, detail string) {
 // parseForm reads an event from the form, in the zone the form's times were
 // typed in, returning the event and the form as submitted -- so a rejected
 // one can be shown back with what was typed.
+//
+// A weekly or fortnightly series starts on the first ticked day on or after
+// the start typed, so the stored start is always a day it happens. The days
+// and the last day are ignored, and stored empty, for anything else.
 func parseForm(r *http.Request, loc *time.Location) (Event, formView, error) {
 	form := formView{
 		Title:    strings.TrimSpace(r.PostFormValue("title")),
@@ -365,6 +457,9 @@ func parseForm(r *http.Request, loc *time.Location) (Event, formView, error) {
 		Ends:     strings.TrimSpace(r.PostFormValue("ends")),
 		Location: strings.TrimSpace(r.PostFormValue("location")),
 		Notes:    strings.TrimSpace(r.PostFormValue("notes")),
+		Repeat:   strings.TrimSpace(r.PostFormValue("repeat")),
+		Days:     parseWeekdays(r.PostForm["weekday"]),
+		Until:    strings.TrimSpace(r.PostFormValue("until")),
 	}
 	e := Event{Title: form.Title, Location: form.Location, Notes: form.Notes}
 
@@ -386,6 +481,42 @@ func parseForm(r *http.Request, loc *time.Location) (Event, formView, error) {
 		}
 		e.EndsAt = &ends
 	}
+
+	repeat, ok := parseRepeat(form.Repeat)
+	if !ok {
+		return e, form, errors.New("that is not a way to repeat")
+	}
+	e.Repeat = repeat
+	if repeat.byWeek() {
+		e.Weekdays = form.Days
+		if len(e.Weekdays) == 0 {
+			e.Weekdays = []time.Weekday{starts.Weekday()}
+		}
+		// AddDate moves by days on the wall clock, so a shifted 20:00 is
+		// still 20:00 whatever the clocks did in between.
+		shift := 0
+		for !slices.Contains(e.Weekdays, starts.AddDate(0, 0, shift).Weekday()) {
+			shift++
+		}
+		if shift > 0 {
+			e.StartsAt = e.StartsAt.AddDate(0, 0, shift)
+			if e.EndsAt != nil {
+				ends := e.EndsAt.AddDate(0, 0, shift)
+				e.EndsAt = &ends
+			}
+		}
+	}
+	if repeat.Recurring() && form.Until != "" {
+		last, err := time.ParseInLocation(dateLayout, form.Until, loc)
+		if err != nil {
+			return e, form, errors.New("the last day is not a date")
+		}
+		until := last.AddDate(0, 0, 1)
+		if !until.After(e.StartsAt) {
+			return e, form, errors.New("the last day must be on or after the first")
+		}
+		e.Until = &until
+	}
 	return e, form, nil
 }
 
@@ -396,22 +527,38 @@ func formOf(e Event, loc *time.Location) formView {
 		Starts:   e.StartsAt.In(loc).Format(formTime),
 		Location: e.Location,
 		Notes:    e.Notes,
+		Repeat:   e.Repeat.String(),
+		Days:     e.Weekdays,
 		Action:   fmt.Sprintf("%s/%d/edit", routePrefix, e.ID),
 	}
 	if e.EndsAt != nil {
 		f.Ends = e.EndsAt.In(loc).Format(formTime)
 	}
+	if e.Until != nil {
+		f.Until = lastDay(e, loc).Format(dateLayout)
+	}
 	return f
 }
 
-// describe is an event in one line, for the trail, in the zone.
+// describe is an event in one line, for the trail, in the zone: when it is,
+// and how it repeats if it does.
 func describe(e Event, loc *time.Location) string {
-	s := e.StartsAt.In(loc).Format(armory.Stamp)
-	if e.EndsAt != nil {
-		s += " to " + e.EndsAt.In(loc).Format("15:04 MST")
+	s := when(e.StartsAt, e.EndsAt, e.Location, loc)
+	if r := describeRepeat(e, loc); r != "" {
+		s += ", " + r
 	}
-	if e.Location != "" {
-		s += " at " + e.Location
+	return s
+}
+
+// when is one time something happens: "18 Sep 2026, 20:00 EDT to 23:00 EDT
+// at Liberation of Undermine".
+func when(start time.Time, end *time.Time, location string, loc *time.Location) string {
+	s := start.In(loc).Format(armory.Stamp)
+	if end != nil {
+		s += " to " + end.In(loc).Format("15:04 MST")
+	}
+	if location != "" {
+		s += " at " + location
 	}
 	return s
 }
@@ -428,6 +575,7 @@ func changes(before, after Event, loc *time.Location) string {
 	add("title", before.Title, after.Title)
 	add("starts", before.StartsAt.In(loc).Format(armory.Stamp), after.StartsAt.In(loc).Format(armory.Stamp))
 	add("ends", endOf(before, loc), endOf(after, loc))
+	add("repeats", describeRepeat(before, loc), describeRepeat(after, loc))
 	add("location", before.Location, after.Location)
 	add("notes", before.Notes, after.Notes)
 	if len(parts) == 0 {

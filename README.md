@@ -128,6 +128,13 @@ daylight saving on its own, so it reads EDT in summer and EST in winter.
 The guild master and officers can add, change and remove events; everyone else
 reads. Every change is recorded in the Logs: who, when, and what changed.
 
+An event can repeat: every day, every week or every two weeks, on the days
+you tick — raid days are one event, Tuesday and Thursday, rather than one a
+week — until a last day, or until it is removed. A repeating event is shown
+eight weeks ahead; a one-off is shown however far off it is. Officers can
+skip one night of a repeating event without touching the rest; Edit and
+Remove act on the whole series.
+
 ## Logs (guild master and officers)
 
 Officers have a **Logs** entry in the navigation that nobody else sees or can
@@ -140,9 +147,6 @@ and the database is set up to refuse it even if somebody tried.
 
 None of this is built yet — it is what the site is being pointed at. There is a
 **Coming Soon** page in the top navigation with the same list.
-
-**Guild calendar.** Raid nights, key pushes and transmog runs in one place, with
-sign-ups that survive being scrolled past in Discord.
 
 **Ask TOMB Bot** *(AI)*. An agent that knows *this* guild. Ask what is running
 this week, who normally tanks, what the loot rules are, or for advice on a spec
