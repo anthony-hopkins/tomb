@@ -108,9 +108,9 @@ refusals above can be given before anything is created; the character's latest
 kill per boss (`wcl`), the top player's parses on the other bosses (cached a day
 each) and the model call run in the background worker. A showcase looks the
 top player up on the raid's first boss in the request (Mythic, then Heroic);
-the worker finds the top player on every other boss, reads each one's cast
-counts from the parse's report (kept on the cached leaderboard row), and
-fetches the character's current equipment and build from Blizzard as the site. Every outcome that creates a row writes
+the worker finds the top player on every other boss and fetches the
+character's current equipment and build from Blizzard as the site; nothing
+about play is read. Every outcome that creates a row writes
 `combatlogs.analyse` when the worker finishes (FR-040).
 
 ---
@@ -123,10 +123,12 @@ The selected character's card gains:
 
 - a **Talents** block under Equipped: from Blizzard's active loadout, or from the
   character's latest parsed pull with the date, or "unavailable" (FR-033, D8);
-- an **Analyse** form in the left panel: a source picker — "My latest raid on
+- an **Analyse** form in the left rail, under the character list (fourth
+  amendment): a source picker — "My latest raid on
   Warcraft Logs" first, then each of this member's uploads with raid pulls for the
   character (file, date, pull count) — a hidden character field, and the button;
-- the **upgrade table** in the left panel and the **write-up** in the right, from the
+- the **result column** to the right of the card (fourth amendment): the upgrade
+  table, the talent difference and the write-up, from the
   newest `done` analysis for this character, with "Analysed <time> against <name>"
   (a showcase says instead "No logs of yours yet, so this is the other way round:
   the top <spec> <class> parses, broken down, against your current gear");

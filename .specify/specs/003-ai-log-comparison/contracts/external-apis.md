@@ -20,7 +20,7 @@ type Reader interface {
 }
 ```
 
-Read-only by construction: these are the only six methods, and the package has
+Read-only by construction: these are the only five methods, and the package has
 no other request path (FR-035). Added by the 2026-09-16 amendments:
 
 ```go
@@ -33,7 +33,7 @@ no other request path (FR-035). Added by the 2026-09-16 amendments:
 
 `ZoneRankings` queries `character(...){ classID zoneRankings }` with no zone or
 difficulty given, taking Warcraft Logs' default of the current raid at the
-highest difficulty the character has rankings in (**UNCONFIRMED**; fixture
+highest difficulty the character has rankings in (**confirmed live 2026-09-16**; fixture
 `zone-rankings.json`); `LatestRank` is `encounterRankings` picking the rank with
 the latest `startTime`. The member's own reference is the configured region,
 Blizzard's realm slug and the character name, which Warcraft Logs shares.
@@ -46,7 +46,7 @@ Blizzard's realm slug and the character name, which Warcraft Logs shares.
 
 It queries `worldData.encounter(id:).characterRankings(difficulty:, className:,
 specName:, metric:, includeCombatantInfo: true, page: 1)` and reads the first of
-`rankings[]` (**UNCONFIRMED** field names, fixture `character-rankings.json`;
+`rankings[]` (**confirmed live 2026-09-16**, fixture `character-rankings.json`;
 `server.region` and `server.name`/`slug` give the character reference). Class names
 are spelled without spaces in the query (`DeathKnight`).
 
@@ -55,20 +55,14 @@ Added by the third amendment (the showcase for a character with no logs):
 ```go
     // CurrentZone is the current raid and its bosses.
     CurrentZone(ctx context.Context) (RaidZone, error)
-    // Casts is one player's ability use in one kill, from the report the
-    // ranking names: how many times each ability was cast.
-    Casts(ctx context.Context, reportCode string, fightID int, player string) ([]CastCount, error)
 ```
 
 `CurrentZone` queries `worldData.zones { id name frozen expansion{id name}
 difficulties{id name} encounters{id name} }` and picks the newest zone (highest
 expansion id, then zone id) that is not frozen and is ranked at a raid difficulty
-(**UNCONFIRMED** field names, fixture `zones.json`). `Casts` queries
-`reportData.report(code:).table(dataType: Casts, fightIDs: [n], filterExpression:
-"source.name = \"<player>\"")`, a JSON scalar whose `data.entries[]` carry
-`guid`, `name` and `total` (**UNCONFIRMED**, fixture `casts.json`). The worker
-turns counts into casts per minute over the kill's duration. Both are read-only
-like the rest.
+(**confirmed live 2026-09-16**, fixture `zones.json`). Read-only like the rest.
+A `Casts` read of the report's cast table was added and removed the same day:
+the showcase is talents and gear only (spec → Third amendment, revised).
 
 **Authentication**: `POST https://www.warcraftlogs.com/oauth/token`, HTTP basic auth
 with `WCL_CLIENT_ID` / `WCL_CLIENT_SECRET`, body `grant_type=client_credentials`.
@@ -83,7 +77,7 @@ before expiry, under a mutex.
  "variables": {"name":"Nekromoo","slug":"area-52","region":"us","enc":3009,"diff":5,"metric":"dps"}}
 ```
 
-`encounterRankings` is a JSON scalar. Expected shape (**UNCONFIRMED** field names;
+`encounterRankings` is a JSON scalar. Shape **confirmed live 2026-09-16** (T050; what follows is the earlier sketch, kept for the field names; the live differences are below it;
 verify and capture):
 
 ```json
@@ -201,3 +195,30 @@ over HTTP basic auth, held in memory and refreshed before expiry — and have
 `Talent` and `Item` use it. No new secret; the same client that signs members in.
 
 Fixtures for all three are captured JSON under `internal/blizzard/fixtures/`.
+
+### What the live capture changed (T050, 2026-09-16)
+
+Run `internal/wcl/live_test.go` (`go test -tags live -run TestLive ./internal/wcl`
+with `WCL_CLIENT_ID`, `WCL_CLIENT_SECRET` and `WCL_LIVE_OUT` set) to capture the
+real answers. Against the sketches above:
+
+- **Gear**: `quality` is a word (`"epic"`), and `itemLevel`, `permanentEnchant`,
+  each `bonusIDs` entry and a gem's `id`/`itemLevel` are strings (`"334"`). The
+  decoders take either a number or a numeric string (`combatant.go`).
+- **Talents on a leaderboard entry**: `[{talentID, points}]`, ids only, every
+  point of them (78 for a full build). So the site re-reads the top player's own
+  ranking on that boss (`encounterRankings`, one more call) and takes its named
+  talent tree and gear, which is the shape the member's side comes in; the
+  leaderboard's answer stands when that read fails, with names then resolved
+  from Blizzard's Game Data through the site's talent-name cache.
+- **Talents on a character's own ranking**: a tree, `{class: {"<row>": [{selectedEntryId,
+  pointsInvested, node: {nodeId, name, abilities: [{id, name, spellId}]}}]}, spec: {...}}`.
+  The decoder walks class, spec, hero, rows ascending, and names each selected
+  entry from its ability.
+- **Leaderboard `server`**: `{id, name, region}` with the region upper-case
+  (`"EU"`) and no slug; the slug is derived from the name.
+- **zoneRankings**: as sketched; a boss with no kill has `rankPercent: null`,
+  `spec: null`, `totalKills: 0`. The default difficulty answered was Heroic (4)
+  for a character with Heroic kills only.
+- **zones**: as sketched; Delves and Mythic+ seasons are zones too, told apart
+  by their difficulties (raids carry 3/4/5).

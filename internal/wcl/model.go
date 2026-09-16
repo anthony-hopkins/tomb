@@ -55,16 +55,6 @@ type Ranking struct {
 
 	Gear    []Gear
 	Talents []Talent
-	// Casts is the ability use in that kill, when it was fetched: how many
-	// times each ability was cast. Empty until Casts() has been asked.
-	Casts []CastCount
-}
-
-// CastCount is one ability's use in one kill.
-type CastCount struct {
-	ID    int
-	Name  string
-	Count int
 }
 
 // RaidZone is the current raid: its id, name and bosses.
@@ -117,9 +107,6 @@ type Reader interface {
 	TopPlayer(ctx context.Context, encounterID, wclDifficulty int, class, spec, metric string) (CharacterRef, Ranking, error)
 	// CurrentZone is the current raid and its bosses.
 	CurrentZone(ctx context.Context) (RaidZone, error)
-	// Casts is one player's ability use in one kill, from the report the
-	// ranking names: how many times each ability was cast.
-	Casts(ctx context.Context, reportCode string, fightID int, player string) ([]CastCount, error)
 }
 
 // ClassSlug is a class name the way Warcraft Logs' API spells it in a

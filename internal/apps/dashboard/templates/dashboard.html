@@ -1,11 +1,14 @@
 {{define "dashboard.html"}}
-{{/* Two columns: the character rail on the left, the selected character's
-     Armory panel on the right. Switching character is a plain link to the same
-     page with ?c=<realm>/<name> -- a GET, so it is bookmarkable, works without
+{{/* Three columns when a comparison is on the page, two otherwise: the rail
+     on the left (the character list, and under it the comparison's controls),
+     the selected character's Armory panel in the middle, and the comparison's
+     result on the right. Switching character is a plain link to the same page
+     with ?c=<realm>/<name> -- a GET, so it is bookmarkable, works without
      JavaScript, and the back button does what it should. */}}
-<div class="dashboard{{if not .Characters}} is-empty{{end}}">
+<div class="dashboard{{if not .Characters}} is-empty{{end}}{{if .Analysis}} has-analysis{{end}}">
 
   {{if .Characters}}
+  <div class="dashboard-rail">
   <aside class="character-nav" aria-label="Your characters">
     <h1 class="roster-heading">My Characters</h1>
 
@@ -57,6 +60,37 @@
       {{end}}
     </ul>
   </aside>
+
+  {{with .Analysis}}
+  {{/* The comparison's controls (spec 003, FR-038; fourth amendment): under
+       the character list, so nobody scrolls to the foot of the page to run
+       one. The form posts to the Combat logs app, which owns the run; the
+       result is drawn in the column right of the card. Nothing here sends
+       anything to Warcraft Logs. */}}
+  <section class="panel card-analysis" aria-label="Comparison">
+    <h3>Compare against a top player</h3>
+    {{with .Msg}}<p class="notice" role="alert">{{.}}</p>{{end}}
+    {{if not .Available}}
+    <p class="fineprint">Comparisons are not set up on this site yet.</p>
+    {{else}}
+    <form class="analyse-form" method="post" action="{{.Action}}">
+      <input type="hidden" name="{{.CSRF.Field}}" value="{{.CSRF.Token}}">
+      <input type="hidden" name="character" value="{{.Character}}">
+      <label for="an-source">Your side</label>
+      <select id="an-source" name="source">
+        {{range .Sources}}<option value="{{.Value}}">{{.Label}}</option>{{end}}
+      </select>
+      <p class="fineprint">Your latest ranked kills on Warcraft Logs, or a night you <a href="/app/combatlogs">uploaded here</a>, measured against the top-ranked player of your class and specialization on the boss you pulled most, at the difficulty you raided. With no logs of yours anywhere, the top parses' talents and gear against your current character.</p>
+      <div class="form-actions">
+        <button type="submit" class="primary">Analyse</button>
+      </div>
+    </form>
+    {{end}}
+    {{if .Pending}}<p class="notice" role="status">Analysing&hellip; this page will update itself.</p>{{end}}
+    {{with .Failure}}<p class="notice" role="alert">The last analysis could not be completed: {{.}}. Try again later.</p>{{end}}
+  </section>
+  {{end}}
+  </div>
   {{end}}
 
   <div class="dashboard-main">
@@ -93,73 +127,46 @@
       {{end}}
     </section>
     {{end}}
-
-    {{with .Analysis}}
-    {{/* The comparison (spec 003): pick one of your pulls, name a player on
-         Warcraft Logs, and get the computed gear table on the left and the
-         write-up on the right. The form posts to the Combat logs app, which
-         owns the run; this card only shows the result. Nothing here sends
-         anything to Warcraft Logs. */}}
-    <section class="panel card-analysis" aria-label="Comparison">
-      <h3>Compare a pull against a top player</h3>
-      {{with .Msg}}<p class="notice" role="alert">{{.}}</p>{{end}}
-      <div class="analysis-grid">
-        <div class="analysis-left">
-          {{if not .Available}}
-          <p class="fineprint">Comparisons are not set up on this site yet.</p>
-          {{else}}
-          <form class="analyse-form" method="post" action="{{.Action}}">
-            <input type="hidden" name="{{.CSRF.Field}}" value="{{.CSRF.Token}}">
-            <input type="hidden" name="character" value="{{.Character}}">
-            <label for="an-source">Your side</label>
-            <select id="an-source" name="source">
-              {{range .Sources}}<option value="{{.Value}}">{{.Label}}</option>{{end}}
-            </select>
-            <p class="fineprint">Your latest ranked kills on Warcraft Logs, or a night you <a href="/app/combatlogs">uploaded here</a>, measured against the top-ranked player of your class and specialization on the boss you pulled most, at the difficulty you raided.</p>
-            <div class="form-actions">
-              <button type="submit" class="primary">Analyse</button>
-            </div>
-          </form>
-          {{end}}
-          {{if .Pending}}<p class="notice" role="status">Analysing&hellip; this page will update itself.</p>{{end}}
-          {{with .Failure}}<p class="notice" role="alert">The last analysis could not be completed: {{.}}. Try again later.</p>{{end}}
-          {{with .Result}}
-          {{if .Showcase}}
-          <p class="analysis-meta">No logs of yours yet, so this is the other way round: the top {{.AgainstAs}} parses, broken down, against your current gear. Analysed {{.Analysed}}; <strong>{{.Against}}</strong> holds the first boss.</p>
-          {{else}}
-          <p class="analysis-meta">Analysed {{.Analysed}} against <strong>{{.Against}}</strong>{{with .AgainstAs}}, {{.}}{{end}}</p>
-          {{end}}
-          <table class="upgrade-table">
-            <thead><tr><th>Slot</th><th>Yours</th><th>Theirs</th><th>Verdict</th></tr></thead>
-            <tbody>
-              {{range .Table}}
-              <tr>
-                <td>{{.Slot}}</td>
-                <td>{{.Yours}}{{if .YourLvl}} <span class="lvl">{{.YourLvl}}</span>{{end}}</td>
-                <td>{{.Theirs}}{{if .TheirLv}} <span class="lvl">{{.TheirLv}}</span>{{end}}</td>
-                <td class="verdict-{{.Verdict}}">{{if eq .Verdict "same"}}Same item{{else if eq .Verdict "holds"}}Yours holds up{{else if eq .Verdict "chase"}}Upgrade to chase (+{{.Gap}}){{end}}</td>
-              </tr>
-              {{end}}
-            </tbody>
-          </table>
-          <dl class="talent-diff">
-            <dt>Talents they take that you do not</dt>
-            <dd>{{if .Diff.TheirsOnly}}{{range $i, $t := .Diff.TheirsOnly}}{{if $i}}, {{end}}{{$t}}{{end}}{{else}}none{{end}}</dd>
-            <dt>Talents you take that they do not</dt>
-            <dd>{{if .Diff.YoursOnly}}{{range $i, $t := .Diff.YoursOnly}}{{if $i}}, {{end}}{{$t}}{{end}}{{else}}none{{end}}</dd>
-          </dl>
-          {{end}}
-        </div>
-        <div class="analysis-right writeup">
-          {{with .Result}}
-          {{range .Paragraphs}}{{if .Heading}}<h4>{{.Text}}</h4>{{else}}<p>{{.Text}}</p>{{end}}{{end}}
-          {{else}}
-          <p class="fineprint">The write-up appears here once an analysis has run.</p>
-          {{end}}
-        </div>
-      </div>
-    </section>
-    {{end}}
   </div>
+
+  {{with .Analysis}}
+  {{/* The comparison's result (fourth amendment): the computed table and
+       talent difference, then the write-up, in the column right of the
+       card, from the newest finished analysis for this character. */}}
+  <aside class="panel analysis-results" aria-label="Comparison result">
+    <h3>Comparison</h3>
+    {{with .Result}}
+    {{if .Showcase}}
+    <p class="analysis-meta">No logs of yours yet, so this is the other way round: the top {{.AgainstAs}} parses, their talents and gear, against your current character. Analysed {{.Analysed}}; <strong>{{.Against}}</strong> holds the first boss.</p>
+    {{else}}
+    <p class="analysis-meta">Analysed {{.Analysed}} against <strong>{{.Against}}</strong>{{with .AgainstAs}}, {{.}}{{end}}</p>
+    {{end}}
+    <table class="upgrade-table">
+      <thead><tr><th>Slot</th><th>Yours</th><th>Theirs</th><th>Verdict</th></tr></thead>
+      <tbody>
+        {{range .Table}}
+        <tr>
+          <td>{{.Slot}}</td>
+          <td>{{.Yours}}{{if .YourLvl}} <span class="lvl">{{.YourLvl}}</span>{{end}}</td>
+          <td>{{.Theirs}}{{if .TheirLv}} <span class="lvl">{{.TheirLv}}</span>{{end}}</td>
+          <td class="verdict-{{.Verdict}}">{{if eq .Verdict "same"}}Same item{{else if eq .Verdict "holds"}}Yours holds up{{else if eq .Verdict "chase"}}Upgrade to chase (+{{.Gap}}){{end}}</td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+    <dl class="talent-diff">
+      <dt>Talents they take that you do not</dt>
+      <dd>{{if .Diff.TheirsOnly}}{{range $i, $t := .Diff.TheirsOnly}}{{if $i}}, {{end}}{{$t}}{{end}}{{else}}none{{end}}</dd>
+      <dt>Talents you take that they do not</dt>
+      <dd>{{if .Diff.YoursOnly}}{{range $i, $t := .Diff.YoursOnly}}{{if $i}}, {{end}}{{$t}}{{end}}{{else}}none{{end}}</dd>
+    </dl>
+    <div class="writeup">
+      {{range .Paragraphs}}{{if .Heading}}<h4>{{.Text}}</h4>{{else}}<p>{{.Text}}</p>{{end}}{{end}}
+    </div>
+    {{else}}
+    <p class="fineprint">The write-up appears here once an analysis has run.</p>
+    {{end}}
+  </aside>
+  {{end}}
 </div>
 {{end}}

@@ -169,9 +169,11 @@ func (c *HTTPClient) query(ctx context.Context, q string, vars map[string]any, o
 	return nil
 }
 
-// rankings is the shape of the encounterRankings scalar. UNCONFIRMED in
-// its field names until a live response is captured as the fixture (T050);
-// the decoder is lenient -- unknown fields are ignored, missing ones zero.
+// rankings is the shape of the encounterRankings scalar, confirmed against
+// the live API on 2026-09-16 (T050; the fixture keeps invented values in
+// the captured shape). The decoder is lenient -- unknown fields are
+// ignored, missing ones zero -- and gear and talents go through the shape
+// readers in combatant.go.
 type rankings struct {
 	Ranks []struct {
 		RankPercent float64 `json:"rankPercent"`
@@ -183,16 +185,8 @@ type rankings struct {
 			Code    string `json:"code"`
 			FightID int    `json:"fightID"`
 		} `json:"report"`
-		Gear []struct {
-			ID        int    `json:"id"`
-			Name      string `json:"name"`
-			ItemLevel int    `json:"itemLevel"`
-			Quality   int    `json:"quality"`
-		} `json:"gear"`
-		Talents []struct {
-			ID   int    `json:"id"`
-			Name string `json:"name"`
-		} `json:"talents"`
+		Gear    []gearJSON      `json:"gear"`
+		Talents json.RawMessage `json:"talents"`
 	} `json:"ranks"`
 }
 
@@ -216,11 +210,9 @@ func decodeRankings(name string, classID int, metric string, raw json.RawMessage
 			ReportCode: r.Report.Code, FightID: r.Report.FightID,
 		}
 		for _, g := range r.Gear {
-			one.Gear = append(one.Gear, Gear{ID: g.ID, Name: g.Name, ItemLevel: g.ItemLevel, Quality: g.Quality})
+			one.Gear = append(one.Gear, g.gear())
 		}
-		for _, t := range r.Talents {
-			one.Talents = append(one.Talents, Talent{ID: t.ID, Name: t.Name})
-		}
+		one.Talents = decodeTalents(r.Talents)
 		out = append(out, one)
 	}
 	return out, nil

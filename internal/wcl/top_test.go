@@ -22,7 +22,9 @@ func TestTopPlayer(t *testing.T) {
 	if got.Name != "Toptank" || got.Class != "Death Knight" || got.Spec != "Blood" || got.Amount != 1498220.1 || got.RankPercent != 100 || got.Duration != 312*time.Second {
 		t.Errorf("ranking = %+v", got)
 	}
-	if len(got.Gear) != 2 || got.Gear[1].ItemLevel != 324 || len(got.Talents) != 2 || got.Talents[1].Name != "Consumption" {
+	// Gear with a word for quality and a string for item level; talents as
+	// ids alone, to be named later from Game Data.
+	if len(got.Gear) != 2 || got.Gear[1].ItemLevel != 324 || got.Gear[0].Quality != 4 || len(got.Talents) != 2 || got.Talents[1] != (Talent{ID: 274156}) {
 		t.Errorf("gear/talents = %+v / %+v", got.Gear, got.Talents)
 	}
 	vars := (*asked)[0]

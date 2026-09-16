@@ -37,10 +37,6 @@ func (noWCL) LatestRank(context.Context, wcl.CharacterRef, int, int, string) (wc
 
 func (noWCL) CurrentZone(context.Context) (wcl.RaidZone, error) { return wcl.RaidZone{}, wcl.ErrNoRank }
 
-func (noWCL) Casts(context.Context, string, int, string) ([]wcl.CastCount, error) {
-	return nil, wcl.ErrNoRank
-}
-
 // stackAnalysis mounts the dashboard with a fights store and, when asked, a
 // Warcraft Logs client.
 func stackAnalysis(t *testing.T, store fights.Store, withWCL bool) http.Handler {

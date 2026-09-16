@@ -17,7 +17,7 @@ import (
 	"github.com/anthony-hopkins/tomb/internal/wcl"
 )
 
-// fakeWCL answers the four reads from a table, and counts.
+// fakeWCL answers the five reads from a table, and counts.
 type fakeWCL struct {
 	top      wcl.Ranking
 	topRef   wcl.CharacterRef
@@ -28,12 +28,10 @@ type fakeWCL struct {
 	zoneErr  error
 	latest   wcl.Ranking
 	raid     wcl.RaidZone
-	casts    []wcl.CastCount
 	tops     int
 	ranks    int
 	zones    int
 	latests  int
-	castsN   int
 	lastSpec string
 }
 
@@ -42,11 +40,6 @@ func (f *fakeWCL) CurrentZone(context.Context) (wcl.RaidZone, error) {
 		return wcl.RaidZone{}, errors.New("no zone")
 	}
 	return f.raid, nil
-}
-
-func (f *fakeWCL) Casts(context.Context, string, int, string) ([]wcl.CastCount, error) {
-	f.castsN++
-	return f.casts, nil
 }
 
 func (f *fakeWCL) BestRank(context.Context, wcl.CharacterRef, int, int, string) (wcl.Ranking, error) {
@@ -85,8 +78,7 @@ func healthyWCL() *fakeWCL {
 		latest: wcl.Ranking{Name: "Nekromoo", Class: "Death Knight", Spec: "Blood", Metric: "dps", RankPercent: 74, Amount: 1102000, Duration: 250 * time.Second,
 			StartedAt: time.Date(2026, 9, 14, 20, 0, 0, 0, time.UTC),
 			Gear:      []wcl.Gear{{ID: 212345, Name: "Baleful Grave-Knight's Casque", ItemLevel: 311}}, Talents: []wcl.Talent{{ID: 1, Name: "Marrowrend"}, {ID: 3, Name: "Bonestorm"}}},
-		raid:  wcl.RaidZone{ID: 44, Name: "The Venomous Abyss", Encounters: []wcl.ZoneEncounter{{ID: 3009, Name: "Vexie and the Geargrinders"}, {ID: 3010, Name: "Cauldron of Carnage"}}},
-		casts: []wcl.CastCount{{ID: 49998, Name: "Death Strike", Count: 63}, {ID: 49028, Name: "Dancing Rune Weapon", Count: 4}},
+		raid: wcl.RaidZone{ID: 44, Name: "The Venomous Abyss", Encounters: []wcl.ZoneEncounter{{ID: 3009, Name: "Vexie and the Geargrinders"}, {ID: 3010, Name: "Cauldron of Carnage"}}},
 	}
 }
 
