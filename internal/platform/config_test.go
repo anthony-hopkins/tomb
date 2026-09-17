@@ -259,7 +259,7 @@ func TestLoadConfigCombatLogs(t *testing.T) {
 	}{
 		{
 			name: "defaults",
-			want: settings{UploadDir: "/var/lib/tomb/uploads", AIModel: "gemini-3.1-pro", AIRegion: "us-central1"},
+			want: settings{UploadDir: "/var/lib/tomb/uploads", AIModel: "gemini-3.1-pro-preview", AIRegion: "global"},
 		},
 		{
 			name: "overrides",

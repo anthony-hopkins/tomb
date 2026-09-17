@@ -144,7 +144,16 @@ func (v *Vertex) projectID(ctx context.Context) (string, error) {
 func (v *Vertex) endpoint(project string) string {
 	base := v.EndpointBase
 	if base == "" {
-		base = "https://" + v.Region + "-aiplatform.googleapis.com"
+		// The "global" location has no regional host: it is served from the
+		// bare domain. That is where Google puts the newest models first;
+		// checked against the live API on 2026-09-17, gemini-3.1-pro-preview
+		// answers there and nowhere else, while gemini-2.5-pro answers in
+		// us-central1 as well.
+		if v.Region == "global" {
+			base = "https://aiplatform.googleapis.com"
+		} else {
+			base = "https://" + v.Region + "-aiplatform.googleapis.com"
+		}
 	}
 	return fmt.Sprintf("%s/v1/projects/%s/locations/%s/publishers/google/models/%s:generateContent", base, project, v.Region, v.Model)
 }
@@ -190,8 +199,12 @@ func (v *Vertex) Write(ctx context.Context, system, prompt string) (string, Usag
 	case http.StatusOK:
 	case http.StatusTooManyRequests, http.StatusServiceUnavailable:
 		return "", Usage{}, ErrBusy
+	case http.StatusNotFound:
+		// The model id or the location is wrong for this project: a
+		// configuration problem, not a bad minute.
+		return "", Usage{}, fmt.Errorf("%w: %s at %s", ErrNoModel, v.Model, v.Region)
 	default:
-		return "", Usage{}, fmt.Errorf("vertex ai answered %d", resp.StatusCode)
+		return "", Usage{}, fmt.Errorf("vertex ai answered %d for %s at %s", resp.StatusCode, v.Model, v.Region)
 	}
 
 	var payload struct {

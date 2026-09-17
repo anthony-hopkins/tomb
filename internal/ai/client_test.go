@@ -102,6 +102,7 @@ func TestWriteOutcomes(t *testing.T) {
 		{"empty text", 200, `{"candidates":[{"content":{"parts":[{"text":"  "}]},"finishReason":"STOP"}]}`, ErrDeclined},
 		{"busy", 429, `{}`, ErrBusy},
 		{"unavailable", 503, `{}`, ErrBusy},
+		{"no such model", 404, `{"error":{"code":404,"message":"Publisher model was not found"}}`, ErrNoModel},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -114,6 +115,20 @@ func TestWriteOutcomes(t *testing.T) {
 	v, _, _ := vertexServer(t, func() (int, string) { return 500, `{}` })
 	if _, _, err := v.Write(context.Background(), "s", "p"); err == nil || !strings.Contains(err.Error(), "500") {
 		t.Errorf("500: err = %v", err)
+	}
+}
+
+// TestEndpointByLocation: a region has its own host; "global" is served
+// from the bare domain (checked live, 2026-09-17).
+func TestEndpointByLocation(t *testing.T) {
+	for _, tc := range []struct{ region, want string }{
+		{"us-central1", "https://us-central1-aiplatform.googleapis.com/v1/projects/p/locations/us-central1/publishers/google/models/gemini-2.5-pro:generateContent"},
+		{"global", "https://aiplatform.googleapis.com/v1/projects/p/locations/global/publishers/google/models/gemini-2.5-pro:generateContent"},
+	} {
+		v := NewVertex("gemini-2.5-pro", tc.region)
+		if got := v.endpoint("p"); got != tc.want {
+			t.Errorf("%s: endpoint = %s", tc.region, got)
+		}
 	}
 }
 

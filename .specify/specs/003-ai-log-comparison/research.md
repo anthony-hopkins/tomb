@@ -297,9 +297,11 @@ header `Metadata-Flavor: Google`), cached until it expires. Request body:
 `generationConfig{temperature: 0.4, maxOutputTokens: 2048}`. Response:
 `candidates[0].content.parts[].text` and `usageMetadata` for the log.
 
-- Model: `TOMB_AI_MODEL`, default `gemini-3.1-pro` (the current GA general-purpose
-  reasoning model on Vertex; the flash tier is cheaper but the write-up's whole value
-  is judgement). Region: `TOMB_AI_REGION`, default the VM's region. Project: from
+- Model: `TOMB_AI_MODEL`, default `gemini-3.1-pro-preview` (the most capable Gemini
+  Vertex serves this project, checked live 2026-09-17 -- `gemini-3.1-pro` without the
+  suffix does not exist; the flash tier is cheaper but the write-up's whole value is
+  judgement). Location: `TOMB_AI_REGION`, default `global`, the only location that
+  model is served at; `gemini-2.5-pro` is the regional fallback (`us-central1`). Project: from
   the metadata server (`project/project-id`), no configuration.
 - OpenTofu: enable `aiplatform.googleapis.com` (`google_project_service`) and grant
   the VM service account `roles/aiplatform.user`. The VM already has the
