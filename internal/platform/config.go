@@ -87,6 +87,11 @@ type Config struct {
 	AIModel  string
 	AIRegion string
 
+	// AIAssistantModel is the model the assistant answers with, from
+	// TOMB_AI_ASSISTANT_MODEL; the review's model when unset, so a faster
+	// one can be tried for the chat without touching the review (spec 006).
+	AIAssistantModel string
+
 	// DiscordInvite is the guild's Discord invite link, from
 	// TOMB_DISCORD_INVITE, shown on the front door (spec 004). Empty means
 	// the page says to ask an officer instead. A public link, so a
@@ -168,9 +173,10 @@ func LoadConfig() (Config, error) {
 		WCLClientSecret:  strings.TrimSpace(os.Getenv("WCL_CLIENT_SECRET")),
 		// Checked against the live API on 2026-09-17: this model answers only
 		// at the "global" location; gemini-2.5-pro answers in us-central1 too.
-		AIModel:       envOr("TOMB_AI_MODEL", "gemini-3.1-pro-preview"),
-		AIRegion:      envOr("TOMB_AI_REGION", "global"),
-		DiscordInvite: strings.TrimSpace(os.Getenv("TOMB_DISCORD_INVITE")),
+		AIModel:          envOr("TOMB_AI_MODEL", "gemini-3.1-pro-preview"),
+		AIRegion:         envOr("TOMB_AI_REGION", "global"),
+		AIAssistantModel: envOr("TOMB_AI_ASSISTANT_MODEL", envOr("TOMB_AI_MODEL", "gemini-3.1-pro-preview")),
+		DiscordInvite:    strings.TrimSpace(os.Getenv("TOMB_DISCORD_INVITE")),
 	}
 	if c.DiscordInvite != "" && !strings.HasPrefix(c.DiscordInvite, "https://") {
 		return Config{}, fmt.Errorf("TOMB_DISCORD_INVITE must be an https:// link, got %q", c.DiscordInvite)

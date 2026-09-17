@@ -2,6 +2,7 @@ package platform
 
 import (
 	"context"
+	"html/template"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -474,6 +475,73 @@ func TestNothingSaysAdministrator(t *testing.T) {
 		if strings.Contains(strings.ToLower(rec.Body.String()), "admin") {
 			t.Errorf("%s says \"admin\" somewhere; the administrator must look like anyone else", path)
 		}
+	}
+}
+
+// panelStub is a stubApp with a panel for every page.
+type panelStub struct {
+	*stubApp
+	panel string
+}
+
+func (p *panelStub) Panel(*http.Request) template.HTML { return template.HTML(p.panel) } //nolint:gosec // test markup
+
+// TestCompanionPanelOnEveryPage: an app that implements Companion has its
+// panel drawn after the body of every page the viewer may see it on, and a
+// viewer who could not reach the app is not shown it.
+func TestCompanionPanelOnEveryPage(t *testing.T) {
+	tests := []struct {
+		name          string
+		member        bool
+		requiresGuild bool
+		officerOnly   bool
+		wantPanel     bool
+	}{
+		{"member sees a gated app's panel", true, true, false, true},
+		{"non-member does not see a gated app's panel", false, true, false, false},
+		{"non-member sees an ungated app's panel", false, false, false, true},
+		{"member below officer does not see an officer-only app's panel", true, true, true, false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			talker := newStub("assistant", "", "assistant-body", tc.requiresGuild)
+			talker.meta.OfficerOnly = tc.officerOnly
+			quiet := &panelStub{stubApp: talker, panel: `<aside class="companion-panel">ask me</aside>`}
+			other := newStub("dashboard", "My Character", "other-body", tc.member)
+
+			_, handler := sessionedCore(t, tc.member, quiet, other)
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app/dashboard", nil))
+			body := rec.Body.String()
+			if !strings.Contains(body, "other-body") {
+				t.Fatalf("page did not render: %d", rec.Code)
+			}
+			if got := strings.Contains(body, "companion-panel"); got != tc.wantPanel {
+				t.Fatalf("panel shown = %v, want %v", got, tc.wantPanel)
+			}
+			if tc.wantPanel {
+				// After the body, before the footer.
+				main, panel, footer := strings.Index(body, "other-body"), strings.Index(body, "companion-panel"), strings.Index(body, `class="site-footer"`)
+				if main >= panel || panel >= footer {
+					t.Errorf("order body=%d panel=%d footer=%d, want body < panel < footer", main, panel, footer)
+				}
+			}
+		})
+	}
+}
+
+// TestMountRefusesTwoCompanions: one panel slot, so two claimants is a
+// configuration error at start, not a coin toss at render.
+func TestMountRefusesTwoCompanions(t *testing.T) {
+	a := &panelStub{stubApp: newStub("one", "One", "one", false), panel: "a"}
+	b := &panelStub{stubApp: newStub("two", "Two", "two", false), panel: "b"}
+	templates, err := LoadTemplates()
+	if err != nil {
+		t.Fatal(err)
+	}
+	core := &Core{Deps: Deps{Logger: discardLogger()}, Sessions: &auth.SessionManager{Store: &auth.Store{}}, CSRF: &CSRF{}, Templates: templates}
+	if _, err := Mount(core, &auth.Handlers{Logger: discardLogger()}, []App{a, b}); err == nil || !strings.Contains(err.Error(), "Companion") {
+		t.Fatalf("Mount() error = %v, want a refusal naming the Companion", err)
 	}
 }
 

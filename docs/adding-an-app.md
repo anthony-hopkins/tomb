@@ -132,6 +132,20 @@ mistake here should never reach a request.
   shown your headlines. Return a handful at most, already worded for a glance
   (`When: "Today 20:00"`), and return nothing on an error — the page is about
   something else, so say so on your own page instead.
+- **A panel on every page.** An app with something to draw below every
+  page's body (the assistant: the member's conversation and a question box)
+  implements `platform.Companion` alongside `App`:
+
+  ```go
+  func (a *App) Panel(r *http.Request) template.HTML
+  ```
+
+  The core asks the one mounted Companion while it draws the shell and places
+  what comes back after `<main>`, gated the way your pages are. Render your
+  own template and hand back the markup; if your panel needs a script, put
+  the `<script src="/static/...">` tag in the markup (the CSP allows this
+  origin's scripts) and make sure the panel works without it. One app may be
+  the Companion; `Mount` refuses two, because nothing yet needs an order.
 - **Outside services.** `Deps.WCL` reads Warcraft Logs (one method, a query;
   nil when the site has no client, which an app reads as "unavailable") and
   `Deps.AI` writes through Vertex AI as the VM. Both are lent like `Blizzard`

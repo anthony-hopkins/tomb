@@ -106,6 +106,20 @@ type Headline struct {
 	Live bool
 }
 
+// Companion is implemented by an app that has a panel to draw on every
+// page: the assistant, with the member's conversation and a question box
+// (spec 006, FR-057). The core asks the mounted Companion while it draws
+// the page shell and places what comes back after the page body.
+//
+// Optional, like Headliner, and gated the same way: a viewer who could not
+// reach the app is not shown its panel. The panel is the app's own markup,
+// rendered by the app from its own templates, so the core knows nothing of
+// what is in it. At most one app may be a Companion; Mount refuses two,
+// because two panels would need an order and nothing yet needs one.
+type Companion interface {
+	Panel(r *http.Request) template.HTML
+}
+
 // CSRFVerifier is the one method of the core's CSRF guard an app needs.
 type CSRFVerifier interface {
 	Verify(r *http.Request) bool
@@ -164,6 +178,11 @@ type Deps struct {
 	// as the VM. Lent like Blizzard so an app never constructs its own
 	// client and a test can hand it a fake.
 	AI ai.Writer
+
+	// Chat answers the assistant's questions through Vertex AI with search
+	// grounding (spec 006). Nil when the site has no model, which the
+	// assistant reads as "unavailable".
+	Chat ai.Chatter
 
 	// RenderInLayout draws an app's rendered body inside the shared page
 	// shell, so apps own their own content without owning the site chrome,

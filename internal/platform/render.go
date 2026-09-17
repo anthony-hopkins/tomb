@@ -23,6 +23,11 @@ type PageData struct {
 
 	// Content is an app's rendered body, injected into the shared shell.
 	Content template.HTML
+
+	// Companion is the panel the Companion app draws below the body -- the
+	// assistant -- for the viewer this page is for; empty for everyone
+	// who could not reach it.
+	Companion template.HTML
 }
 
 // NavItem is one navigation entry, built from AppMeta (contracts/app-registration.md
@@ -66,6 +71,7 @@ func (c *Core) RenderInLayout(w http.ResponseWriter, r *http.Request, status int
 func (c *Core) decorate(r *http.Request, data *PageData) {
 	data.Nav = c.navFor(r)
 	data.Ticker = c.tickerFor(r)
+	data.Companion = c.companionFor(r)
 	data.CSRFToken = CSRFTokenFrom(r.Context())
 	if sess, ok := SessionFrom(r.Context()); ok {
 		data.SignedIn = true

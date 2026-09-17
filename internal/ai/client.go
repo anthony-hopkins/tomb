@@ -167,14 +167,6 @@ func (v *Vertex) endpoint(project string) string {
 
 // Write asks the model.
 func (v *Vertex) Write(ctx context.Context, system, prompt string) (string, Usage, error) {
-	token, err := v.accessToken(ctx)
-	if err != nil {
-		return "", Usage{}, err
-	}
-	project, err := v.projectID(ctx)
-	if err != nil {
-		return "", Usage{}, err
-	}
 	temp, max := v.Temperature, v.MaxOutputTokens
 	if temp == 0 {
 		temp = 0.4
@@ -189,21 +181,57 @@ func (v *Vertex) Write(ctx context.Context, system, prompt string) (string, Usag
 		config["responseMimeType"] = "application/json"
 		config["responseSchema"] = v.Schema
 	}
-	body, _ := json.Marshal(map[string]any{
+	gen, usage, err := v.generate(ctx, map[string]any{
 		"systemInstruction": map[string]any{"parts": []map[string]string{{"text": system}}},
 		"contents":          []map[string]any{{"role": "user", "parts": []map[string]string{{"text": prompt}}}},
 		"generationConfig":  config,
 	})
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, v.endpoint(project), bytes.NewReader(body))
 	if err != nil {
-		return "", Usage{}, err
+		return "", usage, err
 	}
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Content-Type", "application/json")
+	return gen.text, usage, nil
+}
 
-	resp, err := v.http().Do(req)
+// generation is what one call produced: the text, and what the model read
+// when it searched.
+type generation struct {
+	text      string
+	grounding groundingMetadata
+}
+
+// groundingMetadata is the part of Vertex AI's answer that says which pages
+// a grounded answer drew on.
+type groundingMetadata struct {
+	Queries []string `json:"webSearchQueries"`
+	Chunks  []struct {
+		Web struct {
+			URI   string `json:"uri"`
+			Title string `json:"title"`
+		} `json:"web"`
+	} `json:"groundingChunks"`
+}
+
+// generate sends one generateContent request and reads the answer.
+func (v *Vertex) generate(ctx context.Context, req map[string]any) (generation, Usage, error) {
+	token, err := v.accessToken(ctx)
 	if err != nil {
-		return "", Usage{}, fmt.Errorf("vertex ai: %w", err)
+		return generation{}, Usage{}, err
+	}
+	project, err := v.projectID(ctx)
+	if err != nil {
+		return generation{}, Usage{}, err
+	}
+	body, _ := json.Marshal(req)
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, v.endpoint(project), bytes.NewReader(body))
+	if err != nil {
+		return generation{}, Usage{}, err
+	}
+	httpReq.Header.Set("Authorization", "Bearer "+token)
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	resp, err := v.http().Do(httpReq)
+	if err != nil {
+		return generation{}, Usage{}, fmt.Errorf("vertex ai: %w", err)
 	}
 	defer func() {
 		_, _ = io.Copy(io.Discard, resp.Body)
@@ -212,13 +240,13 @@ func (v *Vertex) Write(ctx context.Context, system, prompt string) (string, Usag
 	switch resp.StatusCode {
 	case http.StatusOK:
 	case http.StatusTooManyRequests, http.StatusServiceUnavailable:
-		return "", Usage{}, ErrBusy
+		return generation{}, Usage{}, ErrBusy
 	case http.StatusNotFound:
 		// The model id or the location is wrong for this project: a
 		// configuration problem, not a bad minute.
-		return "", Usage{}, fmt.Errorf("%w: %s at %s", ErrNoModel, v.Model, v.Region)
+		return generation{}, Usage{}, fmt.Errorf("%w: %s at %s", ErrNoModel, v.Model, v.Region)
 	default:
-		return "", Usage{}, fmt.Errorf("vertex ai answered %d for %s at %s", resp.StatusCode, v.Model, v.Region)
+		return generation{}, Usage{}, fmt.Errorf("vertex ai answered %d for %s at %s", resp.StatusCode, v.Model, v.Region)
 	}
 
 	var payload struct {
@@ -228,7 +256,8 @@ func (v *Vertex) Write(ctx context.Context, system, prompt string) (string, Usag
 					Text string `json:"text"`
 				} `json:"parts"`
 			} `json:"content"`
-			FinishReason string `json:"finishReason"`
+			FinishReason string            `json:"finishReason"`
+			Grounding    groundingMetadata `json:"groundingMetadata"`
 		} `json:"candidates"`
 		Usage struct {
 			Prompt int `json:"promptTokenCount"`
@@ -236,18 +265,18 @@ func (v *Vertex) Write(ctx context.Context, system, prompt string) (string, Usag
 		} `json:"usageMetadata"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
-		return "", Usage{}, fmt.Errorf("vertex ai: decode: %w", err)
+		return generation{}, Usage{}, fmt.Errorf("vertex ai: decode: %w", err)
 	}
 	usage := Usage{PromptTokens: payload.Usage.Prompt, OutputTokens: payload.Usage.Output}
 	if len(payload.Candidates) == 0 || payload.Candidates[0].FinishReason == "SAFETY" {
-		return "", usage, ErrDeclined
+		return generation{}, usage, ErrDeclined
 	}
 	var text strings.Builder
 	for _, p := range payload.Candidates[0].Content.Parts {
 		text.WriteString(p.Text)
 	}
 	if strings.TrimSpace(text.String()) == "" {
-		return "", usage, ErrDeclined
+		return generation{}, usage, ErrDeclined
 	}
-	return text.String(), usage, nil
+	return generation{text: text.String(), grounding: payload.Candidates[0].Grounding}, usage, nil
 }

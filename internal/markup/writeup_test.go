@@ -1,14 +1,14 @@
-package dashboard
+package markup
 
 import (
 	"strings"
 	"testing"
 )
 
-// TestRenderWriteup: the Markdown the model is asked for becomes the card's
+// TestRender: the Markdown the model is asked for becomes the card's
 // markup, everything else is text, and nothing the model writes reaches the
 // page unescaped.
-func TestRenderWriteup(t *testing.T) {
+func TestRender(t *testing.T) {
 	in := strings.Join([]string{
 		"## The build",
 		"Two lines of a",
@@ -29,7 +29,7 @@ func TestRenderWriteup(t *testing.T) {
 		"",
 		"<script>alert(1)</script> and a [link](http://x)",
 	}, "\n")
-	got := string(renderWriteup(in))
+	got := string(Render(in))
 	for _, want := range []string{
 		"<h4>The build</h4>",
 		"<p>Two lines of a paragraph with <strong>bold</strong>, <em>italic</em> and <code>code</code>.</p>",
@@ -48,7 +48,7 @@ func TestRenderWriteup(t *testing.T) {
 		t.Errorf("unsafe or unrendered markup in:\n%s", got)
 	}
 	// The older plain form still reads: a lone short line is a heading.
-	old := string(renderWriteup("Overview\n\nYou died once.\n\nDo these first\n\n- Press it more."))
+	old := string(Render("Overview\n\nYou died once.\n\nDo these first\n\n- Press it more."))
 	if !strings.Contains(old, "<h4>Overview</h4>") || !strings.Contains(old, "<p>You died once.</p>") || !strings.Contains(old, "<li>Press it more.</li>") {
 		t.Errorf("plain write-up:\n%s", old)
 	}

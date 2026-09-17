@@ -1964,3 +1964,122 @@ main:has(.welcome) { max-width: 64rem; }
   .analysing-phrase { animation: none; }
   .analysing-phrase:first-child { opacity: 1; transform: none; }
 }
+
+/* The assistant (spec 006): a launcher pinned to the corner of every page,
+   a panel over the page when open, a sheet from the bottom on a phone. The
+   details element is laid out column-reverse so the panel opens above the
+   launcher, where the eye already is. */
+.assistant {
+  position: fixed;
+  right: 1.25rem;
+  bottom: 1.25rem;
+  z-index: 20;
+  max-width: calc(100vw - 2.5rem);
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: flex-end;
+}
+.assistant-launcher {
+  list-style: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 1rem;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  background: rgba(6, 16, 25, 0.94);
+  color: var(--accent);
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 18px 40px -16px #000;
+}
+.assistant-launcher::-webkit-details-marker { display: none; }
+.assistant-launcher::marker { content: ""; }
+.assistant-launcher:hover,
+.assistant-launcher:focus-visible { background: rgba(54, 158, 232, 0.18); outline: none; }
+.assistant-launcher-mark {
+  display: inline-grid;
+  place-items: center;
+  width: 1.4rem;
+  height: 1.4rem;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--bg);
+  font-weight: 700;
+}
+.assistant-panel {
+  width: 26rem;
+  max-width: 100%;
+  max-height: min(70vh, 40rem);
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 0.75rem;
+  background: rgba(6, 16, 25, 0.96);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 18px 40px -16px #000;
+}
+.assistant-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 0.8rem 1rem;
+  border-bottom: 1px solid var(--line);
+}
+.assistant-head h2 { margin: 0; font-size: 1rem; color: var(--accent); }
+.assistant-head a { font-size: 0.8rem; color: var(--accent-2); }
+.assistant-body { overflow-y: auto; padding: 0.5rem 1rem; flex: 1 1 auto; min-height: 8rem; }
+.assistant-thread { list-style: none; margin: 0; padding: 0; }
+.exchange { padding: 0.6rem 0; border-bottom: 1px solid var(--line); }
+.exchange-q { margin: 0 0 0.4rem; font-weight: 600; }
+.exchange-a { font-size: 0.92rem; }
+.exchange-a p { margin: 0 0 0.6rem; line-height: 1.5; }
+.exchange-a h4, .exchange-a h5 { margin: 0.8rem 0 0.3rem; font-size: 0.95rem; color: var(--accent); }
+.exchange-a ul, .exchange-a ol { margin: 0 0 0.6rem; padding-left: 1.2rem; }
+.exchange-a li { margin: 0.2rem 0; }
+.exchange-a .writeup-scroll { margin: 0.4rem 0 0.8rem; }
+.exchange-sources {
+  margin: 0.2rem 0 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.exchange-sources a { color: var(--accent-2); }
+.assistant-empty { color: var(--muted); font-size: 0.9rem; }
+.assistant-empty p { margin: 0.4rem 0; }
+.assistant-empty ul { margin: 0.3rem 0; padding-left: 1.2rem; }
+.assistant-ask { display: flex; flex-direction: column; gap: 0.5rem; padding: 0.6rem 1rem 0; }
+.assistant-ask textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 3rem;
+  background: rgba(0, 3, 7, 0.6);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.5rem 0.7rem;
+  font: inherit;
+}
+.assistant-ask textarea:focus { border-color: var(--accent); outline: none; }
+.assistant-actions { display: flex; align-items: center; gap: 0.75rem; }
+.assistant-wait { margin: 0; color: var(--muted); font-size: 0.85rem; }
+.assistant-notice { margin: 0.5rem 1rem 0; }
+.assistant-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
+  padding: 0.5rem 1rem 0.8rem;
+}
+.assistant-foot .fineprint { margin: 0; font-size: 0.72rem; flex: 1 1 14rem; }
+.assistant-new button { font-size: 0.8rem; }
+.assistant-page { max-width: 48rem; }
+.assistant-page .assistant-body { padding: 0; min-height: 0; }
+.assistant-page .assistant-ask, .assistant-page .assistant-notice, .assistant-page .assistant-foot { padding-left: 0; padding-right: 0; margin-left: 0; margin-right: 0; }
+@media (max-width: 48rem) {
+  .assistant { right: 0; bottom: 0; left: 0; max-width: none; align-items: stretch; padding: 0 0.75rem 0.75rem; }
+  .assistant-launcher { align-self: flex-end; }
+  .assistant-panel { width: auto; max-height: 75vh; }
+}
