@@ -69,6 +69,9 @@ var _ platform.App = (*App)(nil)
 type snapshot struct {
 	members []blizzard.GuildMember
 	details map[string]armory.MemberDetail
+	// owners is which account a character belongs to, for those who have
+	// signed in; keyed as platform.OwnerKey.
+	owners  map[string]int64
 	fetched time.Time
 }
 
@@ -145,6 +148,9 @@ type officer struct {
 	Rank      string
 	RankIndex int
 	ItemLevel int
+	// Others is how many more of this person's characters hold an officer
+	// rank, folded into this line (spec 004, amendment).
+	Others int
 }
 
 // index draws the page from the snapshot in hand, and starts a refresh when
@@ -180,9 +186,15 @@ func (a *App) index(w http.ResponseWriter, r *http.Request) {
 }
 
 // officers is the guild master and the officers, in roster order (rank, then
-// name), each with what their profile added when it was fetched (FR-045).
+// name), each with what their profile added when it was fetched (FR-045),
+// folded to one line per person where the site knows which characters are
+// one person's: the character of the best rank, then the highest item
+// level, stands for the rest, and says how many more there are. Characters
+// of members who have never signed in stay one line each; the roster
+// cannot tell their alts apart.
 func (a *App) officers(snap *snapshot) []officer {
 	var out []officer
+	byOwner := map[int64]int{} // user id -> index in out
 	for _, m := range snap.members {
 		if !a.deps.Guild.IsOfficer(m.Rank) {
 			continue
@@ -203,9 +215,30 @@ func (a *App) officers(snap *snapshot) []officer {
 			o.ItemLevel = d.AverageItemLevel
 		}
 		o.ClassSlug = armory.ClassSlug(o.Class)
+		if owner, known := snap.owners[platform.OwnerKey(m.RealmSlug, m.Name)]; known {
+			if i, have := byOwner[owner]; have {
+				if better(o, out[i]) {
+					o.Others = out[i].Others + 1
+					out[i] = o
+				} else {
+					out[i].Others++
+				}
+				continue
+			}
+			byOwner[owner] = len(out)
+		}
 		out = append(out, o)
 	}
 	return out
+}
+
+// better says whether a stands for a person ahead of b: the better rank,
+// then the higher item level.
+func better(a, b officer) bool {
+	if a.RankIndex != b.RankIndex {
+		return a.RankIndex < b.RankIndex
+	}
+	return a.ItemLevel > b.ItemLevel
 }
 
 // realmOf is the guild's realm as Blizzard displays it, from any member whose
@@ -287,6 +320,13 @@ func (a *App) load(ctx context.Context) {
 		members: members,
 		details: b.Details(ctx, token, members, maxConcurrentProfileFetches),
 		fetched: time.Now(),
+	}
+	if a.deps.Owners != nil {
+		if owners, err := a.deps.Owners.Owners(ctx); err != nil {
+			a.deps.Logger.Warn("front door: character owners", "error", err)
+		} else {
+			snap.owners = owners
+		}
 	}
 	a.mu.Lock()
 	a.snap = snap

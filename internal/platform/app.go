@@ -143,6 +143,11 @@ type Deps struct {
 	// by database rule alike.
 	Audit AuditStore
 
+	// Owners is which account each character belongs to, learned at
+	// sign-in (spec 004, amendment): what lets a page fold an account's
+	// alts into one line. Nil when the site keeps no such record.
+	Owners OwnerStore
+
 	// CSRF verifies a form. An app that accepts a POST checks it before
 	// changing anything; the token to put in the form is CSRFTokenFrom, the
 	// field name CSRFFieldName.

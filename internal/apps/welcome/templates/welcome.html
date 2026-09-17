@@ -56,7 +56,7 @@
         <li>
           <span class="class-name cls-{{.ClassSlug}}">{{template "rank-mark" .RankIndex}}{{.Name}}</span>
           <span class="officer-rank">{{.Rank}}</span>
-          <span class="officer-meta">{{if .Spec}}{{.Spec}} {{end}}{{.Class}}{{if .ItemLevel}} &middot; {{.ItemLevel}} item level{{end}}{{if .Realm}} &middot; {{.Realm}}{{end}}</span>
+          <span class="officer-meta">{{if .Spec}}{{.Spec}} {{end}}{{.Class}}{{if .ItemLevel}} &middot; {{.ItemLevel}} item level{{end}}{{if .Realm}} &middot; {{.Realm}}{{end}}{{if .Others}} &middot; and {{.Others}} more character{{if gt .Others 1}}s{{end}}{{end}}</span>
         </li>
         {{end}}
       </ul>
