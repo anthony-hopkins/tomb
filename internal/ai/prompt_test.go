@@ -37,7 +37,7 @@ func TestBuild(t *testing.T) {
 	if strings.Contains(got, "212345") {
 		t.Error("an item id leaked into the prompt")
 	}
-	if !strings.Contains(System, "Do these first") || !strings.Contains(System, "Do not restate the gear table") || !strings.Contains(System, "boss by boss") {
+	if !strings.Contains(System, "- do_these_first:") || !strings.Contains(System, "never re-rank the upgrade path") || !strings.Contains(System, "- cooldowns:") || !strings.Contains(System, "- verify:") {
 		t.Error("the system instruction lost its rules")
 	}
 }

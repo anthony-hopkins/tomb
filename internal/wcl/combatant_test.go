@@ -46,7 +46,7 @@ func TestTalentShapes(t *testing.T) {
 	  "class": {"10": [{"selectedEntryId": 96216, "pointsInvested": 1, "node": {"name": "Suppression", "abilities": [{"id": 96216, "name": "Suppression"}]}}]},
 	  "odd": 7
 	}`))
-	want := []Talent{{ID: 96216, Name: "Suppression"}, {ID: 96167, Name: "Marrowrend"}, {ID: 96170, Name: "Consumption"}, {ID: 99001, Name: "Deathbringer"}}
+	want := []Talent{{ID: 96216, Name: "Suppression"}, {ID: 96167, Name: "Marrowrend", NodeID: 76087}, {ID: 96170, Name: "Consumption", NodeID: 76090}, {ID: 99001, Name: "Deathbringer"}}
 	if len(tree) != len(want) {
 		t.Fatalf("tree = %+v", tree)
 	}

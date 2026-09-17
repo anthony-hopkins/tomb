@@ -7,9 +7,9 @@ import (
 	"time"
 )
 
-// TestTopPlayer: the leaderboard's first entry becomes a character
-// reference and a ranking with gear and talents; the query names the class
-// without spaces.
+// TestTopPlayer: the leaderboard's first NAMED entry -- the anonymous one
+// ahead of it is skipped -- becomes a character reference and a ranking with
+// gear and talents; the query names the class without spaces and the region.
 func TestTopPlayer(t *testing.T) {
 	c, _, asked := server(t, func(map[string]any) (int, []byte) { return 200, fixture(t, "character-rankings.json") })
 	c.Region = "us"
@@ -19,6 +19,10 @@ func TestTopPlayer(t *testing.T) {
 	}
 	if ref != (CharacterRef{Region: "us", Slug: "area-52", Name: "Toptank"}) {
 		t.Errorf("ref = %+v", ref)
+	}
+	entries, err := c.Leaderboard(context.Background(), 3009, 5, "DeathKnight", "Blood", "dps")
+	if err != nil || len(entries) != 2 || entries[0].Ref.Name != "Toptank" || entries[1].Ref.Slug != "illidan" || entries[1].Rank.Amount != 1401000 {
+		t.Errorf("leaderboard = %+v, %v; the anonymous entry must be left out", entries, err)
 	}
 	if got.Name != "Toptank" || got.Class != "Death Knight" || got.Spec != "Blood" || got.Amount != 1498220.1 || got.RankPercent != 100 || got.Duration != 312*time.Second {
 		t.Errorf("ranking = %+v", got)

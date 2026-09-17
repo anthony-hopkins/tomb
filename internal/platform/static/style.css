@@ -1710,8 +1710,23 @@ a.log-kind:focus { border-color: var(--accent); }
 .talent-diff dt { color: var(--muted); font-size: 0.7rem; letter-spacing: 0.06em; text-transform: uppercase; margin-top: 0.5rem; }
 .talent-diff dd { margin: 0.2rem 0 0; }
 
-.writeup p { margin: 0 0 0.8rem; line-height: 1.55; }
-.writeup h4 { margin: 1rem 0 0.4rem; font-size: 0.9rem; color: var(--accent); }
+/* The review: the model's Markdown as the card renders it (writeup.go).
+   A document, so headings have weight, tables have rules, and lists have
+   their marks. */
+.writeup { margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--line); max-width: 72rem; }
+.writeup p { margin: 0 0 0.8rem; line-height: 1.6; max-width: 72ch; }
+.writeup h4 { margin: 1.6rem 0 0.5rem; padding-bottom: 0.3rem; font-size: 1.05rem; color: var(--accent); border-bottom: 1px solid var(--line); }
+.writeup h4:first-child { margin-top: 0; }
+.writeup h5 { margin: 1rem 0 0.4rem; font-size: 0.9rem; color: var(--ink); }
+.writeup ul, .writeup ol { margin: 0 0 0.9rem; padding-left: 1.4rem; max-width: 72ch; }
+.writeup li { margin: 0.25rem 0; line-height: 1.5; }
+.writeup code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.85em; background: rgba(16, 48, 72, 0.55); padding: 0.1em 0.35em; border-radius: 4px; overflow-wrap: anywhere; }
+.writeup-table { width: 100%; border-collapse: collapse; margin: 0.5rem 0 1rem; font-size: 0.88rem; }
+.writeup-table th, .writeup-table td { padding: 0.35rem 0.6rem; text-align: left; border-bottom: 1px solid var(--line); vertical-align: top; }
+.writeup-table th { font-size: 0.7rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.do-first li { margin: 0.4rem 0; font-weight: 600; }
+.verify-data { color: var(--accent); }
+.verify-inferred { color: #f5c26b; }
 
 @media (max-width: 48rem) {
   .upload-row { grid-template-columns: minmax(0, 1fr); }
@@ -1851,4 +1866,90 @@ main:has(.welcome) { max-width: 64rem; }
 
 @media (max-width: 44rem) {
   .welcome-hero { grid-template-columns: 1fr; }
+}
+
+/* ---------------------------------------------------------------------------
+   Analysing (spec 003, sixth amendment): the card shows work in progress.
+
+   A pulsing mark and one line of patter at a time, cycling in CSS: every
+   phrase sits in the same place and takes its turn through the keyframes,
+   staggered by animation-delay. Twelve phrases, three seconds each. Under
+   reduced motion the first phrase stands still with the mark.
+   ------------------------------------------------------------------------ */
+
+.analysing {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0.75rem 0 0;
+  padding: 0.6rem 0.8rem;
+  background: rgba(54, 158, 232, 0.12);
+  border: 1px solid rgba(54, 158, 232, 0.45);
+  border-radius: 6px;
+  color: #cfe8fb;
+  font-size: 0.9rem;
+}
+
+.analysing-orb {
+  flex: none;
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 0 rgba(74, 249, 231, 0.6);
+  animation: analysing-pulse 1.6s ease-out infinite;
+}
+
+@keyframes analysing-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(74, 249, 231, 0.6); }
+  70%  { box-shadow: 0 0 0 0.6rem rgba(74, 249, 231, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(74, 249, 231, 0); }
+}
+
+.analysing-words {
+  position: relative;
+  display: block;
+  flex: 1;
+  min-width: 0;
+  height: 1.5em;
+  overflow: hidden;
+}
+
+.analysing-phrase {
+  position: absolute;
+  inset: 0 0 auto 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: 0;
+  transform: translateY(0.5em);
+  animation: analysing-cycle 36s linear infinite;
+}
+
+.analysing-phrase:nth-child(1)  { animation-delay: 0s; }
+.analysing-phrase:nth-child(2)  { animation-delay: 3s; }
+.analysing-phrase:nth-child(3)  { animation-delay: 6s; }
+.analysing-phrase:nth-child(4)  { animation-delay: 9s; }
+.analysing-phrase:nth-child(5)  { animation-delay: 12s; }
+.analysing-phrase:nth-child(6)  { animation-delay: 15s; }
+.analysing-phrase:nth-child(7)  { animation-delay: 18s; }
+.analysing-phrase:nth-child(8)  { animation-delay: 21s; }
+.analysing-phrase:nth-child(9)  { animation-delay: 24s; }
+.analysing-phrase:nth-child(10) { animation-delay: 27s; }
+.analysing-phrase:nth-child(11) { animation-delay: 30s; }
+.analysing-phrase:nth-child(12) { animation-delay: 33s; }
+
+/* One twelfth of the cycle each: in, hold, out, then wait for the rest. */
+@keyframes analysing-cycle {
+  0%    { opacity: 0; transform: translateY(0.5em); }
+  1.5%  { opacity: 1; transform: translateY(0); }
+  7%    { opacity: 1; transform: translateY(0); }
+  8.3%  { opacity: 0; transform: translateY(-0.5em); }
+  100%  { opacity: 0; transform: translateY(-0.5em); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .analysing-orb { animation: none; }
+  .analysing-phrase { animation: none; }
+  .analysing-phrase:first-child { opacity: 1; transform: none; }
 }

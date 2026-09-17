@@ -19,20 +19,26 @@ import (
 
 // fakeWCL answers the five reads from a table, and counts.
 type fakeWCL struct {
-	top      wcl.Ranking
-	topRef   wcl.CharacterRef
-	topErr   error
-	rank     wcl.Ranking
-	rankErr  error
-	zone     wcl.Zone
-	zoneErr  error
-	latest   wcl.Ranking
-	raid     wcl.RaidZone
-	tops     int
-	ranks    int
-	zones    int
-	latests  int
-	lastSpec string
+	top       wcl.Ranking
+	topRef    wcl.CharacterRef
+	topErr    error
+	rank      wcl.Ranking
+	rankErr   error
+	zone      wcl.Zone
+	zoneErr   error
+	latest    wcl.Ranking
+	raid      wcl.RaidZone
+	board     []wcl.Entry         // the leaderboard page; nil means just top
+	boardOf   map[int][]wcl.Entry // per boss, when set
+	casts     wcl.CastSet
+	boards    int
+	castsN    int
+	timelines int
+	tops      int
+	ranks     int
+	zones     int
+	latests   int
+	lastSpec  string
 }
 
 func (f *fakeWCL) CurrentZone(context.Context) (wcl.RaidZone, error) {
@@ -40,6 +46,48 @@ func (f *fakeWCL) CurrentZone(context.Context) (wcl.RaidZone, error) {
 		return wcl.RaidZone{}, errors.New("no zone")
 	}
 	return f.raid, nil
+}
+
+func (f *fakeWCL) Leaderboard(_ context.Context, enc, _ int, class, spec, _ string) ([]wcl.Entry, error) {
+	f.boards++
+	f.lastSpec = class + "/" + spec
+	if f.topErr != nil {
+		return nil, f.topErr
+	}
+	if f.board != nil {
+		return f.board, nil
+	}
+	if f.boardOf != nil {
+		if b := f.boardOf[enc]; len(b) > 0 {
+			return b, nil
+		}
+		return nil, wcl.ErrNoRank
+	}
+	return []wcl.Entry{{Ref: f.topRef, Rank: f.top}}, nil
+}
+
+func (f *fakeWCL) Timeline(_ context.Context, _ string, _ int, player string, abilities []string) (wcl.Timeline, error) {
+	f.timelines++
+	if len(abilities) == 0 {
+		return wcl.Timeline{Duration: 312 * time.Second}, nil
+	}
+	// The top player opens Dancing Rune Weapon on the pull and again at
+	// 1:36; the member opens it late and once.
+	tl := wcl.Timeline{Duration: 312 * time.Second, Kill: true, Phases: []wcl.Phase{{ID: 1, Name: "Stage One", At: 0}, {ID: 2, Name: "Stage Two", At: 150 * time.Second}}}
+	if player == "Toptank" {
+		tl.Casts = []wcl.CastEvent{{At: 4 * time.Second, Ability: "Dancing Rune Weapon"}, {At: 96 * time.Second, Ability: "Dancing Rune Weapon"}}
+	} else {
+		tl.Casts = []wcl.CastEvent{{At: 20 * time.Second, Ability: "Dancing Rune Weapon"}}
+	}
+	return tl, nil
+}
+
+func (f *fakeWCL) Casts(context.Context, string, int, string) (wcl.CastSet, error) {
+	f.castsN++
+	if len(f.casts.Abilities) == 0 {
+		return wcl.CastSet{}, wcl.ErrNoRank
+	}
+	return f.casts, nil
 }
 
 func (f *fakeWCL) BestRank(context.Context, wcl.CharacterRef, int, int, string) (wcl.Ranking, error) {
@@ -72,13 +120,14 @@ var topRef = wcl.CharacterRef{Region: "us", Slug: "area-52", Name: "Toptank"}
 func healthyWCL() *fakeWCL {
 	return &fakeWCL{
 		top: topTank, topRef: topRef,
-		rank: wcl.Ranking{Name: "Toptank", Class: "Death Knight", Spec: "Blood", Metric: "dps", RankPercent: 96, Amount: 1400000, Duration: 200 * time.Second},
+		rank: wcl.Ranking{Name: "Toptank", Class: "Death Knight", Spec: "Blood", Metric: "dps", RankPercent: 96, Amount: 1400000, Duration: 200 * time.Second, ReportCode: "ThEiRs", FightID: 5},
 		zone: wcl.Zone{Class: "Death Knight", Spec: "Blood", Difficulty: 4, Metric: "dps",
 			Encounters: []wcl.ZoneEncounter{{ID: 3009, Name: "Vexie and the Geargrinders", Kills: 6}, {ID: 3010, Name: "Cauldron of Carnage", Kills: 4}}},
-		latest: wcl.Ranking{Name: "Nekromoo", Class: "Death Knight", Spec: "Blood", Metric: "dps", RankPercent: 74, Amount: 1102000, Duration: 250 * time.Second,
+		latest: wcl.Ranking{Name: "Nekromoo", Class: "Death Knight", Spec: "Blood", Metric: "dps", RankPercent: 74, Amount: 1102000, Duration: 250 * time.Second, ReportCode: "YoUrS", FightID: 3,
 			StartedAt: time.Date(2026, 9, 14, 20, 0, 0, 0, time.UTC),
 			Gear:      []wcl.Gear{{ID: 212345, Name: "Baleful Grave-Knight's Casque", ItemLevel: 311}}, Talents: []wcl.Talent{{ID: 1, Name: "Marrowrend"}, {ID: 3, Name: "Bonestorm"}}},
-		raid: wcl.RaidZone{ID: 44, Name: "The Venomous Abyss", Encounters: []wcl.ZoneEncounter{{ID: 3009, Name: "Vexie and the Geargrinders"}, {ID: 3010, Name: "Cauldron of Carnage"}}},
+		raid:  wcl.RaidZone{ID: 44, Name: "The Venomous Abyss", Encounters: []wcl.ZoneEncounter{{ID: 3009, Name: "Vexie and the Geargrinders"}, {ID: 3010, Name: "Cauldron of Carnage"}}},
+		casts: wcl.CastSet{Abilities: []wcl.CastCount{{ID: 49998, Name: "Death Strike", Count: 63}, {ID: 49028, Name: "Dancing Rune Weapon", Count: 4}}, Active: 300 * time.Second, Total: 312 * time.Second},
 	}
 }
 

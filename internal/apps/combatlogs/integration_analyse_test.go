@@ -33,6 +33,18 @@ func (f fakeWCL) TopPlayer(context.Context, int, int, string, string, string) (w
 	return wcl.CharacterRef{Region: "us", Slug: "area-52", Name: "Toptank"}, f.rank, nil
 }
 
+func (f fakeWCL) Leaderboard(context.Context, int, int, string, string, string) ([]wcl.Entry, error) {
+	return []wcl.Entry{{Ref: wcl.CharacterRef{Region: "us", Slug: "area-52", Name: "Toptank"}, Rank: f.rank}}, nil
+}
+
+func (f fakeWCL) Casts(context.Context, string, int, string) (wcl.CastSet, error) {
+	return wcl.CastSet{}, wcl.ErrNoRank
+}
+
+func (f fakeWCL) Timeline(context.Context, string, int, string, []string) (wcl.Timeline, error) {
+	return wcl.Timeline{}, wcl.ErrNoRank
+}
+
 func (f fakeWCL) ZoneRankings(context.Context, wcl.CharacterRef) (wcl.Zone, error) {
 	return wcl.Zone{Class: "Death Knight", Spec: "Blood", Difficulty: 5, Metric: "dps",
 		Encounters: []wcl.ZoneEncounter{{ID: 3009, Name: "Vexie and the Geargrinders", Kills: 6}, {ID: 3010, Name: "Cauldron of Carnage", Kills: 4}}}, nil
@@ -71,7 +83,7 @@ func stackBoth(t *testing.T, store *fights.MemStore, audit *memAudit) (http.Hand
 			Config: platform.Config{UploadDir: t.TempDir(), Timezone: time.UTC, AIModel: "gemini-3.1-pro"},
 			WCL: fakeWCL{rank: wcl.Ranking{Name: "Toptank", Class: "Death Knight", Spec: "Blood", Metric: "dps", RankPercent: 97, Amount: 1498220,
 				Gear: []wcl.Gear{{ID: 212345, Name: "Casque", ItemLevel: 320}}, Talents: []wcl.Talent{{ID: 1, Name: "Consumption"}}}},
-			AI: fakeAI{text: "Overview\n\nYou pressed Death Strike twice in two minutes.\n\nDo these first\n\n- Press it more."},
+			AI: fakeAI{text: `{"overview":"You pressed Death Strike twice in two minutes.","build":"x","engine":"","benchmarks":"","boss_by_boss":"","cooldowns":"","opener":"","priority":"","survival":"","cooldown_rules":"","gear":"","upgrade_path":"","do_these_first":["Press it more.","two","three"],"verify":[]}`},
 		},
 		Sessions:  &auth.SessionManager{Store: &auth.Store{}},
 		Profiles:  &platform.ProfileFetcher{Client: client, Guild: platform.GuildConfig{Name: "TOMB", RealmSlug: "area-52"}, Logger: logger},

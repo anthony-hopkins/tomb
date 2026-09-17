@@ -3,9 +3,12 @@ package dashboard
 import (
 	"encoding/json"
 	"fmt"
+	"html/template"
 	"net/http"
 	"strings"
+	"time"
 
+	"github.com/anthony-hopkins/tomb/internal/ai"
 	"github.com/anthony-hopkins/tomb/internal/blizzard"
 	"github.com/anthony-hopkins/tomb/internal/fights"
 	"github.com/anthony-hopkins/tomb/internal/platform"
@@ -31,7 +34,10 @@ type analysisView struct {
 	// Msg is the one-shot message from the analyse route, worded here.
 	Msg string
 
-	Pending bool   // the newest analysis is still being written
+	Pending bool // the newest analysis is still being written
+	// Phrases is what the card says while it waits, one after another,
+	// so a wait of a minute reads as work rather than a freeze.
+	Phrases []string
 	Failure string // the newest analysis failed, and why
 	Result  *resultView
 }
@@ -42,19 +48,24 @@ type sourceOption struct {
 }
 
 type resultView struct {
-	Showcase   bool // no logs of the raider's: the top parses, broken down
-	Against    string
-	AgainstAs  string // "Blood Death Knight, top on Vexie"
-	Analysed   string
-	Table      []fights.UpgradeRow
-	Diff       fights.TalentDiff
-	Paragraphs []paragraph
-	Model      string
+	Showcase  bool // no logs of the raider's: the top parses, broken down
+	Against   string
+	AgainstAs string // "Blood Death Knight, top on Vexie"
+	Analysed  string
+	Table     []fights.UpgradeRow
+	Diff      fights.TalentDiff
+	Writeup   template.HTML // an older plain write-up, rendered (writeup.go)
+	// Sections, DoFirst and Verify are the review (spec 005), rendered
+	// section by section from the parsed object.
+	Sections []reviewSection
+	DoFirst  []string
+	Verify   []ai.VerifyRow
+	Model    string
 }
 
-type paragraph struct {
-	Text    string
-	Heading bool
+type reviewSection struct {
+	Title string
+	Body  template.HTML
 }
 
 // messages are the analyse route's codes, worded for the card. The route
@@ -140,6 +151,7 @@ func (a *App) analysis(r *http.Request, c blizzard.Character) *analysisView {
 		switch newest.State {
 		case fights.Pending:
 			v.Pending = true
+			v.Phrases = analysingPhrases(c, newest.CreatedAt)
 		case fights.AFailed:
 			v.Failure = newest.Failure
 		}
@@ -193,22 +205,40 @@ func (a *App) result(an fights.Analysis) *resultView {
 			rv.AgainstAs = "top " + as
 		}
 	}
-	rv.Paragraphs = paragraphs(an.Writeup)
+	if review, err := ai.ParseReview(an.Writeup); err == nil {
+		for _, s := range review.Sections() {
+			rv.Sections = append(rv.Sections, reviewSection{Title: s.Title, Body: renderWriteup(s.Body)})
+		}
+		rv.DoFirst, rv.Verify = review.DoTheseFirst, review.Verify
+	} else {
+		rv.Writeup = renderWriteup(an.Writeup)
+	}
 	return rv
 }
 
-// paragraphs splits the write-up at blank lines. A short line on its own
-// that does not end a sentence is a heading, which is how the model was
-// asked to write them.
-func paragraphs(text string) []paragraph {
-	var out []paragraph
-	for _, block := range strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n\n") {
-		block = strings.TrimSpace(block)
-		if block == "" {
-			continue
-		}
-		heading := !strings.Contains(block, "\n") && len(block) < 60 && !strings.HasSuffix(block, ".") && !strings.HasPrefix(block, "-")
-		out = append(out, paragraph{Text: strings.TrimPrefix(block, "## "), Heading: heading})
+// analysingPhrases is the card's patter while the worker runs: a dozen
+// lines of what is going on, in the game's own words, rotated by how long
+// the analysis has been running so each refresh of the page starts on a
+// later line rather than the first one again.
+func analysingPhrases(c blizzard.Character, since time.Time) []string {
+	spec := strings.TrimSpace(c.ActiveSpec + " " + c.Class)
+	lines := []string{
+		"Reading " + c.Name + "'s kills on Warcraft Logs…",
+		"Finding the best " + spec + " in the region…",
+		"Pulling their parse on every boss…",
+		"Opening the cast tables, kill by kill…",
+		"Counting casts against the cooldowns…",
+		"Weighing item levels, slot by slot…",
+		"Comparing talent trees…",
+		"Checking active time on the pull…",
+		"Asking the raid leader for the write-up…",
+		"The model is thinking. So is the tank.",
+		"Nearly there. Loot is not guaranteed.",
+		"Still working. The trash is not.",
 	}
-	return out
+	if since.IsZero() {
+		return lines
+	}
+	shift := int(time.Since(since).Seconds()/3) % len(lines)
+	return append(lines[shift:], lines[:shift]...)
 }

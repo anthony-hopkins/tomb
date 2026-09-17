@@ -125,6 +125,8 @@ func run() error {
 		logger.Warn("warcraft logs client not configured; comparisons unavailable")
 	}
 	vertex := ai.NewVertex(cfg.AIModel, cfg.AIRegion)
+	// The review's shape, held to by the model (spec 005).
+	vertex.Schema = ai.ReviewSchema
 	if err := vertex.Ready(ctx); err != nil {
 		logger.Warn("ai unavailable", "model", cfg.AIModel, "region", cfg.AIRegion, "error", err)
 	} else {
@@ -140,6 +142,7 @@ func run() error {
 			Guild:    guildCfg,
 			Roster:   roster,
 			Audit:    audit,
+			Owners:   &platform.OwnerLog{DB: db},
 			CSRF:     csrf,
 			WCL:      wclReader,
 			AI:       vertex,

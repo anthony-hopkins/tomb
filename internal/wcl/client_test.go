@@ -81,7 +81,7 @@ func TestBestRank(t *testing.T) {
 		t.Errorf("gear = %+v", got.Gear)
 	}
 	// The tree, read class then spec, rows ascending, with the names.
-	if len(got.Talents) != 3 || got.Talents[0].Name != "Marrowrend" || got.Talents[2] != (Talent{ID: 194844, Name: "Bonestorm"}) || got.Gear[0].Quality != 4 {
+	if len(got.Talents) != 3 || got.Talents[0].Name != "Marrowrend" || got.Talents[2] != (Talent{ID: 194844, Name: "Bonestorm", NodeID: 70008}) || got.Gear[0].Quality != 4 {
 		t.Errorf("talents = %+v", got.Talents)
 	}
 	vars := (*asked)[0]

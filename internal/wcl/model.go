@@ -31,10 +31,13 @@ type Gear struct {
 	Quality   int
 }
 
-// Talent is one chosen talent in a ranked fight.
+// Talent is one chosen talent in a ranked fight. NodeID is the talent
+// tree's node, the id Blizzard's loadouts list too, when the shape carried
+// one (a character's own ranking does; a leaderboard entry does not).
 type Talent struct {
-	ID   int
-	Name string
+	ID     int
+	Name   string
+	NodeID int
 }
 
 // Ranking is a player's best recorded performance on one boss at one
@@ -55,6 +58,31 @@ type Ranking struct {
 
 	Gear    []Gear
 	Talents []Talent
+
+	// Casts is the player's ability use in that kill, once Casts() has
+	// been asked and the answer kept with the ranking; nil until then.
+	Casts *CastSet
+}
+
+// Entry is one row of a leaderboard: who, and their parse there.
+type Entry struct {
+	Ref  CharacterRef
+	Rank Ranking
+}
+
+// CastSet is a player's ability use in one kill: each ability's cast
+// count, and how much of the fight they were active for.
+type CastSet struct {
+	Abilities []CastCount
+	Active    time.Duration
+	Total     time.Duration
+}
+
+// CastCount is one ability's use in one kill.
+type CastCount struct {
+	ID    int
+	Name  string
+	Count int
 }
 
 // RaidZone is the current raid: its id, name and bosses.
@@ -105,8 +133,18 @@ type Reader interface {
 	// class is Warcraft Logs' spelling, without spaces (ClassSlug).
 	// ErrNoRank when nobody of that class and spec is ranked there.
 	TopPlayer(ctx context.Context, encounterID, wclDifficulty int, class, spec, metric string) (CharacterRef, Ranking, error)
+	// Leaderboard is the first page of that leaderboard: every named
+	// player on it, best first. ErrNoRank when it is empty.
+	Leaderboard(ctx context.Context, encounterID, wclDifficulty int, class, spec, metric string) ([]Entry, error)
 	// CurrentZone is the current raid and its bosses.
 	CurrentZone(ctx context.Context) (RaidZone, error)
+	// Casts is one player's ability use in one kill, from the report the
+	// ranking names. ErrNoRank when the report or the player is not there.
+	Casts(ctx context.Context, reportCode string, fightID int, player string) (CastSet, error)
+	// Timeline is one player's casts of the named abilities in one kill,
+	// as seconds into the pull, with the pull's length and phases (spec
+	// 005). No abilities gives the bounds and phases alone.
+	Timeline(ctx context.Context, reportCode string, fightID int, player string, abilities []string) (Timeline, error)
 }
 
 // ClassSlug is a class name the way Warcraft Logs' API spells it in a

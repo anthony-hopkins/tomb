@@ -171,3 +171,15 @@ The app is `internal/apps/welcome`, slug `welcome`, `Public: true`,
 `Landing: true`, no nav entry. It needs no guild gate. It widens `AppMeta` by
 the two flags in FR-042, recorded in
 `001/contracts/app-registration.md` and `http-routes.md` in the same change.
+
+## Amendment, 2026-09-17: one officer line per person
+
+The officer list showed the guild master's every alt, one line each, because
+Blizzard's roster is a list of characters and says nothing about who plays
+them. The site does learn that: a member's sign-in fetches their account's
+characters. Those are now recorded (`character_owners`, migration 0008; only
+members who have signed in, only the names the roster already shows), and the
+front door folds an account's officer characters into one line -- the best
+rank, then the highest item level, standing for the rest, with "and N more
+characters". Characters of members who have never signed in stay one line each;
+nothing can tell their alts apart. **FR-045** reads accordingly.

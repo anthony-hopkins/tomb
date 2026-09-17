@@ -332,3 +332,21 @@ deleted; FR-033 withdrawn); the Armory panel fills the column and the
 comparison's result sits under it in a two-column section with the talent
 difference headed against the top player; `wcl.HTTPClient.Region` confines the
 leaderboard to the site's region through `serverRegion`.
+
+## Sixth amendment, 2026-09-17: the pick across the raid, ability use, visible work
+
+`wcl.Leaderboard` (named entries only; hidden ones skipped) and `wcl.Casts`
+(the captured table shape) join the client; `combatlogs/pick.go` scores one
+leaderboard page per boss and picks the player best across the raid; the
+worker reads both sides' cast tables and gives the model casts per minute and
+active time; bare talent ids are dropped rather than misnamed; the card shows
+an animated line of patter while the worker runs.
+
+## Seventh amendment, 2026-09-17: the full review
+
+`blizzard.BuildReader` (loadouts with tooltips, the spec's tree, both captured
+live); `combatlogs/build.go` picks the loadout matching the kill and composes
+the build sheet with cooldown-use rows; the prompts ask for the fixed sections
+in Markdown with a 16k output budget; `dashboard/writeup.go` renders that
+Markdown safely; the result section shows the review at the full width under
+the tables.
