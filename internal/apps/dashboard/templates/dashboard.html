@@ -117,10 +117,24 @@
     </dl>
     </div>
     </div>
-    {{/* The review itself: the model's Markdown, rendered by writeup.go,
-         at the full width under the tables. */}}
+    {{/* The review itself, section by section from the parsed object
+         (spec 005), each body rendered by writeup.go; an older plain
+         write-up renders whole. */}}
     <div class="writeup">
+      {{if .Sections}}
+      {{range .Sections}}<h4>{{.Title}}</h4>
+{{.Body}}{{end}}
+      {{if .DoFirst}}<h4>Do these first</h4>
+      <ol class="do-first">{{range .DoFirst}}<li>{{.}}</li>{{end}}</ol>
+      {{end}}
+      {{if .Verify}}<h4>What to verify</h4>
+      <table class="writeup-table"><thead><tr><th>Item</th><th>Status</th><th>Note</th></tr></thead><tbody>
+      {{range .Verify}}<tr><td>{{.Item}}</td><td class="verify-{{.Status}}">{{.Status}}</td><td>{{.Note}}</td></tr>
+      {{end}}</tbody></table>
+      {{end}}
+      {{else}}
       {{.Writeup}}
+      {{end}}
     </div>
     {{else}}
     <p class="fineprint">The write-up appears here once an analysis has run.</p>

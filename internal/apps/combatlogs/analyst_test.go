@@ -2,12 +2,17 @@ package combatlogs
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
 	"github.com/anthony-hopkins/tomb/internal/ai"
+	"github.com/anthony-hopkins/tomb/internal/blizzard"
 	"github.com/anthony-hopkins/tomb/internal/fights"
 )
+
+// reviewJSON is an answer in the review's shape, the least that parses.
+const reviewJSON = `{"overview":"Solid.","build":"## Points\n34/34","engine":"","benchmarks":"","boss_by_boss":"","cooldowns":"","opener":"","priority":"","survival":"","cooldown_rules":"","gear":"","upgrade_path":"","do_these_first":["one","two","three"],"verify":[]}`
 
 // fakeAI answers with fixed text, or an error, or a panic.
 type fakeAI struct {
@@ -35,7 +40,7 @@ func TestAnalystFromWarcraftLogs(t *testing.T) {
 	audit := &memAudit{}
 	w := healthyWCL()
 	a, _ := seeded(t, store, audit, w)
-	model := &fakeAI{text: "Overview\n\nSolid.\n\nDo these first\n\n- Keep going."}
+	model := &fakeAI{text: reviewJSON}
 	a.deps.AI = model
 	audit.entries = nil
 	postAnalyse(a, true, "", nekromoo)
@@ -91,7 +96,7 @@ func TestAnalystShowcase(t *testing.T) {
 	audit := &memAudit{}
 	w := topOnly()
 	a, _ := seeded(t, store, audit, w)
-	model := &fakeAI{text: "Talents\n\nCopy the build.\n\nDo these first\n\n- Copy the build."}
+	model := &fakeAI{text: reviewJSON}
 	a.deps.AI = model
 	audit.entries = nil
 	postAnalyse(a, true, "", nekromoo)
@@ -113,7 +118,7 @@ func TestAnalystShowcase(t *testing.T) {
 	if !strings.Contains(model.system, "briefing one of your raiders who has no logged raids") {
 		t.Error("the compare instruction was used for a showcase")
 	}
-	for _, want := range []string{"## mode\n\"showcase\"", "Vexie and the Geargrinders", "Cauldron of Carnage", `"their_name": "Toptank"`, "Baleful Grave-Knight's Casque", "Consumption", "Nothing about how anyone played is known", "Mythic"} {
+	for _, want := range []string{"## mode\n\"showcase\"", "## comparison_mode\n\"gear_talents_only\"", "Vexie and the Geargrinders", "Cauldron of Carnage", `"their_name": "Toptank"`, "Baleful Grave-Knight's Casque", "Consumption", "Nothing about how anyone played is known", "Mythic"} {
 		if !strings.Contains(model.prompt, want) {
 			t.Errorf("prompt is missing %q", want)
 		}
@@ -146,7 +151,7 @@ func TestAnalystFromUpload(t *testing.T) {
 		wantState fights.AnalysisState
 		wantIn    string
 	}{
-		{"done", &fakeAI{text: "Overview\n\nYou pressed Death Strike twice.\n\nDo these first\n\n- Press it more."}, fights.Done, "done"},
+		{"done", &fakeAI{text: reviewJSON}, fights.Done, "done"},
 		{"model busy", &fakeAI{err: ai.ErrBusy}, fights.AFailed, "busy"},
 		{"model declined", &fakeAI{err: ai.ErrDeclined}, fights.AFailed, "declined"},
 		{"model panics", &fakeAI{panics: true}, fights.AFailed, "something went wrong"},
@@ -206,7 +211,7 @@ func TestAnalystFromUpload(t *testing.T) {
 			if done.TalentDiff == nil || strings.Join(done.TalentDiff.TheirsOnly, ",") != "Consumption,Marrowrend" || strings.Join(done.TalentDiff.YoursOnly, ",") != "2,4" {
 				t.Errorf("diff = %+v", done.TalentDiff)
 			}
-			for _, want := range []string{"## raid", "Vexie and the Geargrinders", "Toptank", "Death Strike", "Pendant of Malefic Fury", `"mismatch"`, `"pulls": 1`, "left out", "Do these first"} {
+			for _, want := range []string{"## raid", "Vexie and the Geargrinders", "Toptank", "Death Strike", "Pendant of Malefic Fury", "## mismatch", `"pulls": 1`, "left out", "do_these_first"} {
 				if !strings.Contains(tc.model.prompt+tc.model.system, want) {
 					t.Errorf("prompt is missing %q", want)
 				}
@@ -267,7 +272,7 @@ func TestAnalystFetchesEveryBoss(t *testing.T) {
 	for _, f := range store.Fights {
 		f.DifficultyID = 16
 	}
-	model := &fakeAI{text: "fine"}
+	model := &fakeAI{text: reviewJSON}
 	a.deps.AI = model
 	postAnalyse(a, true, uploadSource(u), nekromoo)
 	if !a.AnalyseOnce(context.Background()) {
@@ -283,5 +288,72 @@ func TestAnalystFetchesEveryBoss(t *testing.T) {
 	}
 	if strings.Contains(model.prompt, "left out") {
 		t.Error("nothing was left out, but the prompt says so")
+	}
+}
+
+// buildFake is the combat logs fake with the site's own token and a build
+// to read, so the worker has cooldowns to diff (spec 005).
+type buildFake struct{ blizzard.Client }
+
+func (buildFake) CharacterEquipment(context.Context, string, blizzard.CharacterRef) ([]blizzard.EquippedItem, error) {
+	return nil, errors.New("no equipment in this test")
+}
+
+func (buildFake) AppToken(context.Context) (string, error) { return "site-token", nil }
+
+func (buildFake) CharacterLoadouts(_ context.Context, _ string, ref blizzard.CharacterRef) ([]blizzard.Loadout, error) {
+	return []blizzard.Loadout{{Spec: "Blood", Active: true, ActiveInSpec: true, Code: "CoPA-" + ref.Name, HeroTree: "San'layn",
+		SpecTalents: []blizzard.TalentChoice{{ID: 10, Name: "Dancing Rune Weapon", Rank: 1, Cooldown: "1.5 min cooldown", CastTime: "Instant"}, {ID: 11, Name: "Marrowrend", Rank: 1, CastTime: "Instant"}},
+		Class:       []blizzard.TalentChoice{{ID: 1, Name: "Icebound Fortitude", Rank: 1, Cooldown: "2 min cooldown", CastTime: "Instant"}}}}, nil
+}
+
+func (buildFake) TalentTree(context.Context, string, string) (blizzard.TalentTree, error) {
+	return blizzard.TalentTree{}, errors.New("no tree in this test")
+}
+
+// TestAnalystCooldownDiff: with both builds readable the worker reads both
+// sides' timelines on every boss, diffs the cooldowns, marks the comparison
+// full, ranks the upgrade path, and hands all of it to the model; a
+// malformed answer fails the run rather than reaching the card.
+func TestAnalystCooldownDiff(t *testing.T) {
+	store := fights.NewMemStore()
+	audit := &memAudit{}
+	w := healthyWCL()
+	a, _ := seeded(t, store, audit, w)
+	a.deps.Blizzard = buildFake{}
+	model := &fakeAI{text: reviewJSON}
+	a.deps.AI = model
+	postAnalyse(a, true, "", nekromoo)
+	if !a.AnalyseOnce(context.Background()) {
+		t.Fatal("nothing pending")
+	}
+	newest, done, _ := store.LatestAnalyses(context.Background(), "Nekromoo", "area-52")
+	if newest == nil || newest.State != fights.Done || done == nil {
+		t.Fatalf("state = %+v", newest)
+	}
+	// Two bosses, both sides: four timeline reads.
+	if w.timelines != 4 {
+		t.Errorf("timelines read %d times, want 4", w.timelines)
+	}
+	for _, want := range []string{
+		"## comparison_mode\n\"full\"", `"cooldown_diffs"`, `"ability": "Dancing Rune Weapon"`, `"delta_summary": "first use at 20s against the top player's 4s, 16s later. used 1 of 4 possible; the top player 2 of 4. the top player's use 2 at 1:36 has no counterpart."`,
+		`"phase": "Stage One"`, `"cooldown_sequence"`, "## your_build", "## their_build", "CoPA-Toptank", `"import_string": "CoPA-Nekromoo"`,
+	} {
+		if !strings.Contains(model.prompt, want) {
+			t.Errorf("prompt is missing %q", want)
+		}
+	}
+	if !strings.Contains(model.system, "cooldown_diffs") || !strings.Contains(model.system, "do_these_first") {
+		t.Error("the system instruction does not describe the review's fields")
+	}
+
+	// A plain-text answer is not a review.
+	a.deps.AI = &fakeAI{text: "Overview\n\nFine."}
+	audit.entries = nil
+	postAnalyse(a, true, "", nekromoo)
+	a.AnalyseOnce(context.Background())
+	newest, _, _ = store.LatestAnalyses(context.Background(), "Nekromoo", "area-52")
+	if newest.State != fights.AFailed || !strings.Contains(newest.Failure, "not the review asked for") {
+		t.Errorf("malformed answer: newest = %+v", newest)
 	}
 }

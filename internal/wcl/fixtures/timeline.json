@@ -1,0 +1,175 @@
+{
+  "_note": "CAPTURED from the live API on 2026-09-17 (report NZy6ntYwjDH79xkA, fight 9, Nekromoo's four long cooldowns), trimmed: the first ten events, the abilities they name, and this encounter's phases. Timestamps are milliseconds since the report started; the fight's own startTime is the zero of the pull.",
+  "data": {
+    "reportData": {
+      "report": {
+        "fights": [
+          {
+            "id": 9,
+            "encounterID": 3470,
+            "startTime": 4056402,
+            "endTime": 4592037,
+            "kill": true,
+            "phaseTransitions": [
+              {
+                "id": 1,
+                "startTime": 4056402
+              },
+              {
+                "id": 2,
+                "startTime": 4239353
+              },
+              {
+                "id": 3,
+                "startTime": 4399175
+              }
+            ]
+          }
+        ],
+        "phases": [
+          {
+            "encounterID": 3470,
+            "separatesWipes": true,
+            "phases": [
+              {
+                "id": 1,
+                "name": "Stage One: Soulcoiler Initiation",
+                "isIntermission": false
+              },
+              {
+                "id": 2,
+                "name": "Intermission: Ritual of Awakening",
+                "isIntermission": true
+              },
+              {
+                "id": 3,
+                "name": "Stage Two: Uncoiling",
+                "isIntermission": false
+              }
+            ]
+          }
+        ],
+        "events": {
+          "data": [
+            {
+              "timestamp": 4061475,
+              "type": "cast",
+              "sourceID": 27,
+              "targetID": 112,
+              "abilityGameID": 49028,
+              "fight": 9,
+              "sourceMarker": 6
+            },
+            {
+              "timestamp": 4068758,
+              "type": "cast",
+              "sourceID": 27,
+              "targetID": -1,
+              "abilityGameID": 55233,
+              "fight": 9,
+              "sourceMarker": 6
+            },
+            {
+              "timestamp": 4122855,
+              "type": "cast",
+              "sourceID": 27,
+              "targetID": -1,
+              "abilityGameID": 55233,
+              "fight": 9,
+              "sourceMarker": 6
+            },
+            {
+              "timestamp": 4147170,
+              "type": "cast",
+              "sourceID": 27,
+              "targetID": -1,
+              "abilityGameID": 48707,
+              "fight": 9,
+              "sourceMarker": 6
+            },
+            {
+              "timestamp": 4152363,
+              "type": "cast",
+              "sourceID": 27,
+              "targetID": 112,
+              "abilityGameID": 49028,
+              "fight": 9,
+              "sourceMarker": 6
+            },
+            {
+              "timestamp": 4163462,
+              "type": "cast",
+              "sourceID": 27,
+              "targetID": -1,
+              "abilityGameID": 48792,
+              "fight": 9,
+              "sourceMarker": 6
+            },
+            {
+              "timestamp": 4201313,
+              "type": "cast",
+              "sourceID": 27,
+              "targetID": -1,
+              "abilityGameID": 55233,
+              "fight": 9,
+              "sourceMarker": 6
+            },
+            {
+              "timestamp": 4219040,
+              "type": "cast",
+              "sourceID": 27,
+              "targetID": -1,
+              "abilityGameID": 48707,
+              "fight": 9,
+              "sourceMarker": 6
+            },
+            {
+              "timestamp": 4251546,
+              "type": "cast",
+              "sourceID": 27,
+              "targetID": -1,
+              "abilityGameID": 55233,
+              "fight": 9,
+              "sourceMarker": 6
+            },
+            {
+              "timestamp": 4255519,
+              "type": "cast",
+              "sourceID": 27,
+              "targetID": 120,
+              "targetInstance": 1,
+              "abilityGameID": 49028,
+              "fight": 9,
+              "sourceMarker": 6
+            }
+          ],
+          "nextPageTimestamp": null
+        },
+        "masterData": {
+          "abilities": [
+            {
+              "gameID": 55233,
+              "name": "Vampiric Blood",
+              "type": "1"
+            },
+            {
+              "gameID": 49028,
+              "name": "Dancing Rune Weapon",
+              "type": "1"
+            },
+            {
+              "gameID": 48707,
+              "name": "Anti-Magic Shell",
+              "type": "32"
+            },
+            {
+              "gameID": 48792,
+              "name": "Icebound Fortitude",
+              "type": "1"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

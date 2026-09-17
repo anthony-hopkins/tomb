@@ -20,7 +20,7 @@ type Reader interface {
 }
 ```
 
-Read-only by construction: these are the only seven methods, and the package has
+Read-only by construction: these are the only eight methods, and the package has
 no other request path (FR-035). Added by the 2026-09-16 amendments:
 
 ```go
@@ -63,6 +63,15 @@ Added by the sixth amendment:
     // ranking names: each ability's cast count, active time, fight time.
     Casts(ctx context.Context, reportCode string, fightID int, player string) (CastSet, error)
 ```
+
+`Timeline` (spec 005) queries `reportData.report(code:) { fights(fightIDs:) { startTime
+endTime kill phaseTransitions { id startTime } } phases { encounterID phases { id name
+isIntermission } } events(dataType: Casts, fightIDs:, filterExpression:, startTime:,
+limit: 1000) { data nextPageTimestamp } masterData { abilities { gameID name } } }`,
+filtered to `source.name = "<player>" and ability.name in (...)`, paged by
+`nextPageTimestamp`; event timestamps are milliseconds since the report began and
+the fight's `startTime` is the pull's zero (**confirmed live 2026-09-17**, fixture
+`timeline.json`).
 
 `Casts` queries `reportData.report(code:).table(dataType: Casts, fightIDs: [n],
 filterExpression: "source.name = \"<player>\"")`, a JSON scalar whose
@@ -170,6 +179,10 @@ until a minute before expiry. Project ID from
  "contents": [{"role": "user", "parts": [{"text": "<prompt>"}]}],
  "generationConfig": {"temperature": 0.4, "maxOutputTokens": 2048}}
 ```
+
+**Structured output** (spec 005): `generationConfig.responseMimeType = "application/json"`
+and `responseSchema = ai.ReviewSchema`; the answer is parsed with `ai.ParseReview`
+and a malformed one fails the run.
 
 **Response**: `candidates[0].content.parts[].text` concatenated;
 `usageMetadata.promptTokenCount` / `candidatesTokenCount`. An empty candidate list

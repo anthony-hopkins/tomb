@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/anthony-hopkins/tomb/internal/ai"
 	"github.com/anthony-hopkins/tomb/internal/blizzard"
 	"github.com/anthony-hopkins/tomb/internal/fights"
 	"github.com/anthony-hopkins/tomb/internal/platform"
@@ -53,8 +54,18 @@ type resultView struct {
 	Analysed  string
 	Table     []fights.UpgradeRow
 	Diff      fights.TalentDiff
-	Writeup   template.HTML // the model's Markdown, rendered (writeup.go)
-	Model     string
+	Writeup   template.HTML // an older plain write-up, rendered (writeup.go)
+	// Sections, DoFirst and Verify are the review (spec 005), rendered
+	// section by section from the parsed object.
+	Sections []reviewSection
+	DoFirst  []string
+	Verify   []ai.VerifyRow
+	Model    string
+}
+
+type reviewSection struct {
+	Title string
+	Body  template.HTML
 }
 
 // messages are the analyse route's codes, worded for the card. The route
@@ -194,7 +205,14 @@ func (a *App) result(an fights.Analysis) *resultView {
 			rv.AgainstAs = "top " + as
 		}
 	}
-	rv.Writeup = renderWriteup(an.Writeup)
+	if review, err := ai.ParseReview(an.Writeup); err == nil {
+		for _, s := range review.Sections() {
+			rv.Sections = append(rv.Sections, reviewSection{Title: s.Title, Body: renderWriteup(s.Body)})
+		}
+		rv.DoFirst, rv.Verify = review.DoTheseFirst, review.Verify
+	} else {
+		rv.Writeup = renderWriteup(an.Writeup)
+	}
 	return rv
 }
 
