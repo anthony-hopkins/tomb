@@ -324,3 +324,11 @@ Task: "T031 uploader in internal/platform/static/upload.js"
   `make lint`.
 - The two verification tasks (T040, T050) are the only ones that need live services
   during development; everything else runs on fixtures.
+
+## Fifth amendment, 2026-09-17: full width, no talents block, same region
+
+The Talents block came off the card (`dashboard/talents.go` and its tests
+deleted; FR-033 withdrawn); the Armory panel fills the column and the
+comparison's result sits under it in a two-column section with the talent
+difference headed against the top player; `wcl.HTTPClient.Region` confines the
+leaderboard to the site's region through `serverRegion`.

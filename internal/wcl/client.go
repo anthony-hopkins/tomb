@@ -16,6 +16,11 @@ import (
 // HTTPClient reads Warcraft Logs' v2 API with the client credentials grant
 // (contracts/external-apis.md). A handful of queries; nothing else.
 type HTTPClient struct {
+	// Region, when set, confines the leaderboard to one Warcraft Logs region
+	// ("us", "eu"): the site's own, so a member is measured against a top
+	// player they could actually meet. Empty means the world.
+	Region string
+
 	ClientID     string
 	ClientSecret string
 

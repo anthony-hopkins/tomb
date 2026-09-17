@@ -90,7 +90,10 @@ core and exercises begin → pieces → finish → parsed with a fake store.
 | Upload a log without advanced logging | Fights and numbers shown; gear and talents "not recorded"; the note on how to enable it (scenario 6) |
 | Remove an upload | Gone from the list; its fights gone from the card's fight picker; `combatlogs.remove` on the trail |
 
-### 5. Talents on the card (US2)
+### 5. Talents on the card (US2) — withdrawn by the fifth amendment
+
+*The block is gone from the card; the steps below no longer apply. The build
+still shows up as the talent difference in the comparison's result (section 6).*
 
 1. Open **My Characters**, pick the character you raided on. Expected: a Talents
    block under Equipped. If Blizzard's endpoint returns loadouts, it lists the

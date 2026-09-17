@@ -305,12 +305,6 @@ main:has(.dashboard) { max-width: none; }
 /* No characters, no rail, no empty first column. */
 .dashboard.is-empty { grid-template-columns: minmax(0, 1fr); }
 
-/* With a comparison on the page (spec 003, fourth amendment) there are three
-   columns: the character list, the card (with the comparison's controls
-   under the render), and the result. */
-.dashboard.has-analysis {
-  grid-template-columns: minmax(13rem, 17rem) minmax(0, 46rem) minmax(18rem, 1fr);
-}
 
 /* Everything that is prose stays at a readable measure even though main no
    longer constrains it. */
@@ -632,8 +626,7 @@ main:has(.dashboard) { max-width: none; }
    drops inline beneath its row and opens on tap, which focus-within gives us
    for free. display, not opacity, so a closed card takes up no space. */
 @media (max-width: 48rem) {
-  .dashboard,
-  .dashboard.has-analysis { grid-template-columns: 1fr; }
+  .dashboard { grid-template-columns: 1fr; }
   .character-nav { position: static; }
   .roster-hint { display: none; }
 
@@ -1651,12 +1644,23 @@ a.log-kind:focus { border-color: var(--accent); }
 .fight-summary .stat-value { font-variant-numeric: tabular-nums; }
 .fight-casts { grid-column: 1 / -1; color: var(--muted); font-size: 0.85rem; }
 
-/* The comparison (spec 003, fourth amendment): the controls under the
-   render inside the Armory panel, the result in its own column right of the
-   card -- the table, the talent difference, then the write-up. */
+/* The comparison (spec 003, fifth amendment): the controls under the
+   render inside the Armory panel; the result under the card at the full
+   width -- the table and the talent difference on the left, the write-up on
+   the right. */
 .armory-aside { margin-top: 1.25rem; }
 .card-analysis { padding: 1rem 0 0; border-top: 1px solid var(--line); min-width: 0; }
-.analysis-results { padding: 1.25rem; min-width: 0; }
+.analysis-results { margin-top: 1.25rem; padding: 1.25rem 1.5rem; min-width: 0; }
+.analysis-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 1.5rem;
+}
+.analysis-left, .analysis-right { min-width: 0; }
+.talent-diff-heading { margin: 1rem 0 0.25rem; font-size: 0.9rem; color: var(--accent); }
+@media (max-width: 48rem) {
+  .analysis-grid { grid-template-columns: minmax(0, 1fr); }
+}
 .card-analysis h3,
 .analysis-results h3 {
   margin: 0 0 0.6rem;
@@ -1732,7 +1736,6 @@ a.log-kind:focus { border-color: var(--accent); }
 .talent-groups dd { margin: 0.25rem 0 0; font-size: 0.85rem; line-height: 1.5; }
 .talent-groups .rank { color: var(--muted); font-size: 0.75rem; }
 
-.analysis-results .writeup { margin-top: 1rem; padding-top: 0.75rem; border-top: 1px solid var(--line); }
 
 /* ---------------------------------------------------------------------------
    The front door (spec 004): what an anonymous visitor sees at "/".

@@ -14,24 +14,26 @@ import (
 // topQuery is the leaderboard: the ranked players of one class and spec on
 // one boss at one difficulty, best first, with the gear and talents each
 // used (research D9, amendment). Only the first entry is read.
-const topQuery = `query($enc: Int!, $diff: Int!, $class: String!, $spec: String!, $metric: CharacterRankingMetricType!) {
+const topQuery = `query($enc: Int!, $diff: Int!, $class: String!, $spec: String!, $metric: CharacterRankingMetricType!, $region: String) {
   worldData {
     encounter(id: $enc) {
       id
       name
-      characterRankings(difficulty: $diff, className: $class, specName: $spec, metric: $metric, includeCombatantInfo: true, page: 1)
+      characterRankings(difficulty: $diff, className: $class, specName: $spec, metric: $metric, serverRegion: $region, includeCombatantInfo: true, page: 1)
     }
   }
 }`
 
-// TopPlayer finds the highest-ranked player of a class and spec on a boss.
+// TopPlayer finds the highest-ranked player of a class and spec on a boss --
+// in the client's Region when it has one (serverRegion, checked live on
+// 2026-09-17: "US" gives US players only), the world otherwise.
 func (c *HTTPClient) TopPlayer(ctx context.Context, encounterID, wclDifficulty int, class, spec, metric string) (CharacterRef, Ranking, error) {
 	token, err := c.accessToken(ctx)
 	if err != nil {
 		return CharacterRef{}, Ranking{}, err
 	}
 	body, _ := json.Marshal(map[string]any{"query": topQuery, "variables": map[string]any{
-		"enc": encounterID, "diff": wclDifficulty, "class": class, "spec": spec, "metric": metric,
+		"enc": encounterID, "diff": wclDifficulty, "class": class, "spec": spec, "metric": metric, "region": regionArg(c.Region),
 	}})
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.Endpoint, bytes.NewReader(body))
 	if err != nil {
@@ -150,4 +152,13 @@ func unslugClass(s string) string {
 		b.WriteRune(r)
 	}
 	return b.String()
+}
+
+// regionArg is the leaderboard's serverRegion variable: the region upper-case
+// as Warcraft Logs writes it, or null for no filter.
+func regionArg(region string) any {
+	if strings.TrimSpace(region) == "" {
+		return nil
+	}
+	return strings.ToUpper(strings.TrimSpace(region))
 }

@@ -227,7 +227,8 @@ Numbering continues from 002 (FR-026).
 - **FR-032 (privacy line)**: The upload page MUST say that a log contains everyone
   who was in the raid, and that only the member's own characters are kept.
 
-- **FR-033 (talents on the card)**: The character card MUST show a character's
+- **FR-033 (talents on the card)** *(withdrawn by the fifth amendment: the block is
+  gone from the card; the build still feeds the comparison's talent difference)*: The character card MUST show a character's
   currently chosen talents, from the game's official record, grouped the way the game
   groups them; unavailable talents MUST NOT stop the rest of the card rendering.
 
@@ -479,3 +480,21 @@ Armory panel directly under the render, and the result — the upgrade table, th
 difference and the write-up — sits in a third column to the right of the
 character card. Nobody scrolls to the foot of the page to run one or read one.
 On a narrow screen the three stack: rail, card, result.
+
+## Fifth amendment, 2026-09-17: the card at full width, no talents block, same region
+
+After the first working run the guild master directed four things:
+
+- **No talents block on the card.** The Talents section under Equipped (FR-033)
+  goes; nobody needs to read a build off the card. The build still feeds the
+  comparison: the talent difference against the top player's parse stays, and is
+  headed as such in the result.
+- **The character at the full width.** The Armory panel takes the whole column
+  beside the character list, and the comparison's result sits under it in its
+  own section: the upgrade table and the talent difference on the left, the
+  write-up on the right. The controls stay under the render.
+- **Same region only.** The top player is found among players of the site's own
+  region (`BNET_REGION`, "us"), through the leaderboard's `serverRegion`
+  filter (checked live 2026-09-17). A member is measured against somebody they
+  could actually raid with, and the region's realm slugs resolve for the
+  follow-up reads.
