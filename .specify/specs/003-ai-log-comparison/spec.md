@@ -474,8 +474,8 @@ player's class and specialization."
 ## Fourth amendment, 2026-09-16: the card's layout
 
 The guild master then directed where the comparison lives on My Characters:
-the controls (source picker, Analyse, notices) sit in the left rail directly
-under the character list, and the result — the upgrade table, the talent
+the controls (source picker, Analyse, notices) sit inside the character's
+Armory panel directly under the render, and the result — the upgrade table, the talent
 difference and the write-up — sits in a third column to the right of the
 character card. Nobody scrolls to the foot of the page to run one or read one.
 On a narrow screen the three stack: rail, card, result.

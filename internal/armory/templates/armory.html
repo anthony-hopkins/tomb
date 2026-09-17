@@ -17,6 +17,11 @@
       Blizzard has no render for this character yet.
     </p>
     {{end}}
+    {{with .Aside}}
+    {{/* The page's own block under the render -- the comparison's controls
+         on My Characters -- rendered by the page, placed here. */}}
+    <div class="armory-aside">{{.}}</div>
+    {{end}}
   </div>
 
   <div class="armory-detail">

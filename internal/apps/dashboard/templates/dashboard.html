@@ -1,14 +1,13 @@
 {{define "dashboard.html"}}
-{{/* Three columns when a comparison is on the page, two otherwise: the rail
-     on the left (the character list, and under it the comparison's controls),
-     the selected character's Armory panel in the middle, and the comparison's
-     result on the right. Switching character is a plain link to the same page
+{{/* Three columns when a comparison is on the page, two otherwise: the
+     character list on the left, the selected character's Armory panel in the
+     middle (with the comparison's controls under the render, see
+     "analysis-controls"), and the comparison's result on the right. Switching character is a plain link to the same page
      with ?c=<realm>/<name> -- a GET, so it is bookmarkable, works without
      JavaScript, and the back button does what it should. */}}
 <div class="dashboard{{if not .Characters}} is-empty{{end}}{{if .Analysis}} has-analysis{{end}}">
 
   {{if .Characters}}
-  <div class="dashboard-rail">
   <aside class="character-nav" aria-label="Your characters">
     <h1 class="roster-heading">My Characters</h1>
 
@@ -60,37 +59,6 @@
       {{end}}
     </ul>
   </aside>
-
-  {{with .Analysis}}
-  {{/* The comparison's controls (spec 003, FR-038; fourth amendment): under
-       the character list, so nobody scrolls to the foot of the page to run
-       one. The form posts to the Combat logs app, which owns the run; the
-       result is drawn in the column right of the card. Nothing here sends
-       anything to Warcraft Logs. */}}
-  <section class="panel card-analysis" aria-label="Comparison">
-    <h3>Compare against a top player</h3>
-    {{with .Msg}}<p class="notice" role="alert">{{.}}</p>{{end}}
-    {{if not .Available}}
-    <p class="fineprint">Comparisons are not set up on this site yet.</p>
-    {{else}}
-    <form class="analyse-form" method="post" action="{{.Action}}">
-      <input type="hidden" name="{{.CSRF.Field}}" value="{{.CSRF.Token}}">
-      <input type="hidden" name="character" value="{{.Character}}">
-      <label for="an-source">Your side</label>
-      <select id="an-source" name="source">
-        {{range .Sources}}<option value="{{.Value}}">{{.Label}}</option>{{end}}
-      </select>
-      <p class="fineprint">Your latest ranked kills on Warcraft Logs, or a night you <a href="/app/combatlogs">uploaded here</a>, measured against the top-ranked player of your class and specialization on the boss you pulled most, at the difficulty you raided. With no logs of yours anywhere, the top parses' talents and gear against your current character.</p>
-      <div class="form-actions">
-        <button type="submit" class="primary">Analyse</button>
-      </div>
-    </form>
-    {{end}}
-    {{if .Pending}}<p class="notice" role="status">Analysing&hellip; this page will update itself.</p>{{end}}
-    {{with .Failure}}<p class="notice" role="alert">The last analysis could not be completed: {{.}}. Try again later.</p>{{end}}
-  </section>
-  {{end}}
-  </div>
   {{end}}
 
   <div class="dashboard-main">
@@ -169,4 +137,35 @@
   </aside>
   {{end}}
 </div>
+{{end}}
+
+{{/* The comparison's controls (spec 003, FR-038; fourth amendment): under
+     the character's render inside the Armory panel, so nobody scrolls to the
+     foot of the page to run one. Rendered by app.go with the analysis view
+     and handed to the panel as its Aside. The form posts to the Combat logs
+     app, which owns the run; the result is drawn in the column right of the
+     card. Nothing here sends anything to Warcraft Logs. */}}
+{{define "analysis-controls"}}
+  <section class="card-analysis" aria-label="Comparison">
+    <h3>Compare against a top player</h3>
+    {{with .Msg}}<p class="notice" role="alert">{{.}}</p>{{end}}
+    {{if not .Available}}
+    <p class="fineprint">Comparisons are not set up on this site yet.</p>
+    {{else}}
+    <form class="analyse-form" method="post" action="{{.Action}}">
+      <input type="hidden" name="{{.CSRF.Field}}" value="{{.CSRF.Token}}">
+      <input type="hidden" name="character" value="{{.Character}}">
+      <label for="an-source">Your side</label>
+      <select id="an-source" name="source">
+        {{range .Sources}}<option value="{{.Value}}">{{.Label}}</option>{{end}}
+      </select>
+      <p class="fineprint">Your latest ranked kills on Warcraft Logs, or a night you <a href="/app/combatlogs">uploaded here</a>, measured against the top-ranked player of your class and specialization on the boss you pulled most, at the difficulty you raided. With no logs of yours anywhere, the top parses' talents and gear against your current character.</p>
+      <div class="form-actions">
+        <button type="submit" class="primary">Analyse</button>
+      </div>
+    </form>
+    {{end}}
+    {{if .Pending}}<p class="notice" role="status">Analysing&hellip; this page will update itself.</p>{{end}}
+    {{with .Failure}}<p class="notice" role="alert">The last analysis could not be completed: {{.}}. Try again later.</p>{{end}}
+  </section>
 {{end}}

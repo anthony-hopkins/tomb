@@ -231,8 +231,9 @@ cover it too.
 
 ## Fourth amendment, 2026-09-16: the card's layout
 
-The comparison's controls moved to the left rail under the character list and
-its result to a third column right of the card (`dashboard.html`,
+The comparison's controls moved inside the Armory panel under the render
+(`armory.Panel.Aside`, filled by the dashboard from its `analysis-controls`
+template) and its result to a third column right of the card (`dashboard.html`,
 `style.css` `.dashboard.has-analysis`); nothing else changed.
 
 *T050 done 2026-09-16 from the workstation with the develop credentials: `internal/wcl/live_test.go` captured the real shapes (gear quality as a word, string item levels, id-only leaderboard talents, a talent tree on a character's own ranking); the decoders and fixtures follow them.*

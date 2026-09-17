@@ -135,7 +135,7 @@ func TestAnalysisSection(t *testing.T) {
 			[]string{`action="/app/combatlogs/analyses"`, `<option value="wcl">My latest raid on Warcraft Logs</option>`, `name="source"`, `name="character" value="area-52/nekromoo"`},
 			[]string{"upload:"}, false},
 		{"upload, no analysis", storeWith(t, nil), true, "/app/dashboard",
-			[]string{`action="/app/combatlogs/analyses"`, `<option value="wcl">`, `<option value="upload:1">My upload WoWCombatLog.txt`, "1 raid pull<", `name="csrf_token"`, "top-ranked player of your class", "appears here once an analysis has run"},
+			[]string{`<div class="armory-aside">`, `action="/app/combatlogs/analyses"`, `<option value="wcl">`, `<option value="upload:1">My upload WoWCombatLog.txt`, "1 raid pull<", `name="csrf_token"`, "top-ranked player of your class", "appears here once an analysis has run"},
 			[]string{"Some Dungeon Boss", "Analysed"}, false},
 		{"comparisons not set up", storeWith(t, nil), false, "/app/dashboard",
 			[]string{"not set up on this site"}, []string{"analyse-form"}, false},

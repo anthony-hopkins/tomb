@@ -123,7 +123,7 @@ The selected character's card gains:
 
 - a **Talents** block under Equipped: from Blizzard's active loadout, or from the
   character's latest parsed pull with the date, or "unavailable" (FR-033, D8);
-- an **Analyse** form in the left rail, under the character list (fourth
+- an **Analyse** form inside the Armory panel, under the render (fourth
   amendment): a source picker — "My latest raid on
   Warcraft Logs" first, then each of this member's uploads with raid pulls for the
   character (file, date, pull count) — a hidden character field, and the button;
