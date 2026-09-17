@@ -4,8 +4,9 @@
 
 **Created**: 2026-09-17
 
-**Status**: Draft — designed at the guild master's request; the decisions under
-Assumptions are the site's defaults until the guild master changes them.
+**Status**: Approved — designed at the guild master's request and built the
+same day on their word ("I dont see the chat bot option anywhere"); the
+decisions under Assumptions are the site's defaults until they change them.
 
 **Depends on**: 001-battlenet-sso-character-dashboard (the session, the
 viewer's characters, the app extension point), 002-officer-tools (the officer

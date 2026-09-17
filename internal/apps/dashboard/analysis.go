@@ -11,6 +11,7 @@ import (
 	"github.com/anthony-hopkins/tomb/internal/ai"
 	"github.com/anthony-hopkins/tomb/internal/blizzard"
 	"github.com/anthony-hopkins/tomb/internal/fights"
+	"github.com/anthony-hopkins/tomb/internal/markup"
 	"github.com/anthony-hopkins/tomb/internal/platform"
 )
 
@@ -207,11 +208,11 @@ func (a *App) result(an fights.Analysis) *resultView {
 	}
 	if review, err := ai.ParseReview(an.Writeup); err == nil {
 		for _, s := range review.Sections() {
-			rv.Sections = append(rv.Sections, reviewSection{Title: s.Title, Body: renderWriteup(s.Body)})
+			rv.Sections = append(rv.Sections, reviewSection{Title: s.Title, Body: markup.Render(s.Body)})
 		}
 		rv.DoFirst, rv.Verify = review.DoTheseFirst, review.Verify
 	} else {
-		rv.Writeup = renderWriteup(an.Writeup)
+		rv.Writeup = markup.Render(an.Writeup)
 	}
 	return rv
 }

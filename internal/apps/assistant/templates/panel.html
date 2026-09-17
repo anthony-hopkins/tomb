@@ -1,0 +1,76 @@
+{{define "assistant-thread"}}
+{{/* The conversation, shared by the panel and the page. The answer is the
+     model's Markdown as the shared renderer drew it: escaped, no links,
+     no raw HTML. The sources are links, but from the grounding metadata,
+     never from the answer's text (FR-060). */}}
+<ol class="assistant-thread" aria-live="polite">
+  {{range .Thread}}
+  <li class="exchange">
+    <p class="exchange-q">{{.Question}}</p>
+    <div class="exchange-a">{{.Answer}}</div>
+    {{if .Sources}}
+    <p class="exchange-sources">Read:
+      {{range .Sources}}<a href="{{.URL}}" rel="noopener">{{.Title}}</a>{{end}}
+    </p>
+    {{end}}
+  </li>
+  {{end}}
+</ol>
+{{if not .Thread}}
+<div class="assistant-empty">
+  <p>Ask anything about the game{{if .Character}}, and it is answered for <b>{{.Character}}</b> unless you name another character{{end}}. For instance:</p>
+  <ul>
+    <li>What trinkets should I be using right now, and where do they drop?</li>
+    <li>What is the opener for my spec this patch?</li>
+    <li>Which Mythic+ dungeons give the best gear for my slots this season?</li>
+  </ul>
+</div>
+{{end}}
+{{end}}
+
+{{define "assistant-forms"}}
+{{if .Notice}}<p class="notice assistant-notice" role="status">{{.Notice}}</p>{{end}}
+{{if .Available}}
+<form class="assistant-ask" method="post" action="/app/assistant/ask">
+  <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+  <label class="visually-hidden" for="assistant-q{{if .Page}}-page{{end}}">Your question</label>
+  <textarea id="assistant-q{{if .Page}}-page{{end}}" name="q" rows="2" maxlength="600" required placeholder="What tanking trinkets should I be using, and where do they drop?"></textarea>
+  <div class="assistant-actions">
+    <button class="primary" type="submit">Ask</button>
+    <p class="assistant-wait" hidden aria-live="polite">Reading up on it&hellip;</p>
+  </div>
+</form>
+{{else}}
+<p class="fineprint">The assistant is not set up on this site.</p>
+{{end}}
+<div class="assistant-foot">
+  <form class="assistant-new" method="post" action="/app/assistant/new">
+    <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+    <button type="submit">New conversation</button>
+  </form>
+  <p class="fineprint">Answered by Google's Gemini with web search, for the character you played last. Keep it about the game and put nothing personal in it.</p>
+</div>
+{{end}}
+
+{{define "panel.html"}}
+{{/* The panel the core draws after every page's body (spec 006, FR-057).
+     A details element, so it opens and closes without the script; the
+     script only remembers whether it was open and answers in place. */}}
+<details class="assistant" id="assistant" data-ask="/app/assistant/ask" data-new="/app/assistant/new" data-csrf="{{.CSRF}}">
+  <summary class="assistant-launcher">
+    <span class="assistant-launcher-mark" aria-hidden="true">?</span>
+    Ask about the game
+  </summary>
+  <section class="assistant-panel" aria-label="Assistant">
+    <header class="assistant-head">
+      <h2>Assistant</h2>
+      <a href="/app/assistant/">Open as a page</a>
+    </header>
+    <div class="assistant-body">
+      {{template "assistant-thread" .}}
+    </div>
+    {{template "assistant-forms" .}}
+  </section>
+</details>
+<script src="/static/assistant.js" defer></script>
+{{end}}

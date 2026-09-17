@@ -44,6 +44,14 @@ type Headliner interface {
     Headlines(r *http.Request) []Headline
 }
 
+// Companion is optional: the one app with a panel for every page (the
+// assistant, spec 006) implements it alongside App. The core asks it while
+// drawing the shell and places the panel after the page body, gated exactly
+// as the app's own pages are. Mount refuses two Companions.
+type Companion interface {
+    Panel(r *http.Request) template.HTML
+}
+
 // Headline is one line in the header's ticker.
 type Headline struct {
     When  string // worded by the app, for a glance: "Now", "Today 20:00"
@@ -103,6 +111,8 @@ The core MUST:
    the app — for a guild-gated app, only with a profile in hand that proves
    membership; for an officer-only app, only to an officer — and never to anyone
    else. An app that does not implement `Headliner` is simply not asked.
+7. Draw the `Companion`'s panel after the body of every page whose viewer may
+   reach the app, by the same rule as 6, and refuse to mount two Companions.
 
 An app MUST:
 

@@ -44,6 +44,11 @@
     {{if .Content}}{{.Content}}{{else}}{{block "content" .}}{{end}}{{end}}
   </main>
 
+  {{/* The Companion's panel -- the assistant -- after the body, so it is
+       the last thing in the tab order and floats over nothing that has to
+       be read first. Empty for a viewer who could not reach that app. */}}
+  {{if .Companion}}{{.Companion}}{{end}}
+
   <footer class="site-footer">
     <p>Character data from Blizzard's World of Warcraft Profile API. Sign-in by Battle.net.</p>
   </footer>

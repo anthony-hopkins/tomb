@@ -117,6 +117,17 @@ because the shell is a successfully rendered page for an authenticated user; onl
 
 ---
 
+## Assistant app routes (spec 006)
+
+Access: `member`. No nav entry; the launcher is the Companion panel the core
+draws after every member page's body, and the page is linked from it.
+
+| Route | Result |
+|---|---|
+| `GET /app/assistant/` | The member's conversation as a page, with the question form; `?e=<code>` (`empty`, `long`, `allowance`, `unavailable`, `busy`, `failed`) words a refusal, `&at=<unix>` when the allowance reopens |
+| `POST /app/assistant/ask` | CSRF-checked. `q` (at most 600 characters) is answered by the model with the member's characters as facts. `Accept: application/json` answers `{question, answer_html, sources, character}` or `{error}` (400 empty/long, 429 over the allowance, 503 busy or unavailable, 502 failed); otherwise a 303 to the page, with the reason as `?e=` on a refusal |
+| `POST /app/assistant/new` | CSRF-checked. Starts a new conversation. JSON `{ok}` or a 303 to the page |
+
 ## Cross-cutting contracts
 
 **Session cookie** (research D6): name `tomb_session`; `HttpOnly`; `Secure` (unless
