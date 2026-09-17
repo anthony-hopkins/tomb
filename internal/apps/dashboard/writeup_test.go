@@ -34,7 +34,7 @@ func TestRenderWriteup(t *testing.T) {
 		"<h4>The build</h4>",
 		"<p>Two lines of a paragraph with <strong>bold</strong>, <em>italic</em> and <code>code</code>.</p>",
 		"<h5>Cast rates</h5>",
-		"<table class=\"writeup-table\">", "<thead>", "<th>Ability</th><th>Yours</th><th>Theirs</th>", "<td>Death Strike</td><td>12.1</td><td>16.8</td>", "</tbody>",
+		"<div class=\"writeup-scroll\">\n<table class=\"writeup-table\">", "<thead>", "<th>Ability</th><th>Yours</th><th>Theirs</th>", "<td>Death Strike</td><td>12.1</td><td>16.8</td>", "</tbody>\n</table>\n</div>",
 		"<ul>\n<li>first point</li>\n<li>second &lt;b&gt;point&lt;/b&gt;</li>\n</ul>",
 		"<ol>\n<li>step one</li>\n<li>step two</li>\n</ol>",
 		"<h4>Do these first</h4>",

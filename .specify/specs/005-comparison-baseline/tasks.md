@@ -26,3 +26,7 @@
 - [ ] T097 On develop: a comparison of two logged kills shows cooldown diffs with phases; the model's narration matches the diff; a no-logs character gets `gear_talents_only`.
 - [ ] T098 The eval pass the plan asks for: flash against pro on real payloads; pick the default.
 - [ ] T099 Fill `fights.Crests` for the current patch from the vendor's costs.
+
+## Phase 6: Tables (amendment, FR-056)
+
+- [X] T100 Both prompts ask for the tabular sections as tables with named columns (upgrade path, opener, priority, cooldown rules, cooldown diff and opening order, boss by boss, slots behind, defensives) and carry a rule that like things go in a table; the renderer wraps a table in a scroller; tests assert both.
