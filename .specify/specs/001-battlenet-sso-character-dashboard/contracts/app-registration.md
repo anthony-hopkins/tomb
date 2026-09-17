@@ -54,7 +54,9 @@ type Headline struct {
 
 // Deps gained two lent clients with spec 003, composed in main.go like
 // Blizzard: WCL (wcl.Reader, read-only, nil when unconfigured) and AI
-// (ai.Writer). Apps that share a store do so through a shared package
+// (ai.Writer); and with spec 004's amendment Owners (OwnerStore): which
+// account each character belongs to, recorded by the core at a member's
+// sign-in, so a page can fold one person's alts into one line. Apps that share a store do so through a shared package
 // (internal/fights), never by importing each other.
 
 // Registrar is the narrow slice of routing an app is allowed to touch.

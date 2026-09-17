@@ -142,6 +142,7 @@ func run() error {
 			Guild:    guildCfg,
 			Roster:   roster,
 			Audit:    audit,
+			Owners:   &platform.OwnerLog{DB: db},
 			CSRF:     csrf,
 			WCL:      wclReader,
 			AI:       vertex,

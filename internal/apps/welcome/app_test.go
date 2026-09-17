@@ -274,3 +274,43 @@ func TestOfficerThreshold(t *testing.T) {
 		t.Errorf("officers = %+v", got)
 	}
 }
+
+// TestOfficersFoldByAccount: characters the site knows to be one person's
+// (from their sign-in) fold into one officer line -- the best rank, then the
+// highest item level, standing for the rest with a count -- while characters
+// of members who have never signed in stay one line each.
+func TestOfficersFoldByAccount(t *testing.T) {
+	f := guildOf()
+	f.roster = append(f.roster,
+		blizzard.GuildMember{Name: "Nekalt", RealmSlug: "elune", RealmName: "Elune", Rank: 1, Level: 70, Class: "Mage"},
+		blizzard.GuildMember{Name: "Azalt", RealmSlug: "elune", RealmName: "Elune", Rank: 1, Level: 90, Class: "Druid"})
+	f.byName["nekalt"] = blizzard.Character{Name: "Nekalt", RealmSlug: "elune", Class: "Mage", Level: 70, AverageItemLevel: 120}
+	f.byName["azalt"] = blizzard.Character{Name: "Azalt", RealmSlug: "elune", Class: "Druid", Level: 90, AverageItemLevel: 330}
+	a := appOver(t, f, time.Hour)
+	owners := &platform.MemOwners{}
+	// Nekromoo, Lazzlowe and Nekalt are one account; Azelora and Azalt another.
+	_ = owners.Record(context.Background(), 1, []blizzard.Character{{Name: "Nekromoo", RealmSlug: "area-52"}, {Name: "Lazzlowe", RealmSlug: "elune"}, {Name: "Nekalt", RealmSlug: "elune"}})
+	_ = owners.Record(context.Background(), 2, []blizzard.Character{{Name: "Azelora", RealmSlug: "elune"}, {Name: "Azalt", RealmSlug: "elune"}})
+	a.deps.Owners = owners
+	a.Warm(context.Background())
+
+	got := a.officers(a.current())
+	var names []string
+	for _, o := range got {
+		names = append(names, o.Name)
+	}
+	// Azelora (rank 0) stands for her account over the better-geared Azalt;
+	// Nekromoo (311) over Lazzlowe (298) and Nekalt; Quiet never signed in.
+	if strings.Join(names, ",") != "Azelora,Nekromoo,Quiet" {
+		t.Fatalf("officers = %v", names)
+	}
+	if got[0].Others != 1 || got[1].Others != 2 || got[2].Others != 0 {
+		t.Errorf("others = %d %d %d, want 1 2 0", got[0].Others, got[1].Others, got[2].Others)
+	}
+	body := page(t, a, false)
+	// Three officer lines, with the counts; Lazzlowe is still on the top
+	// lists, which are by character, but not on the officer list.
+	if n := strings.Count(body, `class="officer-rank"`); n != 3 || !strings.Contains(body, "and 2 more characters") || !strings.Contains(body, "and 1 more character<") {
+		t.Errorf("the page does not fold the alts: %d officer lines", n)
+	}
+}

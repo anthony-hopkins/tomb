@@ -361,6 +361,14 @@ func (c *Core) Admit(w http.ResponseWriter, r *http.Request, sess auth.Session) 
 		c.RenderNonMember(w, r, http.StatusOK)
 		return false
 	}
+	// A member's sign-in is where the site learns which characters are
+	// theirs (spec 004, amendment). A failure to note it is logged, never
+	// surfaced: nobody is refused entry because a bookkeeping row failed.
+	if c.Deps.Owners != nil {
+		if err := c.Deps.Owners.Record(r.Context(), sess.User.ID, profile.Characters); err != nil {
+			c.Deps.Logger.Error("record character owners", "user", sess.User.ID, "error", err)
+		}
+	}
 	return true
 }
 
