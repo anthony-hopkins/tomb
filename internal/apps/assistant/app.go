@@ -290,7 +290,7 @@ func (a *App) ask(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, exchangeJSON{Question: q, AnswerHTML: string(markup.Render(ans.Text)), Sources: ans.Sources, Character: character})
 		return
 	}
-	http.Redirect(w, r, routePrefix+"/", http.StatusSeeOther)
+	http.Redirect(w, r, routePrefix, http.StatusSeeOther)
 }
 
 // startOver empties the thread (FR-061).
@@ -309,7 +309,7 @@ func (a *App) startOver(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 		return
 	}
-	http.Redirect(w, r, routePrefix+"/", http.StatusSeeOther)
+	http.Redirect(w, r, routePrefix, http.StatusSeeOther)
 }
 
 // gearFor is what the last-played character wears, held ten minutes.
@@ -373,7 +373,7 @@ func (a *App) fail(w http.ResponseWriter, r *http.Request, code string, at time.
 		writeJSON(w, status, map[string]string{"error": a.notice(code, unix(at))})
 		return
 	}
-	u := routePrefix + "/?e=" + code
+	u := routePrefix + "?e=" + code
 	if !at.IsZero() {
 		u += "&at=" + unix(at)
 	}
