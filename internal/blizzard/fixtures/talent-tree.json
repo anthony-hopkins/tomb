@@ -1,0 +1,792 @@
+{
+  "_note": "CAPTURED from the live API on 2026-09-17 (talent-tree 750 / playable-specialization 250, Blood Death Knight), trimmed to a few nodes per tree; descriptions cut at 160 characters. Node ids are the same ids a character loadout lists.",
+  "id": 750,
+  "playable_class": {
+    "name": "Death Knight",
+    "id": 6
+  },
+  "playable_specialization": {
+    "name": "Blood",
+    "id": 250
+  },
+  "class_talent_nodes": [
+    {
+      "id": 76081,
+      "node_type": {
+        "id": 0,
+        "type": "ACTIVE"
+      },
+      "display_row": 2,
+      "display_col": 2,
+      "unlocks": [
+        76045
+      ],
+      "ranks": [
+        {
+          "rank": 1,
+          "tooltip": {
+            "talent": {
+              "name": "Icebound Fortitude",
+              "id": 101212
+            },
+            "spell_tooltip": {
+              "spell": {
+                "name": "Icebound Fortitude",
+                "id": 48792
+              },
+              "description": "Your blood freezes, granting immunity to Stun effects and reducing all damage you take by 30% for 8 sec.",
+              "cast_time": "Instant",
+              "cooldown": "2 min cooldown"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": 76084,
+      "node_type": {
+        "id": 0,
+        "type": "ACTIVE"
+      },
+      "display_row": 4,
+      "display_col": 1,
+      "unlocks": [
+        101708,
+        76083
+      ],
+      "ranks": [
+        {
+          "rank": 1,
+          "tooltip": {
+            "talent": {
+              "name": "Mind Freeze",
+              "id": 101215
+            },
+            "spell_tooltip": {
+              "spell": {
+                "name": "Mind Freeze",
+                "id": 47528
+              },
+              "description": "Smash the target's mind with cold, interrupting spellcasting and preventing any spell in that school from being cast for 5 sec.",
+              "cast_time": "Instant",
+              "cooldown": "15 sec cooldown",
+              "range": "15 yd range"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": 76052,
+      "node_type": {
+        "id": 1,
+        "type": "PASSIVE"
+      },
+      "display_row": 4,
+      "display_col": 3,
+      "unlocks": [
+        76068,
+        76066,
+        101708
+      ],
+      "ranks": [
+        {
+          "rank": 1,
+          "tooltip": {
+            "talent": {
+              "name": "Gloom Ward",
+              "id": 101182
+            },
+            "spell_tooltip": {
+              "spell": {
+                "name": "Gloom Ward",
+                "id": 391571
+              },
+              "description": "Absorbs are 15% more effective on you. ",
+              "cast_time": "Passive"
+            }
+          }
+        },
+        {
+          "rank": 2,
+          "tooltip": {
+            "talent": {
+              "name": "Gloom Ward",
+              "id": 101182
+            },
+            "spell_tooltip": {
+              "spell": {
+                "name": "Gloom Ward",
+                "id": 391571
+              },
+              "description": "Absorbs are 30% more effective on you. ",
+              "cast_time": "Passive"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": 76065,
+      "node_type": {
+        "id": 0,
+        "type": "ACTIVE"
+      },
+      "display_row": 6,
+      "display_col": 4,
+      "unlocks": [
+        76064,
+        76048,
+        76046
+      ],
+      "ranks": [
+        {
+          "rank": 1,
+          "tooltip": {
+            "talent": {
+              "name": "Anti-Magic Zone",
+              "id": 101196
+            },
+            "spell_tooltip": {
+              "spell": {
+                "name": "Anti-Magic Zone",
+                "id": 51052
+              },
+              "description": "Places an Anti-Magic Zone for 6 sec, reducing the magic damage taken by party or raid members by 15%.",
+              "cast_time": "Instant",
+              "cooldown": "4 min cooldown",
+              "range": "30 yd range"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": 76064,
+      "node_type": {
+        "id": 2,
+        "type": "CHOICE"
+      },
+      "display_row": 7,
+      "display_col": 3,
+      "unlocks": [
+        76078,
+        76087
+      ],
+      "ranks": [
+        {
+          "rank": 1,
+          "choice_of_tooltips": [
+            {
+              "talent": {
+                "name": "Asphyxiate",
+                "id": 101195
+              },
+              "spell_tooltip": {
+                "spell": {
+                  "name": "Asphyxiate",
+                  "id": 221562
+                },
+                "description": "Lifts the enemy target off the ground, crushing their throat with dark energy and stunning them for 5 sec.",
+                "cast_time": "Instant",
+                "cooldown": "45 sec cooldown",
+                "range": "20 yd range"
+              }
+            },
+            {
+              "talent": {
+                "name": "Death's Reach",
+                "id": 141299
+              },
+              "spell_tooltip": {
+                "spell": {
+                  "name": "Death's Reach",
+                  "id": 276079
+                },
+                "description": "Increases the range of Death Grip by 10 yds.\r\n\r\nKilling an enemy that yields experience or honor resets the cooldown of Death Grip.",
+                "cast_time": "Passive"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "spec_talent_nodes": [
+    {
+      "id": 76168,
+      "node_type": {
+        "id": 0,
+        "type": "ACTIVE"
+      },
+      "display_row": 3,
+      "display_col": 17,
+      "unlocks": [
+        76173
+      ],
+      "ranks": [
+        {
+          "rank": 1,
+          "tooltip": {
+            "talent": {
+              "name": "Marrowrend",
+              "id": 101305
+            },
+            "spell_tooltip": {
+              "spell": {
+                "name": "Marrowrend",
+                "id": 195182
+              },
+              "description": "Smash the target, dealing 76 Physical damage and generating 3 charges of Bone Shield.\r\n\r\n Bone Shield\r\nSurrounds you with a barrier of whirling bones, increasin",
+              "cast_time": "Instant",
+              "power_cost": "2 Runes",
+              "range": "Melee Range"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": 76173,
+      "node_type": {
+        "id": 0,
+        "type": "ACTIVE"
+      },
+      "display_row": 4,
+      "display_col": 17,
+      "unlocks": [
+        76140,
+        76144
+      ],
+      "ranks": [
+        {
+          "rank": 1,
+          "tooltip": {
+            "talent": {
+              "name": "Vampiric Blood",
+              "id": 101310
+            },
+            "spell_tooltip": {
+              "spell": {
+                "name": "Vampiric Blood",
+                "id": 55233
+              },
+              "description": "Embrace your undeath, increasing your maximum health by 30% and increasing all healing and absorbs received by 30% for 10 sec.",
+              "cast_time": "Instant",
+              "cooldown": "1.5 min cooldown"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": 76126,
+      "node_type": {
+        "id": 1,
+        "type": "PASSIVE"
+      },
+      "display_row": 5,
+      "display_col": 19,
+      "unlocks": [
+        76137,
+        76138
+      ],
+      "ranks": [
+        {
+          "rank": 1,
+          "tooltip": {
+            "talent": {
+              "name": "Improved Heart Strike",
+              "id": 101259
+            },
+            "spell_tooltip": {
+              "spell": {
+                "name": "Improved Heart Strike",
+                "id": 374717
+              },
+              "description": "Heart Strike damage increased by 15%.",
+              "cast_time": "Passive"
+            }
+          }
+        },
+        {
+          "rank": 2,
+          "tooltip": {
+            "talent": {
+              "name": "Improved Heart Strike",
+              "id": 101259
+            },
+            "spell_tooltip": {
+              "spell": {
+                "name": "Improved Heart Strike",
+                "id": 374717
+              },
+              "description": "Heart Strike damage increased by 30%.",
+              "cast_time": "Passive"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": 76138,
+      "node_type": {
+        "id": 0,
+        "type": "ACTIVE"
+      },
+      "display_row": 6,
+      "display_col": 18,
+      "unlocks": [
+        76129,
+        76166,
+        76142
+      ],
+      "ranks": [
+        {
+          "rank": 1,
+          "tooltip": {
+            "talent": {
+              "name": "Dancing Rune Weapon",
+              "id": 101271
+            },
+            "spell_tooltip": {
+              "spell": {
+                "name": "Dancing Rune Weapon",
+                "id": 49028
+              },
+              "description": "Summons a rune weapon for 8 sec that mirrors your melee attacks and bolsters your defenses.\r\n\r\nWhile active, you gain 30% parry chance.",
+              "cast_time": "Instant",
+              "cooldown": "2 min cooldown",
+              "range": "30 yd range"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": 102244,
+      "node_type": {
+        "id": 0,
+        "type": "ACTIVE"
+      },
+      "display_row": 10,
+      "display_col": 19,
+      "unlocks": [
+        102245
+      ],
+      "ranks": [
+        {
+          "rank": 1,
+          "tooltip": {
+            "talent": {
+              "name": "Consumption",
+              "id": 131125
+            },
+            "spell_tooltip": {
+              "spell": {
+                "name": "Consumption",
+                "id": 1263824
+              },
+              "description": "Empower the runes in your weapon, reducing the damage you take over the duration and unleashing a devastating attack that deals 218 Shadow damage and consumes u",
+              "cast_time": "Channeled",
+              "cooldown": "45 sec cooldown"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "hero_talent_trees": [
+    {
+      "id": 31,
+      "name": "San'layn",
+      "playable_specializations": [
+        {
+          "key": {
+            "href": "https://us.api.blizzard.com/data/wow/playable-specialization/252?namespace=static-12.1.0_68914-us"
+          },
+          "name": "Unholy",
+          "id": 252
+        },
+        {
+          "key": {
+            "href": "https://us.api.blizzard.com/data/wow/playable-specialization/250?namespace=static-12.1.0_68914-us"
+          },
+          "name": "Blood",
+          "id": 250
+        }
+      ],
+      "hero_talent_nodes": [
+        {
+          "id": 95033,
+          "node_type": {
+            "id": 1,
+            "type": "PASSIVE"
+          },
+          "display_row": 4,
+          "display_col": 21,
+          "unlocks": [
+            95045
+          ],
+          "ranks": [
+            {
+              "rank": 1,
+              "tooltip": {
+                "talent": {
+                  "name": "Infliction of Sorrow",
+                  "id": 122642
+                },
+                "spell_tooltip": {
+                  "spell": {
+                    "name": "Infliction of Sorrow",
+                    "id": 434143
+                  },
+                  "description": "When Vampiric Strike damages an enemy affected by your plagues, it extends the duration of the plagues by 3.0 sec, and deals 10% of the remaining damage to the ",
+                  "cast_time": "Passive"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "id": 95040,
+          "node_type": {
+            "id": 1,
+            "type": "PASSIVE"
+          },
+          "display_row": 5,
+          "display_col": 22,
+          "unlocks": [
+            95053
+          ],
+          "ranks": [
+            {
+              "rank": 1,
+              "tooltip": {
+                "talent": {
+                  "name": "Incite Terror",
+                  "id": 122649
+                },
+                "spell_tooltip": {
+                  "spell": {
+                    "name": "Incite Terror",
+                    "id": 434151
+                  },
+                  "description": "Vampiric Strike and Scourge Strike cause your targets to take 1% increased Shadow damage, up to 5% for 15 sec.\r\n\r\nVampiric Strike benefits from Incite Terror at",
+                  "cast_time": "Passive"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "id": 95045,
+          "node_type": {
+            "id": 1,
+            "type": "PASSIVE"
+          },
+          "display_row": 5,
+          "display_col": 21,
+          "unlocks": [
+            95053
+          ],
+          "ranks": [
+            {
+              "rank": 1,
+              "tooltip": {
+                "talent": {
+                  "name": "Inevitable",
+                  "id": 122654
+                },
+                "spell_tooltip": {
+                  "spell": {
+                    "name": "Inevitable",
+                    "id": 1280658
+                  },
+                  "description": "Your plagues deal up to 30% increased damage based on the target's missing health.",
+                  "cast_time": "Passive"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 32,
+      "name": "Rider of the Apocalypse",
+      "playable_specializations": [
+        {
+          "key": {
+            "href": "https://us.api.blizzard.com/data/wow/playable-specialization/252?namespace=static-12.1.0_68914-us"
+          },
+          "name": "Unholy",
+          "id": 252
+        },
+        {
+          "key": {
+            "href": "https://us.api.blizzard.com/data/wow/playable-specialization/251?namespace=static-12.1.0_68914-us"
+          },
+          "name": "Frost",
+          "id": 251
+        }
+      ],
+      "hero_talent_nodes": [
+        {
+          "id": 95037,
+          "node_type": {
+            "id": 2,
+            "type": "CHOICE"
+          },
+          "display_row": 8,
+          "display_col": 11,
+          "unlocks": [
+            95063
+          ],
+          "ranks": [
+            {
+              "rank": 1,
+              "choice_of_tooltips": [
+                {
+                  "talent": {
+                    "name": "Horsemen's Aid",
+                    "id": 122646
+                  },
+                  "spell_tooltip": {
+                    "spell": {
+                      "name": "Horsemen's Aid",
+                      "id": 444074
+                    },
+                    "description": "While at your aid, the Horsemen will occasionally cast Anti-Magic Shell on you and themselves at 80% effectiveness.\r\n\r\nYou may only benefit from this effect eve",
+                    "cast_time": "Passive"
+                  }
+                },
+                {
+                  "talent": {
+                    "name": "Pact of the Apocalypse",
+                    "id": 128248
+                  },
+                  "spell_tooltip": {
+                    "spell": {
+                      "name": "Pact of the Apocalypse",
+                      "id": 444083
+                    },
+                    "description": "When you take damage, 5% of the damage is redirected to each active horsemen.",
+                    "cast_time": "Passive"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": 95041,
+          "node_type": {
+            "id": 1,
+            "type": "PASSIVE"
+          },
+          "display_row": 11,
+          "display_col": 10,
+          "unlocks": [],
+          "ranks": [
+            {
+              "rank": 1,
+              "tooltip": {
+                "talent": {
+                  "name": "Apocalypse Now",
+                  "id": 122650
+                },
+                "spell_tooltip": {
+                  "spell": {
+                    "name": "Apocalypse Now",
+                    "id": 444040
+                  },
+                  "description": "Army of the Dead and Frostwyrm's Fury call upon all 4 Horsemen to aid you for 20 sec.",
+                  "cast_time": "Passive"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "id": 95042,
+          "node_type": {
+            "id": 2,
+            "type": "CHOICE"
+          },
+          "display_row": 10,
+          "display_col": 10,
+          "unlocks": [
+            95041
+          ],
+          "ranks": [
+            {
+              "rank": 1,
+              "choice_of_tooltips": [
+                {
+                  "talent": {
+                    "name": "Fury of the Horsemen",
+                    "id": 122651
+                  },
+                  "spell_tooltip": {
+                    "spell": {
+                      "name": "Fury of the Horsemen",
+                      "id": 444069
+                    },
+                    "description": "Every 50 Runic Power you spend extends the duration of the Horsemen's aid in combat by 1 sec, up to 5 sec.",
+                    "cast_time": "Passive"
+                  }
+                },
+                {
+                  "talent": {
+                    "name": "A Feast of Souls",
+                    "id": 128249
+                  },
+                  "spell_tooltip": {
+                    "spell": {
+                      "name": "A Feast of Souls",
+                      "id": 444072
+                    },
+                    "description": "While you have 2 or more Horsemen aiding you, your  increased damage.",
+                    "cast_time": "Passive"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 33,
+      "name": "Deathbringer",
+      "playable_specializations": [
+        {
+          "key": {
+            "href": "https://us.api.blizzard.com/data/wow/playable-specialization/251?namespace=static-12.1.0_68914-us"
+          },
+          "name": "Frost",
+          "id": 251
+        },
+        {
+          "key": {
+            "href": "https://us.api.blizzard.com/data/wow/playable-specialization/250?namespace=static-12.1.0_68914-us"
+          },
+          "name": "Blood",
+          "id": 250
+        }
+      ],
+      "hero_talent_nodes": [
+        {
+          "id": 95032,
+          "node_type": {
+            "id": 1,
+            "type": "PASSIVE"
+          },
+          "display_row": 5,
+          "display_col": 9,
+          "unlocks": [
+            95068
+          ],
+          "ranks": [
+            {
+              "rank": 1,
+              "tooltip": {
+                "talent": {
+                  "name": "Swift and Painful",
+                  "id": 122641
+                },
+                "spell_tooltip": {
+                  "spell": {
+                    "name": "Swift and Painful",
+                    "id": 443560
+                  },
+                  "description": "If no enemies are struck by Soul Rupture, you gain 10% Strength for 8 sec.\r\n\r\nWave of Souls is 100% more effective on the main target of your Reaper's Mark.",
+                  "cast_time": "Passive"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "id": 95034,
+          "node_type": {
+            "id": 1,
+            "type": "PASSIVE"
+          },
+          "display_row": 4,
+          "display_col": 10,
+          "unlocks": [
+            95057
+          ],
+          "ranks": [
+            {
+              "rank": 1,
+              "tooltip": {
+                "talent": {
+                  "name": "Grim Reaper",
+                  "id": 122643
+                },
+                "spell_tooltip": {
+                  "spell": {
+                    "name": "Grim Reaper",
+                    "id": 434905
+                  },
+                  "description": "Reaper's Mark initial strike grants Killing Machine.\r\n\r\nReaper's Mark explosion deals up to 30% increased damage based on your target's missing health.",
+                  "cast_time": "Passive"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "id": 95035,
+          "node_type": {
+            "id": 2,
+            "type": "CHOICE"
+          },
+          "display_row": 4,
+          "display_col": 11,
+          "unlocks": [
+            95049
+          ],
+          "ranks": [
+            {
+              "rank": 1,
+              "choice_of_tooltips": [
+                {
+                  "talent": {
+                    "name": "Pact of the Deathbringer",
+                    "id": 122644
+                  },
+                  "spell_tooltip": {
+                    "spell": {
+                      "name": "Pact of the Deathbringer",
+                      "id": 440476
+                    },
+                    "description": "When you suffer a damaging effect equal to 25% of your maximum health, you instantly cast Death Pact at 50% effectiveness. May only occur every 2 min.\r\n\r\nWhen a",
+                    "cast_time": "Passive"
+                  }
+                },
+                {
+                  "talent": {
+                    "name": "Rune Carved Plates",
+                    "id": 128258
+                  },
+                  "spell_tooltip": {
+                    "spell": {
+                      "name": "Rune Carved Plates",
+                      "id": 440282
+                    },
+                    "description": "Each Rune spent reduces the magic damage you take by 1.5% and each Rune generated reduces the physical damage you take by 1.5% for 5 sec, up to 5 times.",
+                    "cast_time": "Passive"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

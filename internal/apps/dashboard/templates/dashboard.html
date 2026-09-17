@@ -92,6 +92,7 @@
     {{end}}
     <div class="analysis-grid">
     <div class="analysis-left">
+    <h4 class="talent-diff-heading">Upgrade table against {{.Against}}</h4>
     <table class="upgrade-table">
       <thead><tr><th>Slot</th><th>Yours</th><th>Theirs</th><th>Verdict</th></tr></thead>
       <tbody>
@@ -105,6 +106,8 @@
         {{end}}
       </tbody>
     </table>
+    </div>
+    <div class="analysis-right">
     <h4 class="talent-diff-heading">Talent difference against {{.Against}}</h4>
     <dl class="talent-diff">
       <dt>Talents they take that you do not</dt>
@@ -113,9 +116,11 @@
       <dd>{{if .Diff.YoursOnly}}{{range $i, $t := .Diff.YoursOnly}}{{if $i}}, {{end}}{{$t}}{{end}}{{else}}none{{end}}</dd>
     </dl>
     </div>
-    <div class="analysis-right writeup">
-      {{range .Paragraphs}}{{if .Heading}}<h4>{{.Text}}</h4>{{else}}<p>{{.Text}}</p>{{end}}{{end}}
     </div>
+    {{/* The review itself: the model's Markdown, rendered by writeup.go,
+         at the full width under the tables. */}}
+    <div class="writeup">
+      {{.Writeup}}
     </div>
     {{else}}
     <p class="fineprint">The write-up appears here once an analysis has run.</p>

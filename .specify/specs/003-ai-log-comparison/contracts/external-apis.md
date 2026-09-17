@@ -205,6 +205,16 @@ plain text with short headings. The user message is labelled JSON sections:
 
 ## Blizzard additions — `internal/blizzard`
 
+Seventh amendment (2026-09-17), the build in the game's words, both **confirmed
+live** the same day (fixtures `character-loadouts.json`, `talent-tree-index.json`,
+`talent-tree.json`):
+
+| Call | Endpoint | Namespace | Notes |
+|---|---|---|---|
+| `CharacterLoadouts(ctx, token, ref)` | `GET /profile/wow/character/{realm}/{name}/specializations` | `profile-{region}` | Every saved loadout of every spec, each talent with `id` (the node), `rank` and, where the static data has the node, `tooltip.spell_tooltip` (description, cast time, cooldown, cost, range) and the import string. The active loadout may be another spec's; a talent may carry no tooltip at all |
+| `TalentTree(ctx, class, spec)` | `GET /data/wow/talent-tree/index`, then the spec's page `/data/wow/talent-tree/{classTree}/playable-specialization/{spec}` | `static-{region}` | The index names a spec without its class ("Holy", "Frost"), so the class tree id in the href picks the right one. Nodes carry `node_type` (ACTIVE, PASSIVE, CHOICE), ranks with `tooltip` or `choice_of_tooltips`, and the hero trees. Cached a day |
+
+
 Three new methods on the existing `Client` interface, same host, token and
 error handling as the rest:
 

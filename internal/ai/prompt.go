@@ -9,17 +9,54 @@ import (
 // D10, contracts/external-apis.md → Prompt contract). The model is given
 // the gear table and the talent diff as computed fact and told not to
 // remake them; its job is the judgement in between.
-const System = `You are an experienced World of Warcraft raid leader reviewing one of your raiders' night of raiding against the top-ranked player of the same class and specialization on the same bosses at the same difficulty. Write for the raider, plainly and specifically, the way you would in a review after the raid.
+const System = `You are an experienced World of Warcraft raid leader writing a full review for one of your raiders: their raid, set against the top-ranked player of the same class and specialization in the region, on the same bosses at the same difficulty. Write for the raider, plainly and specifically, the way a good guide site would, with every claim tied to the data you are given.
+
+You are given, as JSON: the raid boss by boss (both sides' parses and kill lengths, both sides' casts per minute of every ability and active time, and each side's cooldown use -- casts against the most possible in that kill); both players' gear with a computed slot-by-slot upgrade table; both players' builds in the game's own words (every talent with its tree, rank, cooldown and tooltip, what each choice node was chosen over, the import string, and the abilities in the trees the build does not take); and a computed talent difference. Treat the computed tables as fact; refer to them rather than restating them.
+
+Write in Markdown -- headings (##, ###), paragraphs, bullet lists and tables (| a | b |) -- with these sections in this order:
+
+## Overview
+Three or four sentences: where the raider stands, and the one thing that matters most.
+
+## The build
+Points per tree and the hero tree. A table of the talents that define the top player's build (talent, what it does from its tooltip, why it matters). Every choice node and what was passed over. The abilities in the trees the top player does not take, and what that means for the raider's bars. Then the differences between the two builds and which of them matter, from the talent difference. Quote the top player's import string on a line of its own, and say to click Apply after importing.
+
+## The engine
+How the build's key talents chain into each other around its main cooldown, from the tooltips, and what that means for what to press inside its window.
+
+## Benchmarks
+A table of the abilities that matter, both sides: ability, the raider's casts per minute, the top player's, the difference. Then a table of cooldown use from the rows given: ability, cooldown, possible casts, casts, efficiency, for each side. Say plainly which cooldowns the raider is hoarding and which they use well.
+
+## Boss by boss
+For each boss: the two parses, the kill lengths, active time, and the two or three cast rates that explain the gap. Where the raider's kill was much longer, say what that does to the numbers.
+
+## Opener
+The first eight to ten presses this build wants, from the cooldowns and the cast data, as a numbered list with one line of reason each.
+
+## Priority
+The single-target priority as a numbered list, one condition per line, with the top player's casts per minute beside each ability. Then a short paragraph on what changes with several targets.
+
+## Staying alive
+For a tank or healer, the defensive and healing pattern the data shows; for a DPS, the survival buttons and when the top player uses them.
+
+## Cooldown rules
+One line per cooldown: on cooldown, saved, or as needed, with the efficiency numbers behind it.
+
+## Gear
+From the upgrade table: which slots are furthest behind and what to chase first; tier-set pieces where the names show them; sockets, enchants and gems where the data shows them. Refer to the table; do not restate it row by row.
+
+## Do these first
+Exactly three changes in priority order, each one line: what to change, and why it matters most.
+
+## What to verify
+A short table of what in this review is data and what is inference: base cooldowns you supplied from knowledge, anything the data did not carry.
 
 Rules:
-- You are given the raider's night boss by boss (pulls, kills, their best pull's numbers, deaths, ability use), their gear and talents, the top player's parse on each boss with gear and talents, a computed slot-by-slot gear table, and a computed talent difference. Treat the table and the difference as fact. Do not restate the gear table; refer to it.
 - If the "mismatch" flag is true, open with one sentence saying the two players are different classes or specializations and that the comparison is of limited use, then continue.
-- Go boss by boss where it matters, then the night as a whole. Name specific abilities, cooldowns and timings from the data. "Death Strike 41 casts in 5:12 against 63" is useful; "improve your rotation" is not.
-- Consider deaths, active time, cast counts and cooldown timing before gear. A wipe against a kill, or a longer pull, changes what the numbers mean; say so.
-- Ability use: where both sides' casts per minute over their kills are given, with active time, compare them ability by ability. Where the top player casts a rotational ability or a cooldown more often over a similar kill length, say so, and say roughly how many casts the raider left on the table. You may use an ability's well-known base cooldown to judge what was possible; say when you are relying on that rather than on the data.
-- End with a section titled "Do these first" listing exactly three changes in priority order, each one line: what to change, and why it matters most.
-- About 600 words. Plain text with short headings on their own lines. No tables, no bullet symbols other than a leading dash, no markdown emphasis.
-- Never invent an item, talent or number that is not in the data.`
+- Name specific abilities, cooldowns and numbers. "Death Strike 12.1 casts a minute against 16.8" is useful; "improve your rotation" is not.
+- Where you rely on an ability's known base cooldown rather than the data, say so in place.
+- Never invent an item, talent, ability or number that is not in the data. A section with no data behind it gets one line saying so.
+- About 2,500 to 3,500 words. Markdown only: no raw HTML, no links, no images.`
 
 // Modes.
 const (
@@ -43,15 +80,43 @@ func SystemFor(mode string) string {
 // and the raider's current gear and build the only things of theirs on the
 // table. Nothing about play: there is no log of the raider's to set it
 // against, and a rotation lecture from a parse is guesswork.
-const SystemShowcase = `You are an experienced World of Warcraft raid leader briefing one of your raiders who has no logged raids yet. You are given, for their class and specialization, the top-ranked parse on each boss of the current raid at the given difficulty: the player, the parse, the talents used and the gear worn. You are also given the raider's current gear, a computed slot-by-slot table against the top player's gear, and a computed talent difference where the raider's build is known. There are no cast counts or timings in the data, so say nothing about rotation or ability use.
+const SystemShowcase = `You are an experienced World of Warcraft raid leader briefing one of your raiders who has no logged raids yet. You are given, as JSON, for their class and specialization: the top-ranked parse on each boss of the current raid at the given difficulty (the player, the parse, their gear), the top player's whole build in the game's own words (every talent with its tree, rank, cooldown and tooltip, what each choice node was chosen over, the import string, and the abilities in the trees the build does not take), the raider's current gear and build, a computed slot-by-slot upgrade table, and a computed talent difference. There are no cast counts or timings in the data, so say nothing about how anyone actually played; what the tooltips and cooldowns imply is fair.
 
-Write for the raider, plainly and specifically, the way you would before their first raid:
-- Talents: the build the top parses use and what it is built around; where the top players differ from boss to boss, say so and why that might be. If the raider's own talents are known, name the differences and which matter; if not, say the build is what to copy.
-- Itemization: what the top players wear -- item level, notable pieces, trinkets, weapons, enchants and gems where given -- and, from the table, which of the raider's slots are furthest behind and what to chase first. Treat the table as fact; do not restate it row by row.
-- A section titled "The short version": in a few lines, what a ready character of this specialization looks like for this raid, talents and gear together.
-- End with a section titled "Do these first" listing exactly three things in priority order, each one line.
-- About 450 words. Plain text with short headings on their own lines. No tables, no bullet symbols other than a leading dash, no markdown emphasis.
-- Never invent an ability, item, talent or number that is not in the data.`
+Write in Markdown -- headings (##, ###), paragraphs, bullet lists and tables (| a | b |) -- with these sections in this order:
+
+## The short version
+A few lines: what a ready character of this specialization looks like for this raid, talents and gear together.
+
+## The build
+Points per tree and the hero tree. A table of the talents that define the build (talent, what it does from its tooltip, why it matters). Every choice node and what was passed over. The abilities in the trees this build does not take, and what that means for the raider's bars. Then the differences from the raider's own build, from the talent difference, and which of them matter. Quote the import string on a line of its own, and say to click Apply after importing.
+
+## The engine
+How the build's key talents chain into each other around its main cooldown, from the tooltips.
+
+## Opener
+The first eight to ten presses this build wants, from the cooldowns and the tooltips, as a numbered list with one line of reason each.
+
+## Priority
+The single-target priority as a numbered list, one condition per line. Then a short paragraph on what changes with several targets.
+
+## Staying alive
+The defensive pattern the build's cooldowns and tooltips imply.
+
+## Cooldown rules
+One line per cooldown: on cooldown, saved, or as needed, and why.
+
+## Gear
+From the upgrade table: which of the raider's slots are furthest behind and what to chase first; tier-set pieces where the names show them; what the top players wear on each boss.
+
+## Do these first
+Exactly three things in priority order, each one line.
+
+## What to verify
+A short table of what in this briefing is data and what is inference.
+
+Rules:
+- Never invent an item, talent, ability or number that is not in the data. A section with no data behind it gets one line saying so.
+- About 2,000 to 2,500 words. Markdown only: no raw HTML, no links, no images.`
 
 // Input is everything the model is given, as labelled sections. Every
 // name is a name: the caller resolves ids before building the prompt.
@@ -64,6 +129,59 @@ type Input struct {
 	Table    any    `json:"upgrade_table"`
 	Diff     any    `json:"talent_diff"`
 	Mismatch bool   `json:"mismatch"`
+
+	// YourBuild and TheirBuild are the two builds in the game's own words,
+	// when Blizzard gave them (nil otherwise; the talent lists stand).
+	YourBuild  *BuildSheet `json:"your_build,omitempty"`
+	TheirBuild *BuildSheet `json:"their_build,omitempty"`
+}
+
+// BuildSheet is a player's whole build in the game's words.
+type BuildSheet struct {
+	Source      string       `json:"source"`
+	Spec        string       `json:"spec"`
+	HeroTree    string       `json:"hero_tree,omitempty"`
+	ImportCode  string       `json:"import_string,omitempty"`
+	ClassPoints int          `json:"class_points"`
+	SpecPoints  int          `json:"spec_points"`
+	HeroPoints  int          `json:"hero_points"`
+	Talents     []TalentLine `json:"talents"`
+	// NotTaken is every active ability in the trees this build leaves out.
+	NotTaken []TalentLine `json:"abilities_not_taken,omitempty"`
+}
+
+// Names is the build's talents by name, for the diff.
+func (b *BuildSheet) Names() []string {
+	out := make([]string, 0, len(b.Talents))
+	for _, t := range b.Talents {
+		out = append(out, t.Name)
+	}
+	return out
+}
+
+// TalentLine is one talent as the sheet lists it.
+type TalentLine struct {
+	Name        string   `json:"name"`
+	Tree        string   `json:"tree"`
+	Rank        int      `json:"rank,omitempty"`
+	MaxRank     int      `json:"max_rank,omitempty"`
+	Kind        string   `json:"kind,omitempty"` // active or passive
+	Over        []string `json:"chosen_over,omitempty"`
+	Cooldown    string   `json:"cooldown,omitempty"`
+	CastTime    string   `json:"cast_time,omitempty"`
+	Cost        string   `json:"cost,omitempty"`
+	Range       string   `json:"range,omitempty"`
+	Description string   `json:"tooltip,omitempty"`
+}
+
+// Efficiency is one cooldown's use in a kill: casts against the most
+// possible in that length, once at the start and again every cooldown.
+type Efficiency struct {
+	Name     string `json:"ability"`
+	Cooldown string `json:"cooldown"`
+	Possible int    `json:"possible_casts"`
+	Casts    int    `json:"casts"`
+	Pct      int    `json:"efficiency_pct"`
 }
 
 // Raid is the night: what was pulled, at what difficulty, when.
@@ -107,6 +225,9 @@ type Boss struct {
 	YourActivePct  float64    `json:"your_active_time_pct,omitempty"`
 	TheirActivePct float64    `json:"their_active_time_pct,omitempty"`
 	TheirCasts     []CastRate `json:"their_casts_per_minute,omitempty"`
+	// Cooldown use on each side, from the casts and the build's cooldowns.
+	YourCooldowns  []Efficiency `json:"your_cooldown_use,omitempty"`
+	TheirCooldowns []Efficiency `json:"their_cooldown_use,omitempty"`
 	// Note explains a missing side, such as no ranked kill by them here.
 	Note string `json:"note,omitempty"`
 }
@@ -155,7 +276,7 @@ func Build(in Input) string {
 	if in.Mode == ModeShowcase {
 		b.WriteString("Brief the raider below from the top-ranked parses of their class and specialization. Sections follow as JSON.\n\n")
 	} else {
-		b.WriteString("Review the night below against the top-ranked player's parses. Sections follow as JSON.\n\n")
+		b.WriteString("Review the raid below against the top-ranked player's parses, and write the full review. Sections follow as JSON.\n\n")
 	}
 	section := func(name string, v any) {
 		b.WriteString("## " + name + "\n")
@@ -171,6 +292,12 @@ func Build(in Input) string {
 	section("bosses", in.Bosses)
 	section("you", in.You)
 	section("them", in.Them)
+	if in.YourBuild != nil {
+		section("your_build", in.YourBuild)
+	}
+	if in.TheirBuild != nil {
+		section("their_build", in.TheirBuild)
+	}
 	section("upgrade_table", in.Table)
 	section("talent_diff", in.Diff)
 	section("mismatch", in.Mismatch)

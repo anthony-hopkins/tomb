@@ -150,7 +150,7 @@ func TestAnalysisSection(t *testing.T) {
 		{"pending", storeWith(t, func(s *fights.MemStore, id int64) { analysed(s, id, fights.Pending, "") }), true, "/app/dashboard",
 			[]string{"Analysing", `class="analysing-phrase"`, "Counting casts against the cooldowns", "Finding the best Protection Warrior in the region"}, []string{"Analysed"}, true},
 		{"done", storeWith(t, func(s *fights.MemStore, id int64) { analysed(s, id, fights.Done, "") }), true, "/app/dashboard",
-			[]string{"Analysed", "<strong>Toptank</strong>, top Blood Death Knight on Vexie and the Geargrinders", "Old Casque", "New Casque", "Upgrade to chase (+9)", "Same item", "Consumption", "<h4>Overview</h4>", "<h4>Do these first</h4>", "lost twenty seconds", "<p>- Use Dancing Rune Weapon on pull.</p>"},
+			[]string{"Analysed", "<strong>Toptank</strong>, top Blood Death Knight on Vexie and the Geargrinders", "Old Casque", "New Casque", "Upgrade to chase (+9)", "Same item", "Consumption", "<h4>Overview</h4>", "<h4>Do these first</h4>", "lost twenty seconds", "<li>Use Dancing Rune Weapon on pull.</li>", `<div class="writeup">`},
 			[]string{"Analysing"}, false},
 		{"failed over done", storeWith(t, func(s *fights.MemStore, id int64) {
 			analysed(s, id, fights.Done, "")
