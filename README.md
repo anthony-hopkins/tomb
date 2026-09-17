@@ -167,8 +167,14 @@ which Warcraft Logs' rankings do not carry. A character with no logs anywhere
 gets the reverse instead: the top parses of its class and specialization on every
 boss of the current raid, broken down into talents and itemization against the
 character's current gear and build. Nothing about rotation: there is no log to
-set it against. Nothing is ever sent to Warcraft Logs. A member may run one every two
-hours; officers are not limited. Every run is in the Logs.
+set it against. The review is written from a structured diff the site computes first: both
+builds in the game's own words, casts per minute, cooldown use, and -- when both
+sides have a logged kill -- when each cooldown was pressed, in what order and in
+which phase, against the top player's timing; plus a gear upgrade path ranked by
+item level per crest where the patch's crest catalog is filled in. The model
+narrates that diff in a fixed set of sections and never re-ranks it. Nothing is
+ever sent to Warcraft Logs. A member may run one every two hours; officers are
+not limited. Every run is in the Logs.
 
 Configuration: `WCL_CLIENT_ID` and `WCL_CLIENT_SECRET` (a read-only Warcraft
 Logs API client; without them the card says comparisons are unavailable),

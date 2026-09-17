@@ -77,7 +77,7 @@ func TestWrite(t *testing.T) {
 	if sys != "be a raid leader" || contents["role"] != "user" || contents["parts"].([]any)[0].(map[string]any)["text"] != "here is the fight" {
 		t.Errorf("request = %v", b)
 	}
-	if cfg["temperature"].(float64) != 0.4 || cfg["maxOutputTokens"].(float64) != 2048 {
+	if cfg["temperature"].(float64) != 0.4 || cfg["maxOutputTokens"].(float64) != 16384 {
 		t.Errorf("generationConfig = %v", cfg)
 	}
 	if _, _, err := v.Write(context.Background(), "s", "p"); err != nil {

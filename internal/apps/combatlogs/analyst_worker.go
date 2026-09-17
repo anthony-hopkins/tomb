@@ -77,7 +77,17 @@ type yourSide struct {
 	Gear        []fights.GearNamed
 	GearNote    string
 	Talents     []string
-	Label       string // for the audit entry
+	// KillTalents is what Warcraft Logs recorded of the build in the
+	// kill, node ids and all, to pick the matching loadout (build.go).
+	KillTalents []wcl.Talent
+	// Durations is each boss's kill or best pull length, in Bosses' order,
+	// for the cooldown-use rows.
+	Durations []time.Duration
+	// Reports is each boss's kill on Warcraft Logs, in Bosses' order, for
+	// the cast timeline; Timelines is the same from an upload's own log.
+	Reports   []reportRef
+	Timelines []fights.Timeline
+	Label     string // for the audit entry
 }
 
 // run does one analysis. Every way out settles the row; a panic settles it
@@ -139,6 +149,19 @@ func (a *App) run(ctx context.Context, an fights.Analysis) {
 		you.Mode = ai.ModeCompare
 	}
 
+	theirClass := top.Class
+	if theirClass == "" {
+		theirClass = wcl.ClassName(top.ClassID)
+	}
+	// Both builds in the game's own words (build.go): Blizzard's loadouts
+	// matched to the kills, with the trees' tooltips and cooldowns.
+	theirSheet := a.sheet(ctx, blizzard.CharacterRef{Name: top.Name, RealmSlug: cp.RealmSlug}, theirClass, top.Spec, top.Talents)
+	yourSheet := a.sheet(ctx, blizzard.CharacterRef{Name: an.Name, RealmSlug: an.RealmSlug}, you.Class, you.Spec, you.KillTalents)
+	if yourSheet != nil {
+		you.Talents = yourSheet.Names()
+	}
+	yourCDs, theirCDs := cooldowns(yourSheet), cooldowns(theirSheet)
+
 	// Their parse on every boss of the night, from the cache or Warcraft
 	// Logs; a boss they have no ranked kill on is noted, not fatal. A
 	// showcase filled these in itself, boss by boss.
@@ -181,6 +204,10 @@ func (a *App) run(ctx context.Context, an fights.Analysis) {
 				you.Bosses[i].TheirRankPercent, you.Bosses[i].TheirDuration = rk.RankPercent, seconds(rk.Duration)
 				if rk.Casts != nil {
 					you.Bosses[i].TheirCasts, you.Bosses[i].TheirActivePct = castRates(*rk.Casts, rk.Duration), activePct(*rk.Casts)
+					you.Bosses[i].TheirCooldowns = efficiency(castCounts(nil, you.Bosses[i].TheirCasts), theirCDs, rk.Duration)
+				}
+				if len(you.Durations) == len(you.Bosses) && len(you.Bosses[i].YourCasts) > 0 {
+					you.Bosses[i].YourCooldowns = efficiency(castCounts(you.Bosses[i].YourCasts, nil), yourCDs, you.Durations[i])
 				}
 				if healer {
 					you.Bosses[i].TheirHPS = rk.Amount
@@ -192,6 +219,43 @@ func (a *App) run(ctx context.Context, an fights.Analysis) {
 			}
 		}
 	}
+	// The cooldown timelines on both sides, and the site's diff of them
+	// (spec 005): when each cooldown was pressed and what differs. Full
+	// mode when at least one boss has both sides.
+	mode := "gear_talents_only"
+	if you.Mode != ai.ModeShowcase {
+		union, names, keys := cooldownUnion(yourCDs, theirCDs)
+		for i, id := range you.BossIDs {
+			rk := theirs[id]
+			if len(keys) == 0 || rk == nil || rk.ReportCode == "" {
+				continue
+			}
+			theirTL, err := a.timeline(ctx, rk.ReportCode, rk.FightID, top.Name, keys)
+			if err != nil {
+				log.Warn("their timeline", "encounter", id, "error", err)
+				continue
+			}
+			var yourTL fights.Timeline
+			switch {
+			case i < len(you.Timelines) && you.Timelines[i].Duration > 0:
+				yourTL = you.Timelines[i]
+			case i < len(you.Reports) && you.Reports[i].Code != "":
+				yourTL, err = a.timeline(ctx, you.Reports[i].Code, you.Reports[i].Fight, an.Name, keys)
+				if err != nil {
+					log.Warn("your timeline", "encounter", id, "error", err)
+					continue
+				}
+			default:
+				continue
+			}
+			diffs, seq := fights.DiffCooldowns(yourTL, theirTL, union, names)
+			if len(diffs) > 0 {
+				you.Bosses[i].Cooldowns, you.Bosses[i].Sequence = diffs, seq
+				mode = "full"
+			}
+		}
+	}
+
 	// Their gear and talents: from the main boss, else the first boss that
 	// carried them.
 	theirGear, theirTalents := top.Gear, top.Talents
@@ -222,31 +286,48 @@ func (a *App) run(ctx context.Context, an fights.Analysis) {
 		}
 	}
 	theirTalentNames := a.talentNames(ctx, theirTalents)
+	if theirSheet != nil {
+		theirTalentNames = theirSheet.Names()
+	}
 
 	table := fights.UpgradeTable(you.Gear, theirNamed)
 	diff := fights.DiffTalents(you.Talents, theirTalentNames)
-	theirClass := top.Class
-	if theirClass == "" {
-		theirClass = wcl.ClassName(top.ClassID)
-	}
 	mismatch := (you.Spec != "" && top.Spec != "" && !strings.EqualFold(you.Spec, top.Spec)) ||
 		(you.Class != "" && theirClass != "" && !strings.EqualFold(you.Class, theirClass))
 
 	in := ai.Input{
-		Mode:   you.Mode,
-		Raid:   you.Raid,
-		Bosses: you.Bosses,
+		Mode:           you.Mode,
+		ComparisonMode: mode,
+		Raid:           you.Raid,
+		Bosses:         you.Bosses,
 		You: ai.Player{Name: an.Name, Class: you.Class, Spec: you.Spec, Damage: you.Damage, Healing: you.Healing, Deaths: you.Deaths,
 			Gear: gearLines(you.Gear), Talents: orEmptyStrings(you.Talents), Note: you.GearNote},
-		Them:     ai.Player{Name: top.Name, Class: theirClass, Spec: top.Spec, Gear: gearLines(theirNamed), Talents: orEmptyStrings(theirTalentNames)},
-		Table:    table,
-		Diff:     diff,
-		Mismatch: mismatch,
+		Them:       ai.Player{Name: top.Name, Class: theirClass, Spec: top.Spec, Gear: gearLines(theirNamed), Talents: orEmptyStrings(theirTalentNames)},
+		Table:      table,
+		Diff:       diff,
+		Mismatch:   mismatch,
+		YourBuild:  yourSheet,
+		TheirBuild: theirSheet,
 	}
 
-	callCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	// The slots worth chasing, ranked by the site; nothing to rank means
+	// no section rather than an empty one.
+	if path := fights.UpgradePath(table, fights.Crests); len(path) > 0 {
+		in.UpgradePath = path
+	}
+
+	callCtx, cancel := context.WithTimeout(ctx, 6*time.Minute)
 	defer cancel()
 	text, usage, err := a.deps.AI.Write(callCtx, ai.SystemFor(you.Mode), ai.Build(in))
+	if err == nil {
+		// The review is held to its shape before anything is stored (spec
+		// 005, FR-054): a malformed answer is a failed run, not a blank card.
+		if _, perr := ai.ParseReview(text); perr != nil {
+			log.Error("model answer", "error", perr)
+			fail("the model's answer was not the review asked for; try again")
+			return
+		}
+	}
 	switch {
 	case errors.Is(err, ai.ErrBusy):
 		fail("the model is busy; try again in a few minutes")
@@ -335,6 +416,8 @@ func (a *App) fromWCL(ctx context.Context, an fights.Analysis, cp *fights.Compar
 		}
 		you.Bosses = append(you.Bosses, line)
 		you.BossIDs = append(you.BossIDs, e.ID)
+		you.Durations = append(you.Durations, rk.Duration)
+		you.Reports = append(you.Reports, reportRef{rk.ReportCode, rk.FightID})
 		you.Raid.Pulls += e.Kills
 		you.Raid.Kills += e.Kills
 		if rk.StartedAt.After(latest.StartedAt) && len(rk.Gear) > 0 {
@@ -354,6 +437,7 @@ func (a *App) fromWCL(ctx context.Context, an fights.Analysis, cp *fights.Compar
 		you.Gear = append(you.Gear, fights.GearNamed{Slot: i, ID: g.ID, Name: g.Name, Level: g.ItemLevel})
 	}
 	you.Talents = a.talentNames(ctx, latest.Talents)
+	you.KillTalents = latest.Talents
 	return you, nil
 }
 
@@ -495,6 +579,8 @@ func (a *App) fromUpload(ctx context.Context, an fights.Analysis, healer bool) (
 		}
 		you.Bosses = append(you.Bosses, line)
 		you.BossIDs = append(you.BossIDs, b.EncounterID)
+		you.Durations = append(you.Durations, b.Best.Fight.Duration)
+		you.Timelines = append(you.Timelines, uploadTimeline(b.Best))
 	}
 	you.Raid.Wipes = you.Raid.Pulls - you.Raid.Kills
 	you.Gear, you.GearNote = a.yourGear(ctx, an.Name, an.RealmSlug, n.Gear)
@@ -654,4 +740,64 @@ func orEmptyStrings(s []string) []string {
 		return []string{}
 	}
 	return s
+}
+
+// reportRef names a kill on Warcraft Logs.
+type reportRef struct {
+	Code  string
+	Fight int
+}
+
+// timeline reads one side's cooldown casts in a kill as the diff wants them.
+func (a *App) timeline(ctx context.Context, code string, fight int, player string, abilities []string) (fights.Timeline, error) {
+	tl, err := a.deps.WCL.Timeline(ctx, code, fight, player, abilities)
+	if err != nil {
+		return fights.Timeline{}, err
+	}
+	out := fights.Timeline{Duration: tl.Duration, Uses: map[string][]float64{}}
+	for _, p := range tl.Phases {
+		out.Phases = append(out.Phases, fights.PhaseSpan{Name: p.Name, From: p.At.Seconds()})
+	}
+	for _, c := range tl.Casts {
+		if c.Ability == "" {
+			continue
+		}
+		out.Uses[c.Ability] = append(out.Uses[c.Ability], c.At.Seconds())
+	}
+	return out, nil
+}
+
+// uploadTimeline is the member's side from their own log: the pull's
+// length and the offsets the parser kept for the rarer abilities.
+func uploadTimeline(sm fights.Summary) fights.Timeline {
+	out := fights.Timeline{Uses: map[string][]float64{}}
+	if sm.Fight != nil {
+		out.Duration = sm.Fight.Duration
+	}
+	for _, c := range sm.Casts {
+		if len(c.At) > 0 && c.Name != "" {
+			out.Uses[c.Name] = append([]float64(nil), c.At...)
+		}
+	}
+	return out
+}
+
+// cooldownUnion is both builds' cooldowns together: by lower-cased name,
+// the names as spelt, and the spelt list for the timeline read.
+func cooldownUnion(yours, theirs map[string]cooldown) (map[string]time.Duration, map[string]string, []string) {
+	union := map[string]time.Duration{}
+	names := map[string]string{}
+	for _, m := range []map[string]cooldown{yours, theirs} {
+		for key, cd := range m {
+			if _, have := union[key]; !have {
+				union[key], names[key] = cd.D, cd.Name
+			}
+		}
+	}
+	keys := make([]string, 0, len(names))
+	for _, n := range names {
+		keys = append(keys, n)
+	}
+	sort.Strings(keys)
+	return union, names, keys
 }

@@ -19,25 +19,26 @@ import (
 
 // fakeWCL answers the five reads from a table, and counts.
 type fakeWCL struct {
-	top      wcl.Ranking
-	topRef   wcl.CharacterRef
-	topErr   error
-	rank     wcl.Ranking
-	rankErr  error
-	zone     wcl.Zone
-	zoneErr  error
-	latest   wcl.Ranking
-	raid     wcl.RaidZone
-	board    []wcl.Entry         // the leaderboard page; nil means just top
-	boardOf  map[int][]wcl.Entry // per boss, when set
-	casts    wcl.CastSet
-	boards   int
-	castsN   int
-	tops     int
-	ranks    int
-	zones    int
-	latests  int
-	lastSpec string
+	top       wcl.Ranking
+	topRef    wcl.CharacterRef
+	topErr    error
+	rank      wcl.Ranking
+	rankErr   error
+	zone      wcl.Zone
+	zoneErr   error
+	latest    wcl.Ranking
+	raid      wcl.RaidZone
+	board     []wcl.Entry         // the leaderboard page; nil means just top
+	boardOf   map[int][]wcl.Entry // per boss, when set
+	casts     wcl.CastSet
+	boards    int
+	castsN    int
+	timelines int
+	tops      int
+	ranks     int
+	zones     int
+	latests   int
+	lastSpec  string
 }
 
 func (f *fakeWCL) CurrentZone(context.Context) (wcl.RaidZone, error) {
@@ -63,6 +64,22 @@ func (f *fakeWCL) Leaderboard(_ context.Context, enc, _ int, class, spec, _ stri
 		return nil, wcl.ErrNoRank
 	}
 	return []wcl.Entry{{Ref: f.topRef, Rank: f.top}}, nil
+}
+
+func (f *fakeWCL) Timeline(_ context.Context, _ string, _ int, player string, abilities []string) (wcl.Timeline, error) {
+	f.timelines++
+	if len(abilities) == 0 {
+		return wcl.Timeline{Duration: 312 * time.Second}, nil
+	}
+	// The top player opens Dancing Rune Weapon on the pull and again at
+	// 1:36; the member opens it late and once.
+	tl := wcl.Timeline{Duration: 312 * time.Second, Kill: true, Phases: []wcl.Phase{{ID: 1, Name: "Stage One", At: 0}, {ID: 2, Name: "Stage Two", At: 150 * time.Second}}}
+	if player == "Toptank" {
+		tl.Casts = []wcl.CastEvent{{At: 4 * time.Second, Ability: "Dancing Rune Weapon"}, {At: 96 * time.Second, Ability: "Dancing Rune Weapon"}}
+	} else {
+		tl.Casts = []wcl.CastEvent{{At: 20 * time.Second, Ability: "Dancing Rune Weapon"}}
+	}
+	return tl, nil
 }
 
 func (f *fakeWCL) Casts(context.Context, string, int, string) (wcl.CastSet, error) {

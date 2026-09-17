@@ -114,7 +114,8 @@ func decodeTalents(raw json.RawMessage) []Talent {
 	type item struct {
 		Selected flexInt `json:"selectedEntryId"`
 		Node     struct {
-			Name      string `json:"name"`
+			ID        flexInt `json:"nodeId"`
+			Name      string  `json:"name"`
 			Abilities []struct {
 				ID   flexInt `json:"id"`
 				Name string  `json:"name"`
@@ -156,7 +157,7 @@ func decodeTalents(raw json.RawMessage) []Talent {
 						name = ab.Name
 					}
 				}
-				out = append(out, Talent{ID: int(it.Selected), Name: name})
+				out = append(out, Talent{ID: int(it.Selected), Name: name, NodeID: int(it.Node.ID)})
 			}
 		}
 	}

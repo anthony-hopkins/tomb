@@ -33,6 +33,11 @@ type HTTPClient struct {
 
 	HTTP *http.Client
 
+	// trees is the per-spec talent tree cache (build.go): static data,
+	// kept a day.
+	treeMu sync.Mutex
+	trees  map[string]cachedTree
+
 	// iconCache maps an item media id to its icon URL. Immutable data, so no
 	// expiry: the only way an entry becomes wrong is if Blizzard reissues an
 	// icon under the same id, which they do not.

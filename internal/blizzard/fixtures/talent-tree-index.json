@@ -1,0 +1,95 @@
+{
+  "_note": "CAPTURED from the live API on 2026-09-17, trimmed: a spec entry carries only its name, so the class is read from the class tree id in the href.",
+  "spec_talent_trees": [
+    {
+      "key": {
+        "href": "https://us.api.blizzard.com/data/wow/talent-tree/850/playable-specialization/73?namespace=static-12.1.0_68914-us"
+      },
+      "name": "Protection"
+    },
+    {
+      "key": {
+        "href": "https://us.api.blizzard.com/data/wow/talent-tree/750/playable-specialization/250?namespace=static-12.1.0_68914-us"
+      },
+      "name": "Blood"
+    },
+    {
+      "key": {
+        "href": "https://us.api.blizzard.com/data/wow/talent-tree/750/playable-specialization/251?namespace=static-12.1.0_68914-us"
+      },
+      "name": "Frost"
+    },
+    {
+      "key": {
+        "href": "https://us.api.blizzard.com/data/wow/talent-tree/790/playable-specialization/66?namespace=static-12.1.0_68914-us"
+      },
+      "name": "Protection"
+    },
+    {
+      "key": {
+        "href": "https://us.api.blizzard.com/data/wow/talent-tree/790/playable-specialization/65?namespace=static-12.1.0_68914-us"
+      },
+      "name": "Holy"
+    },
+    {
+      "key": {
+        "href": "https://us.api.blizzard.com/data/wow/talent-tree/795/playable-specialization/257?namespace=static-12.1.0_68914-us"
+      },
+      "name": "Holy"
+    },
+    {
+      "key": {
+        "href": "https://us.api.blizzard.com/data/wow/talent-tree/658/playable-specialization/64?namespace=static-12.1.0_68914-us"
+      },
+      "name": "Frost"
+    }
+  ],
+  "class_talent_trees": [
+    {
+      "key": {
+        "href": "https://us.api.blizzard.com/data/wow/talent-tree/850?namespace=static-12.1.0_68914-us"
+      },
+      "name": "Warrior"
+    },
+    {
+      "key": {
+        "href": "https://us.api.blizzard.com/data/wow/talent-tree/750?namespace=static-12.1.0_68914-us"
+      },
+      "name": "Death Knight"
+    },
+    {
+      "key": {
+        "href": "https://us.api.blizzard.com/data/wow/talent-tree/790?namespace=static-12.1.0_68914-us"
+      },
+      "name": "Paladin"
+    },
+    {
+      "key": {
+        "href": "https://us.api.blizzard.com/data/wow/talent-tree/795?namespace=static-12.1.0_68914-us"
+      },
+      "name": "Priest"
+    },
+    {
+      "key": {
+        "href": "https://us.api.blizzard.com/data/wow/talent-tree/658?namespace=static-12.1.0_68914-us"
+      },
+      "name": "Mage"
+    }
+  ],
+  "hero_talent_trees": [
+    {
+      "key": {
+        "href": "https://us.api.blizzard.com/data/wow/talent-tree/774/hero-talent/42?namespace=static-12.1.0_68914-us"
+      },
+      "name": "Sentinel",
+      "id": 42
+    },
+    {
+      "key": {
+        "href": "https://us.api.blizzard.com/data/wow/talent-tree/774/hero-talent/43?namespace=static-12.1.0_68914-us"
+      },
+      "name": "Pack Leader",
+      "id": 43
+    }
+  ]
+}

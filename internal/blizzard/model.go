@@ -476,8 +476,13 @@ func (c Character) InGuild(name, realmSlug string) bool {
 // Loadout is a character's active talent build, from the specializations
 // endpoint (spec 003, FR-033).
 type Loadout struct {
-	Spec string
-	Code string // the in-game import string
+	Spec   string
+	SpecID int
+	Code   string // the in-game import string
+	// Active is the active loadout of the active spec; ActiveInSpec the
+	// active one of its own spec, which may not be the spec being played.
+	Active       bool
+	ActiveInSpec bool
 	// Class, SpecTalents and Hero are the chosen talents, by name, in the
 	// order Blizzard lists them.
 	Class       []TalentChoice
@@ -486,11 +491,21 @@ type Loadout struct {
 	HeroTree    string
 }
 
-// TalentChoice is one chosen talent.
+// TalentChoice is one chosen talent: the node (ID), its rank, and -- where
+// Game Data has caught up with the node -- the talent's tooltip in the
+// game's words (build.go). A bare node has its id for a name.
 type TalentChoice struct {
-	ID   int
+	ID   int // the node id, the same id the spec's tree lists
 	Name string
 	Rank int
+
+	TalentID    int
+	SpellID     int
+	Description string
+	CastTime    string
+	Cooldown    string
+	Cost        string
+	Range       string
 }
 
 // ErrNoLoadout is the specializations endpoint answering with no active

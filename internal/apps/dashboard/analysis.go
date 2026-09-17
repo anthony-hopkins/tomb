@@ -3,10 +3,12 @@ package dashboard
 import (
 	"encoding/json"
 	"fmt"
+	"html/template"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/anthony-hopkins/tomb/internal/ai"
 	"github.com/anthony-hopkins/tomb/internal/blizzard"
 	"github.com/anthony-hopkins/tomb/internal/fights"
 	"github.com/anthony-hopkins/tomb/internal/platform"
@@ -46,19 +48,24 @@ type sourceOption struct {
 }
 
 type resultView struct {
-	Showcase   bool // no logs of the raider's: the top parses, broken down
-	Against    string
-	AgainstAs  string // "Blood Death Knight, top on Vexie"
-	Analysed   string
-	Table      []fights.UpgradeRow
-	Diff       fights.TalentDiff
-	Paragraphs []paragraph
-	Model      string
+	Showcase  bool // no logs of the raider's: the top parses, broken down
+	Against   string
+	AgainstAs string // "Blood Death Knight, top on Vexie"
+	Analysed  string
+	Table     []fights.UpgradeRow
+	Diff      fights.TalentDiff
+	Writeup   template.HTML // an older plain write-up, rendered (writeup.go)
+	// Sections, DoFirst and Verify are the review (spec 005), rendered
+	// section by section from the parsed object.
+	Sections []reviewSection
+	DoFirst  []string
+	Verify   []ai.VerifyRow
+	Model    string
 }
 
-type paragraph struct {
-	Text    string
-	Heading bool
+type reviewSection struct {
+	Title string
+	Body  template.HTML
 }
 
 // messages are the analyse route's codes, worded for the card. The route
@@ -198,24 +205,15 @@ func (a *App) result(an fights.Analysis) *resultView {
 			rv.AgainstAs = "top " + as
 		}
 	}
-	rv.Paragraphs = paragraphs(an.Writeup)
-	return rv
-}
-
-// paragraphs splits the write-up at blank lines. A short line on its own
-// that does not end a sentence is a heading, which is how the model was
-// asked to write them.
-func paragraphs(text string) []paragraph {
-	var out []paragraph
-	for _, block := range strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n\n") {
-		block = strings.TrimSpace(block)
-		if block == "" {
-			continue
+	if review, err := ai.ParseReview(an.Writeup); err == nil {
+		for _, s := range review.Sections() {
+			rv.Sections = append(rv.Sections, reviewSection{Title: s.Title, Body: renderWriteup(s.Body)})
 		}
-		heading := !strings.Contains(block, "\n") && len(block) < 60 && !strings.HasSuffix(block, ".") && !strings.HasPrefix(block, "-")
-		out = append(out, paragraph{Text: strings.TrimPrefix(block, "## "), Heading: heading})
+		rv.DoFirst, rv.Verify = review.DoTheseFirst, review.Verify
+	} else {
+		rv.Writeup = renderWriteup(an.Writeup)
 	}
-	return out
+	return rv
 }
 
 // analysingPhrases is the card's patter while the worker runs: a dozen
