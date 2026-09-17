@@ -147,6 +147,7 @@ resource "google_compute_instance" "main" {
     tomb-upload-dir         = var.upload_dir
     tomb-ai-model           = var.ai_model
     tomb-ai-region          = var.ai_region
+    tomb-ai-assistant-model = var.ai_assistant_model
     tomb-wcl-client-id      = var.wcl_client_id
     tomb-db-secret          = google_secret_manager_secret.db_password.secret_id
     tomb-bnet-secret        = google_secret_manager_secret.bnet_client_secret.secret_id

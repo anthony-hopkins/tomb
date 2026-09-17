@@ -330,6 +330,12 @@ variable "ai_model" {
   default     = ""
 }
 
+variable "ai_assistant_model" {
+  description = "The Vertex AI model the assistant answers questions with (spec 006). Empty is the review's model. Reaches the app as TOMB_AI_ASSISTANT_MODEL."
+  type        = string
+  default     = ""
+}
+
 variable "ai_region" {
   description = "The Vertex AI location the model is called in: a region such as us-central1, or global, where the newest models are served. Empty is the app's default, global. Reaches the app as TOMB_AI_REGION."
   type        = string

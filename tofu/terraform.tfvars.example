@@ -30,6 +30,7 @@ acme_email = ""
 # wcl_client_id = ""
 # ai_model      = "gemini-3.1-pro"
 # ai_region     = "us-central1"
+# ai_assistant_model = "gemini-3.1-flash-preview"
 
 # --- Backups -------------------------------------------------------------
 # Daily snapshots of the Postgres data disk, kept 14 days by default.

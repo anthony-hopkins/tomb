@@ -1,0 +1,15 @@
+{{define "assistant.html"}}
+{{/* The assistant's own page (spec 006, FR-064): the same conversation as
+     the panel, as the page's body, for a member without the script and for
+     anyone who wants it wider than a popup. */}}
+<div class="assistant-page">
+  <section class="panel">
+    <h1 class="summary-heading">Assistant</h1>
+    <p class="tagline">Questions about the game, answered for the character you play.</p>
+    <div class="assistant-body">
+      {{template "assistant-thread" .}}
+    </div>
+    {{template "assistant-forms" .}}
+  </section>
+</div>
+{{end}}

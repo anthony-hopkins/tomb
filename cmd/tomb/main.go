@@ -21,6 +21,7 @@ import (
 	_ "time/tzdata"
 
 	"github.com/anthony-hopkins/tomb/internal/ai"
+	"github.com/anthony-hopkins/tomb/internal/apps/assistant"
 	"github.com/anthony-hopkins/tomb/internal/apps/calendar"
 	"github.com/anthony-hopkins/tomb/internal/apps/combatlogs"
 	"github.com/anthony-hopkins/tomb/internal/apps/comingsoon"
@@ -133,6 +134,11 @@ func run() error {
 		logger.Info("ai ready", "model", cfg.AIModel, "region", cfg.AIRegion)
 	}
 
+	// The assistant's own client: its model may differ, and it carries no
+	// response schema (Vertex AI does not combine one with search grounding).
+	chat := ai.NewVertex(cfg.AIAssistantModel, cfg.AIRegion)
+	chat.HTTP.Timeout = 90 * time.Second
+
 	core := &platform.Core{
 		Deps: platform.Deps{
 			DB:       db,
@@ -146,6 +152,7 @@ func run() error {
 			CSRF:     csrf,
 			WCL:      wclReader,
 			AI:       vertex,
+			Chat:     chat,
 		},
 		Sessions: sessions,
 		Profiles: &platform.ProfileFetcher{
@@ -222,6 +229,12 @@ func run() error {
 		return fmt.Errorf("build welcome app: %w", err)
 	}
 
+	// The assistant: the question box on every page (spec 006).
+	helper, err := assistant.New(core.Deps, &assistant.SQLStore{DB: db})
+	if err != nil {
+		return fmt.Errorf("build assistant app: %w", err)
+	}
+
 	// The single registration point. Adding an app means adding one line here
 	// and nothing else (Principle II, contracts/app-registration.md).
 	//
@@ -237,6 +250,7 @@ func run() error {
 		combatLogs,
 		auditLogs,
 		frontDoor,
+		helper,
 	}
 
 	handler, err := platform.Mount(core, authHandlers, apps)
@@ -251,6 +265,7 @@ func run() error {
 	go combatLogs.Housekeep(ctx)
 	go combatLogs.RunParser(ctx)
 	go combatLogs.RunAnalyst(ctx)
+	go helper.Housekeep(ctx)
 
 	srv := &http.Server{
 		Addr:    cfg.Addr,

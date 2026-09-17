@@ -49,6 +49,7 @@ services:
       TOMB_UPLOAD_DIR: ${TOMB_UPLOAD_DIR:-}
       TOMB_AI_MODEL: ${TOMB_AI_MODEL:-}
       TOMB_AI_REGION: ${TOMB_AI_REGION:-}
+      TOMB_AI_ASSISTANT_MODEL: ${TOMB_AI_ASSISTANT_MODEL:-}
       WCL_CLIENT_ID: ${WCL_CLIENT_ID:-}
       WCL_CLIENT_SECRET: ${WCL_CLIENT_SECRET:-}
       DATABASE_URL: postgres://tomb:${DB_PASSWORD:?}@db:5432/tomb?sslmode=disable

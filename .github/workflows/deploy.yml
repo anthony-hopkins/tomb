@@ -420,6 +420,7 @@ jobs:
             -var="upload_dir=${{ vars.TOMB_UPLOAD_DIR }}" \
             -var="ai_model=${{ vars.TOMB_AI_MODEL }}" \
             -var="ai_region=${{ vars.TOMB_AI_REGION }}" \
+            -var="ai_assistant_model=${{ vars.TOMB_AI_ASSISTANT_MODEL }}" \
             -var="wcl_client_id=${{ vars.WCL_CLIENT_ID }}" \
             -var="domain=${{ needs.resolve.outputs.domain }}" \
             -var="enable_snapshots=${{ needs.resolve.outputs.snapshots }}" \

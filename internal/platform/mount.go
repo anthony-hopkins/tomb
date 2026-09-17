@@ -3,6 +3,7 @@ package platform
 import (
 	"context"
 	"fmt"
+	"html/template"
 	"net/http"
 	"sort"
 	"strings"
@@ -27,6 +28,10 @@ type Core struct {
 	// its headlines.
 	headliners []headliner
 
+	// companion is the one mounted app with a panel for every page, with
+	// its meta for the same reason. Nil when no app is one.
+	companion *headlinerPanel
+
 	// home is the route a signed-in viewer is sent to from "/", taken from the
 	// app that declares AppMeta.Home.
 	home string
@@ -41,6 +46,13 @@ type Core struct {
 type headliner struct {
 	meta AppMeta
 	app  Headliner
+}
+
+// headlinerPanel is the Companion's contribution below the page, and who
+// may see it.
+type headlinerPanel struct {
+	meta AppMeta
+	app  Companion
 }
 
 // appRegistrar adapts a ServeMux to the narrow Registrar an app may touch,
@@ -142,6 +154,12 @@ func Mount(c *Core, authHandlers *auth.Handlers, apps []App) (http.Handler, erro
 
 		if h, ok := app.(Headliner); ok {
 			c.headliners = append(c.headliners, headliner{meta: meta, app: h})
+		}
+		if p, ok := app.(Companion); ok {
+			if c.companion != nil {
+				return nil, fmt.Errorf("two apps claim to be the Companion: %q and %q", c.companion.meta.Slug, meta.Slug)
+			}
+			c.companion = &headlinerPanel{meta: meta, app: p}
 		}
 	}
 
@@ -322,6 +340,35 @@ func (c *Core) navFor(r *http.Request) []NavItem {
 	return items
 }
 
+// reachable says whether the viewer this request is for could reach an app
+// with this meta, by the rule tickerFor states: a guild-gated app needs a
+// profile that proves membership, an officer-only app one that proves rank.
+func reachable(r *http.Request, meta AppMeta) bool {
+	profile, haveProfile := ProfileFrom(r.Context())
+	if meta.RequiresGuild && (!haveProfile || !profile.Membership.IsMember) {
+		return false
+	}
+	if meta.OfficerOnly && (!haveProfile || !profile.Membership.IsOfficer) {
+		return false
+	}
+	return true
+}
+
+// companionFor is the Companion's panel for the viewer this page is for,
+// gated as its headlines would be, and nothing for an anonymous visitor.
+func (c *Core) companionFor(r *http.Request) template.HTML {
+	if c.companion == nil {
+		return ""
+	}
+	if _, signedIn := SessionFrom(r.Context()); !signedIn {
+		return ""
+	}
+	if !reachable(r, c.companion.meta) {
+		return ""
+	}
+	return c.companion.app.Panel(r)
+}
+
 // tickerFor gathers the header's headlines from every app the viewer could
 // reach. The rule is navFor's, but stricter on one point: a guild-gated
 // app's headlines need a profile that proves membership, where its nav entry
@@ -331,14 +378,9 @@ func (c *Core) tickerFor(r *http.Request) []Headline {
 	if _, signedIn := SessionFrom(r.Context()); !signedIn {
 		return nil
 	}
-	profile, haveProfile := ProfileFrom(r.Context())
-
 	var lines []Headline
 	for _, h := range c.headliners {
-		if h.meta.RequiresGuild && (!haveProfile || !profile.Membership.IsMember) {
-			continue
-		}
-		if h.meta.OfficerOnly && (!haveProfile || !profile.Membership.IsOfficer) {
+		if !reachable(r, h.meta) {
 			continue
 		}
 		lines = append(lines, h.app.Headlines(r)...)

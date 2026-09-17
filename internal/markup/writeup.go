@@ -1,4 +1,8 @@
-package dashboard
+// Package markup renders the little Markdown the site asks a model for --
+// headings, paragraphs, lists, tables, bold, italic and code -- into markup a
+// page can trust. Shared by the review card and the assistant, so the model's
+// text is escaped the same way everywhere.
+package markup
 
 import (
 	"html"
@@ -31,8 +35,8 @@ func inline(s string) string {
 	return s
 }
 
-// renderWriteup turns the model's Markdown into the card's markup.
-func renderWriteup(text string) template.HTML {
+// Render turns the model's Markdown into the page's markup.
+func Render(text string) template.HTML {
 	lines := strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n")
 	var b strings.Builder
 	var para []string
