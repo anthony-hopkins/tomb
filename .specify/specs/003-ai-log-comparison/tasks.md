@@ -341,3 +341,12 @@ leaderboard page per boss and picks the player best across the raid; the
 worker reads both sides' cast tables and gives the model casts per minute and
 active time; bare talent ids are dropped rather than misnamed; the card shows
 an animated line of patter while the worker runs.
+
+## Seventh amendment, 2026-09-17: the full review
+
+`blizzard.BuildReader` (loadouts with tooltips, the spec's tree, both captured
+live); `combatlogs/build.go` picks the loadout matching the kill and composes
+the build sheet with cooldown-use rows; the prompts ask for the fixed sections
+in Markdown with a 16k output budget; `dashboard/writeup.go` renders that
+Markdown safely; the result section shows the review at the full width under
+the tables.

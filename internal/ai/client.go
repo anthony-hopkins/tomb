@@ -47,7 +47,9 @@ func NewVertex(model, region string) *Vertex {
 	return &Vertex{
 		Model: model, Region: region,
 		MetadataURL: "http://metadata.google.internal/computeMetadata/v1",
-		HTTP:        &http.Client{Timeout: 90 * time.Second},
+		// A full review is thousands of words, and the model thinks before
+		// it writes; a minute and a half was cutting it off.
+		HTTP: &http.Client{Timeout: 5 * time.Minute},
 	}
 }
 
@@ -173,7 +175,9 @@ func (v *Vertex) Write(ctx context.Context, system, prompt string) (string, Usag
 		temp = 0.4
 	}
 	if max == 0 {
-		max = 2048
+		// A full review is three thousand words, and the newer models
+		// spend part of this budget thinking before they write.
+		max = 16384
 	}
 	body, _ := json.Marshal(map[string]any{
 		"systemInstruction": map[string]any{"parts": []map[string]string{{"text": system}}},

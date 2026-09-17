@@ -522,3 +522,28 @@ After the first real comparison the guild master directed three things:
 - **Visible work.** While an analysis runs the card shows a pulsing mark and a
   line of patter that changes every few seconds ("Counting casts against the
   cooldowns…"), in CSS alone; each refresh of the page starts on a later line.
+
+## Seventh amendment, 2026-09-17: the full review
+
+The first write-up was a paragraph cut off mid-sentence, against a reference
+document (a build, engine, benchmarks, opener, priority, survival, cooldown
+rules, gear parity, what to verify) the guild master had produced elsewhere.
+The comparison now produces that document:
+
+- **The build in the game's own words.** Both players' builds come from
+  Blizzard's saved loadouts -- the one that best matches the talents Warcraft
+  Logs recorded in the kill, so a player with several builds is read with the
+  one they raided in -- with every talent's rank, tooltip and cooldown, what
+  each choice node was chosen over (from the spec's talent tree), the import
+  string, and the active abilities in the trees the build leaves out. All of it
+  is data from Blizzard; none of it is the model's memory.
+- **Cooldown use, computed.** For every cooldown of twenty seconds or more,
+  each side's casts in a kill against the most possible in its length, as a
+  percentage: what was pressed on cooldown and what was hoarded.
+- **A document, not a paragraph.** The model writes Markdown in fixed sections
+  -- Overview, The build, The engine, Benchmarks, Boss by boss, Opener,
+  Priority, Staying alive, Cooldown rules, Gear, Do these first, What to
+  verify -- of about three thousand words, with an output budget to match;
+  the card renders headings, lists and tables, escaping everything else.
+- **What to verify** names what is data and what is the model's inference,
+  so a reader can tell the two apart, as the reference document did.

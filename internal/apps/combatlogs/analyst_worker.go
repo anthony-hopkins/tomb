@@ -77,7 +77,13 @@ type yourSide struct {
 	Gear        []fights.GearNamed
 	GearNote    string
 	Talents     []string
-	Label       string // for the audit entry
+	// KillTalents is what Warcraft Logs recorded of the build in the
+	// kill, node ids and all, to pick the matching loadout (build.go).
+	KillTalents []wcl.Talent
+	// Durations is each boss's kill or best pull length, in Bosses' order,
+	// for the cooldown-use rows.
+	Durations []time.Duration
+	Label     string // for the audit entry
 }
 
 // run does one analysis. Every way out settles the row; a panic settles it
@@ -139,6 +145,19 @@ func (a *App) run(ctx context.Context, an fights.Analysis) {
 		you.Mode = ai.ModeCompare
 	}
 
+	theirClass := top.Class
+	if theirClass == "" {
+		theirClass = wcl.ClassName(top.ClassID)
+	}
+	// Both builds in the game's own words (build.go): Blizzard's loadouts
+	// matched to the kills, with the trees' tooltips and cooldowns.
+	theirSheet := a.sheet(ctx, blizzard.CharacterRef{Name: top.Name, RealmSlug: cp.RealmSlug}, theirClass, top.Spec, top.Talents)
+	yourSheet := a.sheet(ctx, blizzard.CharacterRef{Name: an.Name, RealmSlug: an.RealmSlug}, you.Class, you.Spec, you.KillTalents)
+	if yourSheet != nil {
+		you.Talents = yourSheet.Names()
+	}
+	yourCDs, theirCDs := cooldowns(yourSheet), cooldowns(theirSheet)
+
 	// Their parse on every boss of the night, from the cache or Warcraft
 	// Logs; a boss they have no ranked kill on is noted, not fatal. A
 	// showcase filled these in itself, boss by boss.
@@ -181,6 +200,10 @@ func (a *App) run(ctx context.Context, an fights.Analysis) {
 				you.Bosses[i].TheirRankPercent, you.Bosses[i].TheirDuration = rk.RankPercent, seconds(rk.Duration)
 				if rk.Casts != nil {
 					you.Bosses[i].TheirCasts, you.Bosses[i].TheirActivePct = castRates(*rk.Casts, rk.Duration), activePct(*rk.Casts)
+					you.Bosses[i].TheirCooldowns = efficiency(castCounts(nil, you.Bosses[i].TheirCasts), theirCDs, rk.Duration)
+				}
+				if len(you.Durations) == len(you.Bosses) && len(you.Bosses[i].YourCasts) > 0 {
+					you.Bosses[i].YourCooldowns = efficiency(castCounts(you.Bosses[i].YourCasts, nil), yourCDs, you.Durations[i])
 				}
 				if healer {
 					you.Bosses[i].TheirHPS = rk.Amount
@@ -222,13 +245,12 @@ func (a *App) run(ctx context.Context, an fights.Analysis) {
 		}
 	}
 	theirTalentNames := a.talentNames(ctx, theirTalents)
+	if theirSheet != nil {
+		theirTalentNames = theirSheet.Names()
+	}
 
 	table := fights.UpgradeTable(you.Gear, theirNamed)
 	diff := fights.DiffTalents(you.Talents, theirTalentNames)
-	theirClass := top.Class
-	if theirClass == "" {
-		theirClass = wcl.ClassName(top.ClassID)
-	}
 	mismatch := (you.Spec != "" && top.Spec != "" && !strings.EqualFold(you.Spec, top.Spec)) ||
 		(you.Class != "" && theirClass != "" && !strings.EqualFold(you.Class, theirClass))
 
@@ -238,13 +260,15 @@ func (a *App) run(ctx context.Context, an fights.Analysis) {
 		Bosses: you.Bosses,
 		You: ai.Player{Name: an.Name, Class: you.Class, Spec: you.Spec, Damage: you.Damage, Healing: you.Healing, Deaths: you.Deaths,
 			Gear: gearLines(you.Gear), Talents: orEmptyStrings(you.Talents), Note: you.GearNote},
-		Them:     ai.Player{Name: top.Name, Class: theirClass, Spec: top.Spec, Gear: gearLines(theirNamed), Talents: orEmptyStrings(theirTalentNames)},
-		Table:    table,
-		Diff:     diff,
-		Mismatch: mismatch,
+		Them:       ai.Player{Name: top.Name, Class: theirClass, Spec: top.Spec, Gear: gearLines(theirNamed), Talents: orEmptyStrings(theirTalentNames)},
+		Table:      table,
+		Diff:       diff,
+		Mismatch:   mismatch,
+		YourBuild:  yourSheet,
+		TheirBuild: theirSheet,
 	}
 
-	callCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	callCtx, cancel := context.WithTimeout(ctx, 6*time.Minute)
 	defer cancel()
 	text, usage, err := a.deps.AI.Write(callCtx, ai.SystemFor(you.Mode), ai.Build(in))
 	switch {
@@ -335,6 +359,7 @@ func (a *App) fromWCL(ctx context.Context, an fights.Analysis, cp *fights.Compar
 		}
 		you.Bosses = append(you.Bosses, line)
 		you.BossIDs = append(you.BossIDs, e.ID)
+		you.Durations = append(you.Durations, rk.Duration)
 		you.Raid.Pulls += e.Kills
 		you.Raid.Kills += e.Kills
 		if rk.StartedAt.After(latest.StartedAt) && len(rk.Gear) > 0 {
@@ -354,6 +379,7 @@ func (a *App) fromWCL(ctx context.Context, an fights.Analysis, cp *fights.Compar
 		you.Gear = append(you.Gear, fights.GearNamed{Slot: i, ID: g.ID, Name: g.Name, Level: g.ItemLevel})
 	}
 	you.Talents = a.talentNames(ctx, latest.Talents)
+	you.KillTalents = latest.Talents
 	return you, nil
 }
 
@@ -495,6 +521,7 @@ func (a *App) fromUpload(ctx context.Context, an fights.Analysis, healer bool) (
 		}
 		you.Bosses = append(you.Bosses, line)
 		you.BossIDs = append(you.BossIDs, b.EncounterID)
+		you.Durations = append(you.Durations, b.Best.Fight.Duration)
 	}
 	you.Raid.Wipes = you.Raid.Pulls - you.Raid.Kills
 	you.Gear, you.GearNote = a.yourGear(ctx, an.Name, an.RealmSlug, n.Gear)

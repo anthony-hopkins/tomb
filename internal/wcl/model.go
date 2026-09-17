@@ -31,10 +31,13 @@ type Gear struct {
 	Quality   int
 }
 
-// Talent is one chosen talent in a ranked fight.
+// Talent is one chosen talent in a ranked fight. NodeID is the talent
+// tree's node, the id Blizzard's loadouts list too, when the shape carried
+// one (a character's own ranking does; a leaderboard entry does not).
 type Talent struct {
-	ID   int
-	Name string
+	ID     int
+	Name   string
+	NodeID int
 }
 
 // Ranking is a player's best recorded performance on one boss at one
