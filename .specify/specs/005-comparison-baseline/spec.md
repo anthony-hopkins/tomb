@@ -73,6 +73,14 @@ waste crests.
   review section by section from the parsed object.
 - **FR-055 (what to verify)**: The review MUST name what is data and what is
   inference, as a list of rows.
+- **FR-056 (tables where the data is tabular)** *(amendment, 2026-09-17)*: A
+  section that lists like things with the same facts about each -- the upgrade
+  path, the opener, the priority, the cooldown rules, the cooldown diff, boss
+  by boss, the slots behind -- MUST be asked for as a Markdown table with a
+  header row, the prose kept for the judgement around it; the card renders
+  such a table inside a scroller so a wide one does not break the page on a
+  phone. Asked of the guild master: "the analysis data to come back in table
+  format where appropriate such as item level upgrade paths, opening order".
 
 ## Success Criteria
 
@@ -83,6 +91,9 @@ waste crests.
   three lines (asserted in code).
 - **SC-014**: With an empty crest catalog every upgrade step says the cost is
   unknown; with a filled one, steps are ordered by item level per crest.
+- **SC-015**: Both instructions ask for the upgrade path, the opener, the
+  priority and the cooldown rules as tables (asserted in code), and a table
+  in a write-up renders inside a scroller.
 
 ## Out of scope
 

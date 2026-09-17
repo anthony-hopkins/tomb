@@ -133,12 +133,13 @@ func TestRosterRowsBehaveLikeCharacterRows(t *testing.T) {
 
 	body := render(t, v)
 
-	// Every row focusable, or tabbing the roster reveals nothing.
+	// Every row is one link to the character's panel: a click anywhere on
+	// the row opens the character, and tabbing to it reveals the card.
 	rows := strings.Count(body, `class="character-row"`)
-	focusable := strings.Count(body, `class="character-row" tabindex="0"`)
-	if rows == 0 || rows != focusable {
-		t.Errorf("%d rows but %d focusable; the card is keyboard-unreachable on the rest",
-			rows, focusable)
+	links := strings.Count(body, `class="row-link" href="?c=`)
+	if rows == 0 || rows != links {
+		t.Errorf("%d rows but %d row links; the rest open nothing when clicked and are keyboard-unreachable",
+			rows, links)
 	}
 
 	// Every row carries a card, using the same classes the stylesheet keys off.

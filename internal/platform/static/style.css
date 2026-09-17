@@ -359,12 +359,21 @@ main:has(.dashboard) { max-width: none; }
 
 .character-row {
   position: relative;
+  border-left: 3px solid transparent;
+}
+
+/* The row's whole face is one link to the character's panel, so a click
+   anywhere on it -- not only on the name inside the card -- opens the
+   character. The padding is on the link rather than the row for the same
+   reason: no dead margin around the target. */
+.row-link {
   display: flex;
   flex-direction: column;
   gap: 0.1rem;
   padding: 0.7rem 0.9rem;
-  border-left: 3px solid transparent;
-  cursor: default;
+  color: inherit;
+  text-decoration: none;
+  outline: none;
 }
 
 .character-row + .character-row { border-top: 1px solid var(--line); }
@@ -1721,7 +1730,9 @@ a.log-kind:focus { border-color: var(--accent); }
 .writeup ul, .writeup ol { margin: 0 0 0.9rem; padding-left: 1.4rem; max-width: 72ch; }
 .writeup li { margin: 0.25rem 0; line-height: 1.5; }
 .writeup code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.85em; background: rgba(16, 48, 72, 0.55); padding: 0.1em 0.35em; border-radius: 4px; overflow-wrap: anywhere; }
-.writeup-table { width: 100%; border-collapse: collapse; margin: 0.5rem 0 1rem; font-size: 0.88rem; }
+.writeup-scroll { overflow-x: auto; margin: 0.5rem 0 1rem; }
+.writeup-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+.writeup-table td:first-child, .writeup-table th:first-child { white-space: nowrap; }
 .writeup-table th, .writeup-table td { padding: 0.35rem 0.6rem; text-align: left; border-bottom: 1px solid var(--line); vertical-align: top; }
 .writeup-table th { font-size: 0.7rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
 .do-first li { margin: 0.4rem 0; font-weight: 600; }
