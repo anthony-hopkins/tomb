@@ -33,6 +33,14 @@ func (f fakeWCL) TopPlayer(context.Context, int, int, string, string, string) (w
 	return wcl.CharacterRef{Region: "us", Slug: "area-52", Name: "Toptank"}, f.rank, nil
 }
 
+func (f fakeWCL) Leaderboard(context.Context, int, int, string, string, string) ([]wcl.Entry, error) {
+	return []wcl.Entry{{Ref: wcl.CharacterRef{Region: "us", Slug: "area-52", Name: "Toptank"}, Rank: f.rank}}, nil
+}
+
+func (f fakeWCL) Casts(context.Context, string, int, string) (wcl.CastSet, error) {
+	return wcl.CastSet{}, wcl.ErrNoRank
+}
+
 func (f fakeWCL) ZoneRankings(context.Context, wcl.CharacterRef) (wcl.Zone, error) {
 	return wcl.Zone{Class: "Death Knight", Spec: "Blood", Difficulty: 5, Metric: "dps",
 		Encounters: []wcl.ZoneEncounter{{ID: 3009, Name: "Vexie and the Geargrinders", Kills: 6}, {ID: 3010, Name: "Cauldron of Carnage", Kills: 4}}}, nil

@@ -153,7 +153,17 @@
       </div>
     </form>
     {{end}}
-    {{if .Pending}}<p class="notice" role="status">Analysing&hellip; this page will update itself.</p>{{end}}
+    {{if .Pending}}
+    {{/* Working, visibly: a pulsing mark and a line of patter that changes
+         every few seconds, in CSS alone. The page fetches itself again
+         every five seconds until the write-up lands, and each fetch starts
+         the patter on a later line. */}}
+    <div class="analysing" role="status" aria-live="polite">
+      <span class="analysing-orb" aria-hidden="true"></span>
+      <span class="analysing-words">{{range .Phrases}}<span class="analysing-phrase">{{.}}</span>{{end}}</span>
+      <span class="visually-hidden">Analysing. This page updates itself.</span>
+    </div>
+    {{end}}
     {{with .Failure}}<p class="notice" role="alert">The last analysis could not be completed: {{.}}. Try again later.</p>{{end}}
   </section>
 {{end}}

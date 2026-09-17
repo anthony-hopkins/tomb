@@ -162,9 +162,26 @@ func (a *App) run(ctx context.Context, an fights.Analysis) {
 				theirs[id] = &rk
 			}
 		}
+		// Their ability use in each of those kills, from the report's cast
+		// table, kept with the cached parse so the next run has it.
+		for id, rk := range theirs {
+			if rk.Casts != nil || rk.ReportCode == "" {
+				continue
+			}
+			cs, err := a.deps.WCL.Casts(ctx, rk.ReportCode, rk.FightID, top.Name)
+			if err != nil {
+				log.Warn("their casts on a boss", "encounter", id, "error", err)
+				continue
+			}
+			rk.Casts = &cs
+			_, _ = a.putComparison(ctx, ref, id, cp.WCLDiff, cp.Metric, *rk)
+		}
 		for i, id := range you.BossIDs {
 			if rk := theirs[id]; rk != nil {
 				you.Bosses[i].TheirRankPercent, you.Bosses[i].TheirDuration = rk.RankPercent, seconds(rk.Duration)
+				if rk.Casts != nil {
+					you.Bosses[i].TheirCasts, you.Bosses[i].TheirActivePct = castRates(*rk.Casts, rk.Duration), activePct(*rk.Casts)
+				}
 				if healer {
 					you.Bosses[i].TheirHPS = rk.Amount
 				} else {
@@ -289,7 +306,7 @@ func (a *App) fromWCL(ctx context.Context, an fights.Analysis, cp *fights.Compar
 		Class: zone.Class, Spec: zone.Spec,
 		Raid: ai.Raid{
 			Difficulty: fights.DifficultyName(wcl.GameDifficulty(zone.Difficulty)),
-			Note:       "your side is your latest ranked kill on each boss as recorded on Warcraft Logs; wipes, pull counts and ability use are not known from it",
+			Note:       "your side is your latest ranked kill on each boss as recorded on Warcraft Logs, with the ability use in that kill from its cast table; wipes and pull counts are not known from it",
 		},
 		Label: "latest ranked kills on Warcraft Logs",
 	}
@@ -302,6 +319,13 @@ func (a *App) fromWCL(ctx context.Context, an fights.Analysis, cp *fights.Compar
 		}
 		line := ai.Boss{Name: e.Name, Pulls: e.Kills, Kills: e.Kills, YourBestDuration: seconds(rk.Duration), YourBestWasKill: true,
 			YourRankPercent: rk.RankPercent, YourDate: rk.StartedAt.In(a.deps.Config.Timezone).Format("2 Jan 2006")}
+		if rk.ReportCode != "" {
+			if cs, err := a.deps.WCL.Casts(ctx, rk.ReportCode, rk.FightID, an.Name); err != nil {
+				a.deps.Logger.Warn("your casts on a boss", "encounter", e.ID, "error", err)
+			} else {
+				line.YourCasts, line.YourActivePct = yourRates(cs, rk.Duration), activePct(cs)
+			}
+		}
 		if healer {
 			line.YourBestHPS = rk.Amount
 			you.Healing += int64(rk.Amount * rk.Duration.Seconds())
@@ -462,7 +486,7 @@ func (a *App) fromUpload(ctx context.Context, an fights.Analysis, healer bool) (
 		line := ai.Boss{
 			Name: b.Name, Pulls: b.Pulls, Kills: b.Kills, YourDeaths: b.Deaths,
 			YourBestDuration: seconds(b.Best.Fight.Duration), YourBestWasKill: b.Best.Fight.Kill,
-			YourCasts: casts(b.Best.Casts),
+			YourCasts: casts(b.Best.Casts, b.Best.Fight.Duration),
 		}
 		if healer {
 			line.YourBestHPS = perSecond(b.Best.Healing, b.Best.Fight.Duration)
@@ -488,23 +512,15 @@ func (a *App) fromUpload(ctx context.Context, an fights.Analysis, healer bool) (
 	return you, nil
 }
 
-// talentNames names Warcraft Logs talents, resolving any that came as a
-// bare id.
-func (a *App) talentNames(ctx context.Context, ts []wcl.Talent) []string {
-	var missing []int
-	for _, t := range ts {
-		if t.Name == "" {
-			missing = append(missing, t.ID)
-		}
-	}
-	gd, _ := a.deps.Blizzard.(blizzard.GameData)
-	names := fights.ResolveTalents(ctx, a.store, gd, missing)
+// talentNames is the named talents of a Warcraft Logs ranking. Bare ids
+// are dropped: a leaderboard entry's talent ids are not Blizzard's, and
+// naming them through Game Data gave other classes' talents (seen live,
+// 2026-09-17), which is worse than saying nothing.
+func (a *App) talentNames(_ context.Context, ts []wcl.Talent) []string {
 	out := make([]string, 0, len(ts))
 	for _, t := range ts {
 		if t.Name != "" {
 			out = append(out, t.Name)
-		} else {
-			out = append(out, names[t.ID])
 		}
 	}
 	return out
@@ -569,18 +585,56 @@ func gearLines(gear []fights.GearNamed) []ai.Gear {
 	return out
 }
 
-// casts is a pull's ability use for the model: every spell, counts for the
-// rotational ones and timings for the rare ones, most used first.
-func casts(cs []fights.Cast) []ai.Cast {
+// casts is a pull's ability use for the model: every spell, counts and
+// rates for the rotational ones and timings for the rare ones, most used
+// first.
+func casts(cs []fights.Cast, d time.Duration) []ai.Cast {
 	out := make([]ai.Cast, 0, len(cs))
 	for _, c := range cs {
 		name := c.Name
 		if name == "" {
 			name = strconv.Itoa(c.ID)
 		}
-		out = append(out, ai.Cast{Name: name, Count: c.Count, At: c.At})
+		out = append(out, ai.Cast{Name: name, Count: c.Count, PerMinute: perMinute(c.Count, d), At: c.At})
 	}
 	return out
+}
+
+// yourRates and castRates turn a kill's cast table into counts and rates,
+// most used first.
+func yourRates(cs wcl.CastSet, d time.Duration) []ai.Cast {
+	out := make([]ai.Cast, 0, len(cs.Abilities))
+	for _, c := range cs.Abilities {
+		out = append(out, ai.Cast{Name: c.Name, Count: c.Count, PerMinute: perMinute(c.Count, d)})
+	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].Count > out[j].Count })
+	return out
+}
+
+func castRates(cs wcl.CastSet, d time.Duration) []ai.CastRate {
+	out := make([]ai.CastRate, 0, len(cs.Abilities))
+	for _, c := range cs.Abilities {
+		out = append(out, ai.CastRate{Name: c.Name, Count: c.Count, PerMinute: perMinute(c.Count, d)})
+	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].Count > out[j].Count })
+	return out
+}
+
+// perMinute is a count over a length, to one decimal.
+func perMinute(count int, d time.Duration) float64 {
+	if d <= 0 {
+		return 0
+	}
+	return float64(int(float64(count)/d.Minutes()*10+0.5)) / 10
+}
+
+// activePct is how much of the kill the player was doing something, as a
+// whole-number percentage; zero when the table did not say.
+func activePct(cs wcl.CastSet) float64 {
+	if cs.Total <= 0 {
+		return 0
+	}
+	return float64(int(100 * cs.Active / cs.Total))
 }
 
 func perSecond(amount int64, d time.Duration) float64 {

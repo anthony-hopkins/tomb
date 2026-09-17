@@ -498,3 +498,27 @@ After the first working run the guild master directed four things:
   filter (checked live 2026-09-17). A member is measured against somebody they
   could actually raid with, and the region's realm slugs resolve for the
   follow-up reads.
+
+## Sixth amendment, 2026-09-17: the pick across the raid, ability use, and visible work
+
+After the first real comparison the guild master directed three things:
+
+- **The player to compare against is good across the raid, not first on one
+  boss.** Warcraft Logs' "All Stars" table is not in its API, so the site reads
+  one page of the region's leaderboard on every boss of the raid (cached a day
+  each) and scores each named player by how close to the top of each boss they
+  are; the most points across the raid wins. Players who hide their name on
+  Warcraft Logs ("Anonymous", no realm) are never picked: nothing more of
+  theirs can be read. A leaderboard entry's talent ids are not Blizzard's and
+  are never named through Game Data (that produced other classes' talents);
+  only the named tree from the player's own ranking is used, so a build that
+  cannot be read is left out rather than shown as numbers.
+- **Ability use on both sides.** For a member with kills on Warcraft Logs, each
+  kill's cast table is read for both the member and the top player: casts per
+  minute of every ability, and active time. The write-up is told to compare
+  them ability by ability against cooldowns and say what was left on the
+  table. An uploaded night's own cast counts get the same rates. A showcase
+  still carries no ability use (third amendment, revised).
+- **Visible work.** While an analysis runs the card shows a pulsing mark and a
+  line of patter that changes every few seconds ("Counting casts against the
+  cooldowns…"), in CSS alone; each refresh of the page starts on a later line.

@@ -1,0 +1,57 @@
+{
+  "_note": "CAPTURED from the live API on 2026-09-17 (report NZy6ntYwjDH79xkA fight 9, filtered to one player): the Casts table is one entry per source with its abilities; other per-entry fields (gear, talents, targets, damageAbilities) trimmed.",
+  "data": {
+    "reportData": {
+      "report": {
+        "table": {
+          "data": {
+            "entries": [
+              {
+                "name": "Nekromoo",
+                "guid": 250439304,
+                "type": "DeathKnight",
+                "total": 381,
+                "activeTime": 511536,
+                "abilities": [
+                  {
+                    "guid": 50842,
+                    "name": "Blood Boil",
+                    "total": 77,
+                    "type": 32
+                  },
+                  {
+                    "guid": 49998,
+                    "name": "Death Strike",
+                    "total": 76,
+                    "type": 1
+                  },
+                  {
+                    "guid": 206930,
+                    "name": "Heart Strike",
+                    "total": 70,
+                    "type": 1
+                  },
+                  {
+                    "guid": 433895,
+                    "name": "Vampiric Strike",
+                    "total": 39,
+                    "type": 32
+                  },
+                  {
+                    "guid": 43265,
+                    "name": "Death and Decay",
+                    "total": 21,
+                    "type": 32
+                  }
+                ]
+              }
+            ],
+            "totalTime": 535635,
+            "logVersion": 17,
+            "gameVersion": 1
+          }
+        }
+      }
+    }
+  }
+}

@@ -47,11 +47,11 @@ func TestAnalystFromWarcraftLogs(t *testing.T) {
 	if newest == nil || newest.State != fights.Done || done == nil {
 		t.Fatalf("state = %+v", newest)
 	}
-	// One top lookup on Vexie (most kills) plus the top player's own
-	// ranking there (named talents), your latest kill on both bosses,
-	// their parse on Cauldron.
-	if w.tops != 1 || w.zones != 2 || w.latests != 2 || w.ranks != 2 {
-		t.Errorf("tops %d zones %d latests %d ranks %d; want 1 2 2 2", w.tops, w.zones, w.latests, w.ranks)
+	// The pick read both bosses' leaderboards and the pick's own ranking
+	// on Vexie (named talents); your latest kill on both bosses; their
+	// parse on Cauldron; and the cast tables of all four kills.
+	if w.boards != 2 || w.zones != 2 || w.latests != 2 || w.ranks != 2 || w.castsN != 4 {
+		t.Errorf("boards %d zones %d latests %d ranks %d casts %d; want 2 2 2 2 4", w.boards, w.zones, w.latests, w.ranks, w.castsN)
 	}
 	var head, neck *fights.UpgradeRow
 	for i := range done.Table {
@@ -72,7 +72,7 @@ func TestAnalystFromWarcraftLogs(t *testing.T) {
 		t.Errorf("diff = %+v", done.TalentDiff)
 	}
 	for _, want := range []string{"## raid", "Heroic", "Vexie and the Geargrinders", "Cauldron of Carnage", `"your_rank_percent": 74`, `"your_kill_date": "14 Sep 2026"`,
-		`"their_dps": 1400000`, "Toptank", "wipes, pull counts and ability use are not known", "## mismatch\nfalse"} {
+		`"their_dps": 1400000`, "Toptank", "wipes and pull counts are not known", `"their_casts_per_minute"`, `"name": "Death Strike"`, `"per_minute": 12.1`, `"per_minute": 15.1`, `"your_active_time_pct": 96`, "## mismatch\nfalse"} {
 		if !strings.Contains(model.prompt, want) {
 			t.Errorf("prompt is missing %q", want)
 		}
@@ -103,12 +103,12 @@ func TestAnalystShowcase(t *testing.T) {
 	if newest == nil || newest.State != fights.Done || done == nil || done.Source != fights.SourceShowcase {
 		t.Fatalf("state = %+v", newest)
 	}
-	// The route looked the top player up on the first boss at Mythic; the
-	// worker used that answer and looked up the second boss; each lookup
-	// re-read that player's own ranking for named talents. Nothing else:
-	// no report is opened, no cast table read, nothing of the member's.
-	if w.tops != 2 || w.latests != 0 || w.ranks != 2 {
-		t.Errorf("tops %d latests %d ranks %d; want 2 0 2", w.tops, w.latests, w.ranks)
+	// The route read the first boss's leaderboard at Mythic; the worker
+	// used that answer and read the second boss's; each re-read the top
+	// player's own ranking for named talents. Nothing else: no cast table
+	// read, nothing of the member's.
+	if w.boards != 2 || w.latests != 0 || w.ranks != 2 || w.castsN != 0 {
+		t.Errorf("boards %d latests %d ranks %d casts %d; want 2 0 2 0", w.boards, w.latests, w.ranks, w.castsN)
 	}
 	if !strings.Contains(model.system, "briefing one of your raiders who has no logged raids") {
 		t.Error("the compare instruction was used for a showcase")
@@ -182,10 +182,11 @@ func TestAnalystFromUpload(t *testing.T) {
 			}
 			// Nekromoo pulled Vexie (Mythic) and Cauldron (Heroic) once
 			// each; the night is the harder difficulty, so Vexie alone: one
-			// top-player lookup plus that player's own ranking there, no other
-			// boss to fetch, no Warcraft Logs lookup of the member.
-			if w.tops != 1 || w.ranks != 1 || w.zones != 0 || w.latests != 0 {
-				t.Errorf("tops %d ranks %d zones %d latests %d; want 1 1 0 0", w.tops, w.ranks, w.zones, w.latests)
+			// pick across the raid's two leaderboards plus the pick's own
+			// ranking on Vexie, no other boss to fetch, no Warcraft Logs
+			// lookup of the member, and the top player's cast table on Vexie.
+			if w.boards != 2 || w.ranks != 1 || w.zones != 0 || w.latests != 0 || w.castsN != 1 {
+				t.Errorf("boards %d ranks %d zones %d latests %d casts %d; want 2 1 0 0 1", w.boards, w.ranks, w.zones, w.latests, w.castsN)
 			}
 			var head, neck *fights.UpgradeRow
 			for i := range done.Table {
@@ -272,8 +273,8 @@ func TestAnalystFetchesEveryBoss(t *testing.T) {
 	if !a.AnalyseOnce(context.Background()) {
 		t.Fatal("nothing pending")
 	}
-	if w.tops != 1 || w.ranks != 2 {
-		t.Errorf("top lookups %d, rank fetches %d; want 1 and 2 (the top player's own ranking, then the other boss)", w.tops, w.ranks)
+	if w.boards != 2 || w.ranks != 2 || w.castsN != 2 {
+		t.Errorf("boards %d, rank fetches %d, casts %d; want 2, 2 (the pick's own ranking, then the other boss) and 2", w.boards, w.ranks, w.castsN)
 	}
 	for _, want := range []string{"Vexie and the Geargrinders", "Cauldron of Carnage", `"pulls": 2`, `"their_dps": 1400000`} {
 		if !strings.Contains(model.prompt, want) {

@@ -178,7 +178,16 @@ func (a *App) analyse(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	top, err := a.topPlayer(r.Context(), mainEncounter, diff, class, spec, metric)
+	// The player to compare against: for a showcase the top parse on the
+	// main boss, as the worker takes each boss's top parse; otherwise the
+	// player who is best across the whole raid (pick.go).
+	var top fights.ComparisonPlayer
+	var err error
+	if an.Source == fights.SourceShowcase {
+		top, err = a.topPlayer(r.Context(), mainEncounter, diff, class, spec, metric)
+	} else {
+		top, err = a.pickTop(r.Context(), a.raidBosses(r.Context(), mainEncounter), mainEncounter, diff, class, spec, metric)
+	}
 	switch {
 	case errors.Is(err, wcl.ErrNoRank):
 		back(msgNoRank, nil)
@@ -238,36 +247,38 @@ func summariesOf(fs []fights.Fight, name, realm string) []fights.Summary {
 	return out
 }
 
-// topPlayer is the leaderboard's first player of a class and spec on a
-// boss, as a comparison row. The leaderboard itself is cached a day, keyed
-// by class and spec rather than by player, so a busy night asks Warcraft
-// Logs once per boss.
+// raidBosses is every boss of the current raid, for the pick; the main
+// boss alone when the raid cannot be read.
+func (a *App) raidBosses(ctx context.Context, mainEncounter int) []int {
+	raid, err := a.deps.WCL.CurrentZone(ctx)
+	if err != nil || len(raid.Encounters) == 0 {
+		return []int{mainEncounter}
+	}
+	ids := make([]int, 0, len(raid.Encounters))
+	for _, e := range raid.Encounters {
+		ids = append(ids, e.ID)
+	}
+	return ids
+}
+
+// topPlayer is the leaderboard's first named player of a class and spec
+// on a boss, as a comparison row: the top parse there, which is what a
+// showcase shows boss by boss. The page is cached a day (pick.go), so a
+// busy night asks Warcraft Logs once per boss.
 func (a *App) topPlayer(ctx context.Context, encounterID, diff int, class, spec, metric string) (fights.ComparisonPlayer, error) {
 	key := topKey(class, spec, encounterID, diff, metric)
 	if have, err := a.store.ComparisonPlayer(ctx, key); err == nil && a.now().Sub(have.FetchedAt) < comparisonTTL {
 		return have, nil
 	}
-	ref, ranking, err := a.deps.WCL.TopPlayer(ctx, encounterID, diff, wcl.ClassSlug(class), spec, metric)
+	entries, err := a.leaderboard(ctx, encounterID, diff, class, spec, metric)
 	if err != nil {
 		return fights.ComparisonPlayer{}, err
 	}
+	ref, ranking := entries[0].Ref, entries[0].Rank
 	if ranking.Class == "" {
 		ranking.Class = class
 	}
-	// The leaderboard's talents are ids alone, every point of them; the
-	// player's own ranking on the boss is the same kill with the talents
-	// as a named tree, the shape the member's side comes in. One more
-	// read, so the diff is like against like and needs no name lookups.
-	// The leaderboard's answer stands when that read fails.
-	if own, err := a.deps.WCL.BestRank(ctx, ref, encounterID, diff, metric); err == nil && len(own.Talents) > 0 {
-		ranking.Talents = own.Talents
-		if len(own.Gear) > 0 {
-			ranking.Gear = own.Gear
-		}
-		if own.ReportCode != "" {
-			ranking.ReportCode, ranking.FightID = own.ReportCode, own.FightID
-		}
-	}
+	a.enrich(ctx, ref, encounterID, diff, metric, &ranking)
 	// Two rows: the leaderboard's answer under the class-and-spec key, and
 	// the player's parse under their own, so a later run on that player
 	// finds it too.
