@@ -45,7 +45,9 @@ Blizzard's realm slug and the character name, which Warcraft Logs shares.
 ```
 
 It queries `worldData.encounter(id:).characterRankings(difficulty:, className:,
-specName:, metric:, includeCombatantInfo: true, page: 1)` and reads the first of
+specName:, metric:, serverRegion:, includeCombatantInfo: true, page: 1)` -- the
+`serverRegion` being the site's own (`BNET_REGION` upper-case; fifth amendment,
+checked live 2026-09-17), or null for the world when the client has none -- and reads the first of
 `rankings[]` (**confirmed live 2026-09-16**, fixture `character-rankings.json`;
 `server.region` and `server.name`/`slug` give the character reference). Class names
 are spelled without spaces in the query (`DeathKnight`).

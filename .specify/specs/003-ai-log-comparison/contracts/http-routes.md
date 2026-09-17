@@ -121,13 +121,14 @@ about play is read. Every outcome that creates a row writes
 
 The selected character's card gains:
 
-- a **Talents** block under Equipped: from Blizzard's active loadout, or from the
-  character's latest parsed pull with the date, or "unavailable" (FR-033, D8);
+- *(the Talents block under Equipped, FR-033, was withdrawn by the fifth
+  amendment)*;
 - an **Analyse** form inside the Armory panel, under the render (fourth
   amendment): a source picker — "My latest raid on
   Warcraft Logs" first, then each of this member's uploads with raid pulls for the
   character (file, date, pull count) — a hidden character field, and the button;
-- the **result column** to the right of the card (fourth amendment): the upgrade
+- the **result section** under the card at the full width (fifth amendment; a
+  column to its right under the fourth): the upgrade
   table, the talent difference and the write-up, from the
   newest `done` analysis for this character, with "Analysed <time> against <name>"
   (a showcase says instead "No logs of yours yet, so this is the other way round:

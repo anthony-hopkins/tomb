@@ -1,11 +1,11 @@
 {{define "dashboard.html"}}
-{{/* Three columns when a comparison is on the page, two otherwise: the
-     character list on the left, the selected character's Armory panel in the
-     middle (with the comparison's controls under the render, see
-     "analysis-controls"), and the comparison's result on the right. Switching character is a plain link to the same page
+{{/* Two columns: the character list on the left; on the right, the selected
+     character's Armory panel at the full width (with the comparison's controls
+     under the render, see "analysis-controls") and the comparison's result
+     under it. Switching character is a plain link to the same page
      with ?c=<realm>/<name> -- a GET, so it is bookmarkable, works without
      JavaScript, and the back button does what it should. */}}
-<div class="dashboard{{if not .Characters}} is-empty{{end}}{{if .Analysis}} has-analysis{{end}}">
+<div class="dashboard{{if not .Characters}} is-empty{{end}}">
 
   {{if .Characters}}
   <aside class="character-nav" aria-label="Your characters">
@@ -61,7 +61,7 @@
   </aside>
   {{end}}
 
-  <div class="dashboard-main">
+  <div class="dashboard-main dashboard-main--wide">
     {{if .Partial}}
     <p class="notice" role="status">
       Some of your characters could not be loaded from Blizzard just now, so
@@ -78,30 +78,11 @@
     </section>
     {{end}}
 
-    {{with .Talents}}
-    {{/* The build (spec 003, FR-033): Blizzard's when it answers, the log's
-         record of the latest pull when it does not, and it says which. */}}
-    <section class="panel talents" aria-label="Talents">
-      <h3 class="gear-heading">Talents</h3>
-      {{if .Unavailable}}
-      <p class="talents-source">Talents are unavailable for this character: Blizzard returned no build, and no parsed pull records one.</p>
-      {{else}}
-      <p class="talents-source">{{.Source}}{{with .HeroTree}} &middot; {{.}}{{end}}</p>
-      <dl class="talent-groups">
-        {{if .Class}}<div><dt>Class</dt>{{range .Class}}<dd>{{.Name}}{{if gt .Rank 1}} <span class="rank">&times;{{.Rank}}</span>{{end}}</dd>{{end}}</div>{{end}}
-        {{if .Spec}}<div><dt>Specialization</dt>{{range .Spec}}<dd>{{.Name}}{{if gt .Rank 1}} <span class="rank">&times;{{.Rank}}</span>{{end}}</dd>{{end}}</div>{{end}}
-        {{if .Hero}}<div><dt>Hero</dt>{{range .Hero}}<dd>{{.Name}}{{if gt .Rank 1}} <span class="rank">&times;{{.Rank}}</span>{{end}}</dd>{{end}}</div>{{end}}
-      </dl>
-      {{end}}
-    </section>
-    {{end}}
-  </div>
-
-  {{with .Analysis}}
-  {{/* The comparison's result (fourth amendment): the computed table and
-       talent difference, then the write-up, in the column right of the
-       card, from the newest finished analysis for this character. */}}
-  <aside class="panel analysis-results" aria-label="Comparison result">
+    {{with .Analysis}}
+    {{/* The comparison's result (fifth amendment): under the card in its
+         own section -- the table and the talent difference on the left, the
+         write-up on the right -- from the newest finished analysis. */}}
+    <section class="panel analysis-results" aria-label="Comparison result">
     <h3>Comparison</h3>
     {{with .Result}}
     {{if .Showcase}}
@@ -109,6 +90,8 @@
     {{else}}
     <p class="analysis-meta">Analysed {{.Analysed}} against <strong>{{.Against}}</strong>{{with .AgainstAs}}, {{.}}{{end}}</p>
     {{end}}
+    <div class="analysis-grid">
+    <div class="analysis-left">
     <table class="upgrade-table">
       <thead><tr><th>Slot</th><th>Yours</th><th>Theirs</th><th>Verdict</th></tr></thead>
       <tbody>
@@ -122,20 +105,25 @@
         {{end}}
       </tbody>
     </table>
+    <h4 class="talent-diff-heading">Talent difference against {{.Against}}</h4>
     <dl class="talent-diff">
       <dt>Talents they take that you do not</dt>
       <dd>{{if .Diff.TheirsOnly}}{{range $i, $t := .Diff.TheirsOnly}}{{if $i}}, {{end}}{{$t}}{{end}}{{else}}none{{end}}</dd>
       <dt>Talents you take that they do not</dt>
       <dd>{{if .Diff.YoursOnly}}{{range $i, $t := .Diff.YoursOnly}}{{if $i}}, {{end}}{{$t}}{{end}}{{else}}none{{end}}</dd>
     </dl>
-    <div class="writeup">
+    </div>
+    <div class="analysis-right writeup">
       {{range .Paragraphs}}{{if .Heading}}<h4>{{.Text}}</h4>{{else}}<p>{{.Text}}</p>{{end}}{{end}}
+    </div>
     </div>
     {{else}}
     <p class="fineprint">The write-up appears here once an analysis has run.</p>
     {{end}}
-  </aside>
-  {{end}}
+    </section>
+    {{end}}
+  </div>
+
 </div>
 {{end}}
 

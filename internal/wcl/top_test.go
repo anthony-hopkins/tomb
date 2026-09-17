@@ -12,6 +12,7 @@ import (
 // without spaces.
 func TestTopPlayer(t *testing.T) {
 	c, _, asked := server(t, func(map[string]any) (int, []byte) { return 200, fixture(t, "character-rankings.json") })
+	c.Region = "us"
 	ref, got, err := c.TopPlayer(context.Background(), 3009, 5, "DeathKnight", "Blood", "dps")
 	if err != nil {
 		t.Fatal(err)
@@ -28,7 +29,7 @@ func TestTopPlayer(t *testing.T) {
 		t.Errorf("gear/talents = %+v / %+v", got.Gear, got.Talents)
 	}
 	vars := (*asked)[0]
-	if vars["class"] != "DeathKnight" || vars["spec"] != "Blood" || vars["enc"].(float64) != 3009 || vars["diff"].(float64) != 5 || vars["metric"] != "dps" {
+	if vars["class"] != "DeathKnight" || vars["spec"] != "Blood" || vars["enc"].(float64) != 3009 || vars["diff"].(float64) != 5 || vars["metric"] != "dps" || vars["region"] != "US" {
 		t.Errorf("variables = %v", vars)
 	}
 

@@ -116,7 +116,11 @@ func run() error {
 	// says comparisons are unavailable otherwise. Vertex AI as the VM.
 	var wclReader wcl.Reader
 	if cfg.WCLClientID != "" && cfg.WCLClientSecret != "" {
-		wclReader = wcl.New(cfg.WCLClientID, cfg.WCLClientSecret)
+		client := wcl.New(cfg.WCLClientID, cfg.WCLClientSecret)
+		// Top players from the site's own region only: a comparison against
+		// somebody a member could actually raid with.
+		client.Region = cfg.BnetRegion
+		wclReader = client
 	} else {
 		logger.Warn("warcraft logs client not configured; comparisons unavailable")
 	}
