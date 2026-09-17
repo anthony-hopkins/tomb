@@ -1,5 +1,5 @@
 {
-  "_note": "SHAPE CAPTURED from the live API on 2026-09-16 (T050): field names and types are real -- quality is a word, itemLevel and the enchant and bonus ids are strings, talents are ids alone, the server has no slug. The VALUES are invented for the tests.",
+  "_note": "SHAPE CAPTURED from the live API on 2026-09-16 (T050): field names and types are real -- quality is a word, itemLevel and the enchant and bonus ids are strings, talents are ids alone, the server has no slug. The VALUES are invented for the tests. A hidden (anonymous) entry leads, as the live API lists them: no server, hidden true.",
   "data": {
     "worldData": {
       "encounter": {
@@ -10,6 +10,26 @@
           "hasMorePages": true,
           "count": 100,
           "rankings": [
+            {
+              "name": "Anonymous",
+              "class": "DeathKnight",
+              "spec": "Blood",
+              "amount": 1600000.0,
+              "hardModeLevel": 0,
+              "duration": 300000,
+              "startTime": 1757900000000,
+              "report": {
+                "code": "hIdDeN",
+                "fightID": 1,
+                "startTime": 1757899000000
+              },
+              "hidden": true,
+              "bracketData": 320,
+              "faction": 1,
+              "size": 20,
+              "talents": [],
+              "gear": []
+            },
             {
               "name": "Toptank",
               "class": "DeathKnight",

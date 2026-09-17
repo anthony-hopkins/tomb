@@ -28,6 +28,11 @@ type fakeWCL struct {
 	zoneErr  error
 	latest   wcl.Ranking
 	raid     wcl.RaidZone
+	board    []wcl.Entry         // the leaderboard page; nil means just top
+	boardOf  map[int][]wcl.Entry // per boss, when set
+	casts    wcl.CastSet
+	boards   int
+	castsN   int
 	tops     int
 	ranks    int
 	zones    int
@@ -40,6 +45,32 @@ func (f *fakeWCL) CurrentZone(context.Context) (wcl.RaidZone, error) {
 		return wcl.RaidZone{}, errors.New("no zone")
 	}
 	return f.raid, nil
+}
+
+func (f *fakeWCL) Leaderboard(_ context.Context, enc, _ int, class, spec, _ string) ([]wcl.Entry, error) {
+	f.boards++
+	f.lastSpec = class + "/" + spec
+	if f.topErr != nil {
+		return nil, f.topErr
+	}
+	if f.board != nil {
+		return f.board, nil
+	}
+	if f.boardOf != nil {
+		if b := f.boardOf[enc]; len(b) > 0 {
+			return b, nil
+		}
+		return nil, wcl.ErrNoRank
+	}
+	return []wcl.Entry{{Ref: f.topRef, Rank: f.top}}, nil
+}
+
+func (f *fakeWCL) Casts(context.Context, string, int, string) (wcl.CastSet, error) {
+	f.castsN++
+	if len(f.casts.Abilities) == 0 {
+		return wcl.CastSet{}, wcl.ErrNoRank
+	}
+	return f.casts, nil
 }
 
 func (f *fakeWCL) BestRank(context.Context, wcl.CharacterRef, int, int, string) (wcl.Ranking, error) {
@@ -72,13 +103,14 @@ var topRef = wcl.CharacterRef{Region: "us", Slug: "area-52", Name: "Toptank"}
 func healthyWCL() *fakeWCL {
 	return &fakeWCL{
 		top: topTank, topRef: topRef,
-		rank: wcl.Ranking{Name: "Toptank", Class: "Death Knight", Spec: "Blood", Metric: "dps", RankPercent: 96, Amount: 1400000, Duration: 200 * time.Second},
+		rank: wcl.Ranking{Name: "Toptank", Class: "Death Knight", Spec: "Blood", Metric: "dps", RankPercent: 96, Amount: 1400000, Duration: 200 * time.Second, ReportCode: "ThEiRs", FightID: 5},
 		zone: wcl.Zone{Class: "Death Knight", Spec: "Blood", Difficulty: 4, Metric: "dps",
 			Encounters: []wcl.ZoneEncounter{{ID: 3009, Name: "Vexie and the Geargrinders", Kills: 6}, {ID: 3010, Name: "Cauldron of Carnage", Kills: 4}}},
-		latest: wcl.Ranking{Name: "Nekromoo", Class: "Death Knight", Spec: "Blood", Metric: "dps", RankPercent: 74, Amount: 1102000, Duration: 250 * time.Second,
+		latest: wcl.Ranking{Name: "Nekromoo", Class: "Death Knight", Spec: "Blood", Metric: "dps", RankPercent: 74, Amount: 1102000, Duration: 250 * time.Second, ReportCode: "YoUrS", FightID: 3,
 			StartedAt: time.Date(2026, 9, 14, 20, 0, 0, 0, time.UTC),
 			Gear:      []wcl.Gear{{ID: 212345, Name: "Baleful Grave-Knight's Casque", ItemLevel: 311}}, Talents: []wcl.Talent{{ID: 1, Name: "Marrowrend"}, {ID: 3, Name: "Bonestorm"}}},
-		raid: wcl.RaidZone{ID: 44, Name: "The Venomous Abyss", Encounters: []wcl.ZoneEncounter{{ID: 3009, Name: "Vexie and the Geargrinders"}, {ID: 3010, Name: "Cauldron of Carnage"}}},
+		raid:  wcl.RaidZone{ID: 44, Name: "The Venomous Abyss", Encounters: []wcl.ZoneEncounter{{ID: 3009, Name: "Vexie and the Geargrinders"}, {ID: 3010, Name: "Cauldron of Carnage"}}},
+		casts: wcl.CastSet{Abilities: []wcl.CastCount{{ID: 49998, Name: "Death Strike", Count: 63}, {ID: 49028, Name: "Dancing Rune Weapon", Count: 4}}, Active: 300 * time.Second, Total: 312 * time.Second},
 	}
 }
 

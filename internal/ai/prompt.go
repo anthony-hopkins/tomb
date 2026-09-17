@@ -16,6 +16,7 @@ Rules:
 - If the "mismatch" flag is true, open with one sentence saying the two players are different classes or specializations and that the comparison is of limited use, then continue.
 - Go boss by boss where it matters, then the night as a whole. Name specific abilities, cooldowns and timings from the data. "Death Strike 41 casts in 5:12 against 63" is useful; "improve your rotation" is not.
 - Consider deaths, active time, cast counts and cooldown timing before gear. A wipe against a kill, or a longer pull, changes what the numbers mean; say so.
+- Ability use: where both sides' casts per minute over their kills are given, with active time, compare them ability by ability. Where the top player casts a rotational ability or a cooldown more often over a similar kill length, say so, and say roughly how many casts the raider left on the table. You may use an ability's well-known base cooldown to judge what was possible; say when you are relying on that rather than on the data.
 - End with a section titled "Do these first" listing exactly three changes in priority order, each one line: what to change, and why it matters most.
 - About 600 words. Plain text with short headings on their own lines. No tables, no bullet symbols other than a leading dash, no markdown emphasis.
 - Never invent an item, talent or number that is not in the data.`
@@ -100,6 +101,12 @@ type Boss struct {
 	TheirHPS         float64 `json:"their_hps,omitempty"`
 	TheirRankPercent float64 `json:"their_rank_percent,omitempty"`
 	TheirDuration    string  `json:"their_kill_duration,omitempty"`
+	// Casts per minute on each side, from the kills' cast tables, and how
+	// much of the kill each was active for. Known when the kill is on
+	// Warcraft Logs; a showcase carries none.
+	YourActivePct  float64    `json:"your_active_time_pct,omitempty"`
+	TheirActivePct float64    `json:"their_active_time_pct,omitempty"`
+	TheirCasts     []CastRate `json:"their_casts_per_minute,omitempty"`
 	// Note explains a missing side, such as no ranked kill by them here.
 	Note string `json:"note,omitempty"`
 }
@@ -121,9 +128,17 @@ type Player struct {
 
 // Cast is one ability's use in a pull.
 type Cast struct {
-	Name  string    `json:"name"`
-	Count int       `json:"count"`
-	At    []float64 `json:"at_seconds,omitempty"`
+	Name      string    `json:"name"`
+	Count     int       `json:"count"`
+	PerMinute float64   `json:"per_minute,omitempty"`
+	At        []float64 `json:"at_seconds,omitempty"`
+}
+
+// CastRate is one ability's use in a kill, as a count and a rate.
+type CastRate struct {
+	Name      string  `json:"name"`
+	Count     int     `json:"count"`
+	PerMinute float64 `json:"per_minute"`
 }
 
 // Gear is one item by name and level.

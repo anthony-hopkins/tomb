@@ -20,7 +20,7 @@ type Reader interface {
 }
 ```
 
-Read-only by construction: these are the only five methods, and the package has
+Read-only by construction: these are the only seven methods, and the package has
 no other request path (FR-035). Added by the 2026-09-16 amendments:
 
 ```go
@@ -52,6 +52,26 @@ checked live 2026-09-17), or null for the world when the client has none -- and 
 `server.region` and `server.name`/`slug` give the character reference). Class names
 are spelled without spaces in the query (`DeathKnight`).
 
+Added by the sixth amendment:
+
+```go
+    // Leaderboard is the first page of that leaderboard: every NAMED player
+    // on it, best first (hidden entries -- "Anonymous", no server -- are
+    // left out). ErrNoRank when empty.
+    Leaderboard(ctx context.Context, encounterID, wclDifficulty int, class, spec, metric string) ([]Entry, error)
+    // Casts is one player's ability use in one kill, from the report the
+    // ranking names: each ability's cast count, active time, fight time.
+    Casts(ctx context.Context, reportCode string, fightID int, player string) (CastSet, error)
+```
+
+`Casts` queries `reportData.report(code:).table(dataType: Casts, fightIDs: [n],
+filterExpression: "source.name = \"<player>\"")`, a JSON scalar whose
+`data.entries[]` is one entry per source with `activeTime` and `abilities[]{guid,
+name, total}`, and `data.totalTime` (**confirmed live 2026-09-17**, fixture
+`casts.json` captured from a real report). The pick of the player to compare
+against is made in the app (`combatlogs/pick.go`) from one `Leaderboard` page per
+boss of the raid, cached a day each under a class-and-spec key.
+
 Added by the third amendment (the showcase for a character with no logs):
 
 ```go
@@ -63,8 +83,8 @@ Added by the third amendment (the showcase for a character with no logs):
 difficulties{id name} encounters{id name} }` and picks the newest zone (highest
 expansion id, then zone id) that is not frozen and is ranked at a raid difficulty
 (**confirmed live 2026-09-16**, fixture `zones.json`). Read-only like the rest.
-A `Casts` read of the report's cast table was added and removed the same day:
-the showcase is talents and gear only (spec → Third amendment, revised).
+The showcase itself reads no cast table (spec → Third amendment, revised); the
+compare mode does (sixth amendment).
 
 **Authentication**: `POST https://www.warcraftlogs.com/oauth/token`, HTTP basic auth
 with `WCL_CLIENT_ID` / `WCL_CLIENT_SECRET`, body `grant_type=client_credentials`.

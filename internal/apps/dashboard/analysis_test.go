@@ -37,6 +37,14 @@ func (noWCL) LatestRank(context.Context, wcl.CharacterRef, int, int, string) (wc
 
 func (noWCL) CurrentZone(context.Context) (wcl.RaidZone, error) { return wcl.RaidZone{}, wcl.ErrNoRank }
 
+func (noWCL) Leaderboard(context.Context, int, int, string, string, string) ([]wcl.Entry, error) {
+	return nil, wcl.ErrNoRank
+}
+
+func (noWCL) Casts(context.Context, string, int, string) (wcl.CastSet, error) {
+	return wcl.CastSet{}, wcl.ErrNoRank
+}
+
 // stackAnalysis mounts the dashboard with a fights store and, when asked, a
 // Warcraft Logs client.
 func stackAnalysis(t *testing.T, store fights.Store, withWCL bool) http.Handler {
@@ -140,7 +148,7 @@ func TestAnalysisSection(t *testing.T) {
 		{"comparisons not set up", storeWith(t, nil), false, "/app/dashboard",
 			[]string{"not set up on this site"}, []string{"analyse-form"}, false},
 		{"pending", storeWith(t, func(s *fights.MemStore, id int64) { analysed(s, id, fights.Pending, "") }), true, "/app/dashboard",
-			[]string{"Analysing"}, []string{"Analysed"}, true},
+			[]string{"Analysing", `class="analysing-phrase"`, "Counting casts against the cooldowns", "Finding the best Protection Warrior in the region"}, []string{"Analysed"}, true},
 		{"done", storeWith(t, func(s *fights.MemStore, id int64) { analysed(s, id, fights.Done, "") }), true, "/app/dashboard",
 			[]string{"Analysed", "<strong>Toptank</strong>, top Blood Death Knight on Vexie and the Geargrinders", "Old Casque", "New Casque", "Upgrade to chase (+9)", "Same item", "Consumption", "<h4>Overview</h4>", "<h4>Do these first</h4>", "lost twenty seconds", "<p>- Use Dancing Rune Weapon on pull.</p>"},
 			[]string{"Analysing"}, false},

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/anthony-hopkins/tomb/internal/blizzard"
 	"github.com/anthony-hopkins/tomb/internal/fights"
@@ -31,7 +32,10 @@ type analysisView struct {
 	// Msg is the one-shot message from the analyse route, worded here.
 	Msg string
 
-	Pending bool   // the newest analysis is still being written
+	Pending bool // the newest analysis is still being written
+	// Phrases is what the card says while it waits, one after another,
+	// so a wait of a minute reads as work rather than a freeze.
+	Phrases []string
 	Failure string // the newest analysis failed, and why
 	Result  *resultView
 }
@@ -140,6 +144,7 @@ func (a *App) analysis(r *http.Request, c blizzard.Character) *analysisView {
 		switch newest.State {
 		case fights.Pending:
 			v.Pending = true
+			v.Phrases = analysingPhrases(c, newest.CreatedAt)
 		case fights.AFailed:
 			v.Failure = newest.Failure
 		}
@@ -211,4 +216,31 @@ func paragraphs(text string) []paragraph {
 		out = append(out, paragraph{Text: strings.TrimPrefix(block, "## "), Heading: heading})
 	}
 	return out
+}
+
+// analysingPhrases is the card's patter while the worker runs: a dozen
+// lines of what is going on, in the game's own words, rotated by how long
+// the analysis has been running so each refresh of the page starts on a
+// later line rather than the first one again.
+func analysingPhrases(c blizzard.Character, since time.Time) []string {
+	spec := strings.TrimSpace(c.ActiveSpec + " " + c.Class)
+	lines := []string{
+		"Reading " + c.Name + "'s kills on Warcraft Logs…",
+		"Finding the best " + spec + " in the region…",
+		"Pulling their parse on every boss…",
+		"Opening the cast tables, kill by kill…",
+		"Counting casts against the cooldowns…",
+		"Weighing item levels, slot by slot…",
+		"Comparing talent trees…",
+		"Checking active time on the pull…",
+		"Asking the raid leader for the write-up…",
+		"The model is thinking. So is the tank.",
+		"Nearly there. Loot is not guaranteed.",
+		"Still working. The trash is not.",
+	}
+	if since.IsZero() {
+		return lines
+	}
+	shift := int(time.Since(since).Seconds()/3) % len(lines)
+	return append(lines[shift:], lines[:shift]...)
 }
