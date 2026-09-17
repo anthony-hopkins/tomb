@@ -11,17 +11,21 @@
   <aside class="character-nav" aria-label="Your characters">
     <h1 class="roster-heading">My Characters</h1>
 
-    {{/* tabindex on each row is what makes this usable without a mouse: the
-         card is revealed by :hover OR :focus-within, so tabbing through the
-         list opens each card in turn, and the link inside it is the next stop
-         after that. */}}
+    {{/* The whole row is one link to the character's panel, the same place
+         the name on its card leads: a click anywhere on the row opens the
+         character, not only a click on the small name. That link is also
+         what makes the list usable without a mouse: the card is revealed by
+         :hover OR :focus-within, so tabbing through the list opens each card
+         in turn, and the link inside it is the next stop after that. */}}
     <ul class="character-list">
       {{range .Characters}}
-      <li class="character-row{{if .Current}} is-current{{end}}{{if .Selected}} is-selected{{end}}" tabindex="0"{{if .Selected}} aria-current="true"{{end}}>
-        {{/* Names wear their class's colour, everywhere, the way the game
-             paints them. The stylesheet keys the colour on cls-<slug>. */}}
-        <span class="row-name class-name cls-{{.ClassSlug}}">{{.Name}}</span>
-        <span class="row-meta">{{.Level}} {{.Class}}{{if .Guild}} &middot; &lt;{{.Guild}}&gt;{{end}}</span>
+      <li class="character-row{{if .Current}} is-current{{end}}{{if .Selected}} is-selected{{end}}"{{if .Selected}} aria-current="true"{{end}}>
+        <a class="row-link" href="?c={{.Key}}">
+          {{/* Names wear their class's colour, everywhere, the way the game
+               paints them. The stylesheet keys the colour on cls-<slug>. */}}
+          <span class="row-name class-name cls-{{.ClassSlug}}">{{.Name}}</span>
+          <span class="row-meta">{{.Level}} {{.Class}}{{if .Guild}} &middot; &lt;{{.Guild}}&gt;{{end}}</span>
+        </a>
 
         <div class="character-card popover" role="group" aria-label="{{.Name}} details">
           {{if .Current}}<p class="badge">Most recently played</p>{{end}}

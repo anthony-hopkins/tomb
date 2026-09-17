@@ -242,11 +242,13 @@ func TestShowsMostRecentCharacter(t *testing.T) {
 		t.Error("a stale character is marked as the current one")
 	}
 
-	// Every row must be reachable without a mouse. The card is disclosed by
-	// :hover and :focus-within, and focus-within needs something focusable.
+	// Every row is one link to its character's panel, so a click anywhere
+	// on the row opens the character. That link is also what makes the row
+	// reachable without a mouse: the card is disclosed by :hover and
+	// :focus-within, and focus-within needs something focusable.
 	for i, row := range rows[1:] {
-		if !strings.Contains(row, "tabindex") {
-			t.Errorf("row %d is not focusable, so its card is keyboard-unreachable", i+1)
+		if !strings.Contains(row, `class="row-link" href="?c=`) {
+			t.Errorf("row %d has no row link, so clicking it opens nothing and its card is keyboard-unreachable", i+1)
 		}
 	}
 
