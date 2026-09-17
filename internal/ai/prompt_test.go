@@ -40,4 +40,17 @@ func TestBuild(t *testing.T) {
 	if !strings.Contains(System, "- do_these_first:") || !strings.Contains(System, "never re-rank the upgrade path") || !strings.Contains(System, "- cooldowns:") || !strings.Contains(System, "- verify:") {
 		t.Error("the system instruction lost its rules")
 	}
+	// The tabular fields are asked for as tables (spec 005, FR-056): the
+	// upgrade path, the opener, the priority and the cooldown rules in both
+	// modes, and the cooldown diff in the full one.
+	for _, sys := range []string{System, SystemShowcase} {
+		for _, want := range []string{"- upgrade_path: a table in the site's order", "as a table: step, ability", "- priority: the single-target priority as a table", "- cooldown_rules: a table", "put them in a Markdown table"} {
+			if !strings.Contains(sys, want) {
+				t.Errorf("the instruction no longer asks for %q", want)
+			}
+		}
+	}
+	if !strings.Contains(System, "First a table from cooldown_diffs") {
+		t.Error("the cooldown diff is not asked for as a table")
+	}
 }

@@ -19,20 +19,21 @@ Answer as a JSON object with exactly these fields, each a Markdown string unless
 - build: points per tree and the hero tree; a table of the talents that define the top player's build (talent, what it does from its tooltip, why it matters); every choice node and what was passed over; the abilities in the trees the top player does not take and what that means for the raider's bars; then the differences between the two builds and which matter. Quote the import string on a line of its own and say to click Apply after importing.
 - engine: how the build's key talents chain into each other around its main cooldown, from the tooltips, and what to press inside its window.
 - benchmarks: a table of the abilities that matter, both sides: ability, the raider's casts per minute, the top player's, the difference; then a table of cooldown use from the rows given (ability, cooldown, possible, casts, efficiency) for each side; say which cooldowns the raider hoards and which they use well.
-- boss_by_boss: for each boss, the two parses, kill lengths, active time, and the two or three cast rates that explain the gap; where the raider's kill was much longer, what that does to the numbers.
-- cooldowns: in full mode, the heart of the review: from cooldown_diffs and cooldown_sequence, ability by ability, when the top player pressed it and when the raider did, the first-use delay, the reuses that were late and the phase they slipped into, the uses left on the table, and what the opening order says; then the three timing changes that would gain the most. In gear_talents_only mode, one line saying no cast timeline was available.
-- opener: the first eight to ten presses this build wants, from the top player's sequence and the cooldowns, as a numbered list with one line of reason each.
-- priority: the single-target priority as a numbered list, one condition per line, with the top player's casts per minute beside each ability; then a short paragraph on several targets.
-- survival: for a tank or healer, the defensive and healing pattern the data shows; for a DPS, the survival buttons and when the top player uses them.
-- cooldown_rules: one line per cooldown: on cooldown, saved, or as needed, with the efficiency and timing numbers behind it.
-- gear: from the upgrade table: which slots are furthest behind; tier-set pieces where the names show them; sockets, enchants and gems where the data shows them. Refer to the table; do not restate it row by row.
-- upgrade_path: explain the site's ranking step by step -- why each slot sits where it does, what it costs where the cost is known, and that the crest balance is not readable from the API -- without changing the order.
+- boss_by_boss: a table, one row per boss: boss, the raider's parse, the top player's, the raider's kill length, the top player's, each side's active time; then, under it, for each boss the two or three cast rates that explain the gap, and where the raider's kill was much longer, what that does to the numbers.
+- cooldowns: in full mode, the heart of the review. First a table from cooldown_diffs, one row per cooldown: ability, the top player's first use (seconds into the pull and the phase), the raider's, the delay, the raider's late reuses with the phase each slipped into, uses left on the table. Then a table of the opening order from cooldown_sequence, one row per position: order, the top player's press, the raider's. Then, in prose, what the tables say and the three timing changes that would gain the most. In gear_talents_only mode, one line saying no cast timeline was available.
+- opener: the first eight to ten presses this build wants, from the top player's sequence and the cooldowns, as a table: step, ability, seconds into the pull where the sequence gives it, why.
+- priority: the single-target priority as a table: order, ability, the condition to press it under, the top player's casts per minute; then a short paragraph on several targets.
+- survival: for a tank or healer, the defensive and healing pattern the data shows, as a table of the defensives (ability, cooldown, the top player's uses, when they press it) and a paragraph of what it means; for a DPS, the survival buttons and when the top player uses them.
+- cooldown_rules: a table, one row per cooldown: cooldown, the rule (on cooldown, saved for a phase, or as needed), the efficiency and timing numbers behind it.
+- gear: from the upgrade table: a table of the slots furthest behind (slot, the raider's item and its level, the top player's, the gap in levels); then tier-set pieces where the names show them, and sockets, enchants and gems where the data shows them. Do not restate the whole upgrade table.
+- upgrade_path: a table in the site's order, one row per step: rank, slot, item level now, the level to chase, the cost where the crest catalog priced it or "unknown", the site's note. Then a short paragraph on why the ranking falls that way and that the crest balance is not readable from the API. Never change the order.
 - do_these_first: an array of exactly three strings, in priority order, each one line: what to change, and why it matters most.
 - verify: an array of {item, status, note}: what in this review is data ("data"), what you inferred ("inferred": base cooldowns from your own knowledge, anything the data did not carry), and what was not in the data ("not in data").
 
 Rules:
 - Name specific abilities, cooldowns and numbers. "Death Strike 12.1 casts a minute against 16.8" is useful; "improve your rotation" is not.
 - Where you rely on an ability's known base cooldown rather than the data, say so in place and in verify.
+- Where a field lists like things with the same facts about each -- steps, slots, cooldowns, bosses -- put them in a Markdown table with a header row, one row each, and keep the prose for the judgement around the table. A cell holds a few words or a number; reasoning goes under the table, not in it.
 - Never invent an item, talent, ability or number that is not in the data. A field with no data behind it gets one line saying so.
 - About 2,500 to 3,500 words across the fields.`
 
@@ -66,18 +67,19 @@ Answer as a JSON object with exactly these fields, each a Markdown string unless
 - build: points per tree and the hero tree; a table of the talents that define the build (talent, what it does from its tooltip, why it matters); every choice node and what was passed over; the abilities in the trees this build does not take and what that means for the raider's bars; then the differences from the raider's own build and which matter. Quote the import string on a line of its own and say to click Apply after importing.
 - engine: how the build's key talents chain into each other around its main cooldown, from the tooltips.
 - benchmarks: one line: no ability use was available.
-- boss_by_boss: each boss's top parse: the player, the parse, the kill length.
+- boss_by_boss: a table, one row per boss: boss, the top player, the parse, the kill length.
 - cooldowns: one line: no cast timeline was available.
-- opener: the first eight to ten presses this build wants, from the cooldowns and tooltips, as a numbered list with one line of reason each.
-- priority: the single-target priority as a numbered list, one condition per line; then a short paragraph on several targets.
-- survival: the defensive pattern the build's cooldowns and tooltips imply.
-- cooldown_rules: one line per cooldown: on cooldown, saved, or as needed, and why.
-- gear: from the upgrade table: which of the raider's slots are furthest behind; tier-set pieces where the names show them; what the top players wear on each boss.
-- upgrade_path: explain the site's ranking step by step without changing its order, and that the crest balance is not readable from the API.
+- opener: the first eight to ten presses this build wants, from the cooldowns and tooltips, as a table: step, ability, why.
+- priority: the single-target priority as a table: order, ability, the condition to press it under; then a short paragraph on several targets.
+- survival: the defensive pattern the build's cooldowns and tooltips imply, as a table of the defensives (ability, cooldown, when to press it) and a paragraph of what it means.
+- cooldown_rules: a table, one row per cooldown: cooldown, the rule (on cooldown, saved, or as needed), why.
+- gear: from the upgrade table: a table of the raider's slots furthest behind (slot, the raider's item and its level, what the top players wear there, the gap in levels); then tier-set pieces where the names show them.
+- upgrade_path: a table in the site's order, one row per step: rank, slot, item level now, the level to chase, the cost where the crest catalog priced it or "unknown", the site's note. Then a short paragraph on why the ranking falls that way and that the crest balance is not readable from the API. Never change the order.
 - do_these_first: an array of exactly three strings, in priority order, each one line.
 - verify: an array of {item, status, note}: what is data, what you inferred, what was not in the data.
 
 Rules:
+- Where a field lists like things with the same facts about each -- steps, slots, cooldowns, bosses -- put them in a Markdown table with a header row, one row each, and keep the prose for the judgement around the table. A cell holds a few words or a number; reasoning goes under the table, not in it.
 - Never invent an item, talent, ability or number that is not in the data. A field with no data behind it gets one line saying so.
 - About 2,000 to 2,500 words across the fields.`
 

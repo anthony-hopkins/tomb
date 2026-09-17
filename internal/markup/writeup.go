@@ -12,8 +12,9 @@ import (
 )
 
 // The write-up is Markdown, the little of it the model is asked to use:
-// headings, paragraphs, bullet and numbered lists, tables, bold, italic and
-// code. Rendered here, line by line, into markup the card can trust: every
+// headings, paragraphs, bullet and numbered lists, tables (which the model
+// is asked for wherever a section lists like things: the upgrade path, the
+// opener, the cooldown rules), bold, italic and code. Rendered here, line by line, into markup the card can trust: every
 // character of the model's text is escaped first, and only the marks this
 // renderer knows turn into tags. Nothing else -- no raw HTML, no links --
 // gets through (spec 003, seventh amendment).
@@ -67,7 +68,9 @@ func Render(text string) template.HTML {
 		if len(table) == 0 {
 			return
 		}
-		b.WriteString("<table class=\"writeup-table\">\n")
+		// In a scroller of its own: a wide table on a phone scrolls
+		// sideways inside the card instead of pushing the page out.
+		b.WriteString("<div class=\"writeup-scroll\">\n<table class=\"writeup-table\">\n")
 		for i, row := range table {
 			cell := "td"
 			if i == 0 {
@@ -83,7 +86,7 @@ func Render(text string) template.HTML {
 				b.WriteString("</thead>\n<tbody>\n")
 			}
 		}
-		b.WriteString("</tbody>\n</table>\n")
+		b.WriteString("</tbody>\n</table>\n</div>\n")
 		table = nil
 	}
 	flushAll := func() { flushPara(); flushList(); flushTable() }
