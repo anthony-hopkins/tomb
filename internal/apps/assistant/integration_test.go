@@ -110,6 +110,10 @@ func TestAssistantBehindTheCore(t *testing.T) {
 	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `class="assistant-page"`) {
 		t.Errorf("GET %s = %d, want the assistant's page", link, rec.Code)
 	}
+	// The page is the conversation; the corner panel is not drawn over it.
+	if strings.Contains(rec.Body.String(), `id="assistant"`) {
+		t.Error("the panel is drawn on the assistant's own page")
+	}
 	// The wording on the page for a refusal reaches it at the same root.
 	rec = get(link + "?e=long")
 	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "at most 600 characters") {

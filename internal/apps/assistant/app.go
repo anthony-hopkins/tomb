@@ -155,6 +155,11 @@ type exchangeView struct {
 // Panel implements platform.Companion: the conversation and the question
 // box, for the shell of every page.
 func (a *App) Panel(r *http.Request) template.HTML {
+	// Not on the app's own page: the conversation is the page there, and a
+	// second copy of it in the corner would be the same box twice.
+	if strings.HasPrefix(r.URL.Path, routePrefix) {
+		return ""
+	}
 	v := a.viewFor(r)
 	var body bytes.Buffer
 	if err := a.tmpl.ExecuteTemplate(&body, "panel.html", v); err != nil {
