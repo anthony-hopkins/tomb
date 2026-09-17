@@ -155,6 +155,11 @@ type exchangeView struct {
 // Panel implements platform.Companion: the conversation and the question
 // box, for the shell of every page.
 func (a *App) Panel(r *http.Request) template.HTML {
+	// Not on the app's own page: the conversation is the page there, and a
+	// second copy of it in the corner would be the same box twice.
+	if strings.HasPrefix(r.URL.Path, routePrefix) {
+		return ""
+	}
 	v := a.viewFor(r)
 	var body bytes.Buffer
 	if err := a.tmpl.ExecuteTemplate(&body, "panel.html", v); err != nil {
@@ -290,7 +295,7 @@ func (a *App) ask(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, exchangeJSON{Question: q, AnswerHTML: string(markup.Render(ans.Text)), Sources: ans.Sources, Character: character})
 		return
 	}
-	http.Redirect(w, r, routePrefix+"/", http.StatusSeeOther)
+	http.Redirect(w, r, routePrefix, http.StatusSeeOther)
 }
 
 // startOver empties the thread (FR-061).
@@ -309,7 +314,7 @@ func (a *App) startOver(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 		return
 	}
-	http.Redirect(w, r, routePrefix+"/", http.StatusSeeOther)
+	http.Redirect(w, r, routePrefix, http.StatusSeeOther)
 }
 
 // gearFor is what the last-played character wears, held ten minutes.
@@ -373,7 +378,7 @@ func (a *App) fail(w http.ResponseWriter, r *http.Request, code string, at time.
 		writeJSON(w, status, map[string]string{"error": a.notice(code, unix(at))})
 		return
 	}
-	u := routePrefix + "/?e=" + code
+	u := routePrefix + "?e=" + code
 	if !at.IsZero() {
 		u += "&at=" + unix(at)
 	}

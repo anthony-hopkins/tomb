@@ -143,8 +143,13 @@ func TestAsk(t *testing.T) {
 
 	// The panel and the page both carry the exchanges, the sources as links,
 	// the model's own link as text, and the script.
-	r := asMember(httptest.NewRequest(http.MethodGet, "/app/assistant/", nil), false)
-	panel := string(a.Panel(r))
+	// The panel is asked for from another app's page; on its own page the
+	// conversation is the body and no panel is drawn.
+	panel := string(a.Panel(asMember(httptest.NewRequest(http.MethodGet, "/app/guild", nil), false)))
+	r := asMember(httptest.NewRequest(http.MethodGet, "/app/assistant", nil), false)
+	if a.Panel(r) != "" {
+		t.Error("the panel is drawn on the assistant's own page")
+	}
 	for _, want := range []string{`class="assistant"`, "What tanking trinkets should I be using?", "<table", `href="https://vertexaisearch.cloud.google.com/grounding-api-redirect/abc" rel="noopener">wowhead.com</a>`, "/static/assistant.js", `action="/app/assistant/ask"`, "New conversation", "Gemini"} {
 		if !strings.Contains(panel, want) {
 			t.Errorf("panel is missing %q", want)
@@ -214,18 +219,18 @@ func TestAskWithoutScript(t *testing.T) {
 	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	rec := httptest.NewRecorder()
 	a.ask(rec, asMember(r, false))
-	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/app/assistant/" {
+	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/app/assistant" {
 		t.Errorf("form ask = %d %q", rec.Code, rec.Header().Get("Location"))
 	}
 	r = httptest.NewRequest(http.MethodPost, "/app/assistant/ask", strings.NewReader(url.Values{"q": {strings.Repeat("y", 700)}}.Encode()))
 	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	rec = httptest.NewRecorder()
 	a.ask(rec, asMember(r, false))
-	if loc := rec.Header().Get("Location"); rec.Code != http.StatusSeeOther || loc != "/app/assistant/?e=long" {
+	if loc := rec.Header().Get("Location"); rec.Code != http.StatusSeeOther || loc != "/app/assistant?e=long" {
 		t.Errorf("long form ask = %d %q", rec.Code, loc)
 	}
 	rec = httptest.NewRecorder()
-	a.page(rec, asMember(httptest.NewRequest(http.MethodGet, "/app/assistant/?e=long", nil), false))
+	a.page(rec, asMember(httptest.NewRequest(http.MethodGet, "/app/assistant?e=long", nil), false))
 	if !strings.Contains(rec.Body.String(), "at most 600 characters") {
 		t.Error("the page does not word the refusal")
 	}
