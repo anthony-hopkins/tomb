@@ -268,6 +268,13 @@ card code; record the answer in this file.
 - The client is **read-only by construction**: it has one method, a query. There is
   no upload path to Warcraft Logs in the code at all (FR-035).
 
+**Amendment 2026-09-16**: the comparison target is found, not named. A second
+query, `worldData.encounter(id).characterRankings(className, specName, difficulty,
+metric, includeCombatantInfo: true)`, gives the leaderboard for one class and spec
+on one boss; its first entry is the top player, and `BestRank` then fetches that
+player on the night's other bosses. Class names are spelled without spaces in the
+query. The link parser stays in the package for the per-pull view to come.
+
 **Setup step**: register a v2 API client at warcraftlogs.com/api/clients under a
 guild account; the ID and secret become `WCL_CLIENT_ID` and `WCL_CLIENT_SECRET`,
 the secret in Secret Manager beside the Battle.net secret.
@@ -290,9 +297,11 @@ header `Metadata-Flavor: Google`), cached until it expires. Request body:
 `generationConfig{temperature: 0.4, maxOutputTokens: 2048}`. Response:
 `candidates[0].content.parts[].text` and `usageMetadata` for the log.
 
-- Model: `TOMB_AI_MODEL`, default `gemini-3.1-pro` (the current GA general-purpose
-  reasoning model on Vertex; the flash tier is cheaper but the write-up's whole value
-  is judgement). Region: `TOMB_AI_REGION`, default the VM's region. Project: from
+- Model: `TOMB_AI_MODEL`, default `gemini-3.1-pro-preview` (the most capable Gemini
+  Vertex serves this project, checked live 2026-09-17 -- `gemini-3.1-pro` without the
+  suffix does not exist; the flash tier is cheaper but the write-up's whole value is
+  judgement). Location: `TOMB_AI_REGION`, default `global`, the only location that
+  model is served at; `gemini-2.5-pro` is the regional fallback (`us-central1`). Project: from
   the metadata server (`project/project-id`), no configuration.
 - OpenTofu: enable `aiplatform.googleapis.com` (`google_project_service`) and grant
   the VM service account `roles/aiplatform.user`. The VM already has the

@@ -5,7 +5,7 @@
       "character": {
         "id": 1234567,
         "name": "Toptank",
-        "classID": 6,
+        "classID": 1,
         "encounterRankings": {
           "bestAmount": 0,
           "totalKills": 0,

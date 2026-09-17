@@ -4,8 +4,12 @@
 
 **Created**: 2026-09-16
 
-**Status**: Draft — decisions taken with the guild master on 2026-09-16; defaults
-assumed where noted.
+**Status**: Implemented on `003-ai-log-comparison`, 2026-09-16; **amended three
+times the same day** (see the Amendment sections): the comparison is a whole raid
+against the top-ranked player rather than one pull against a pasted link, the
+member's side comes from Warcraft Logs first, with an upload as the alternative,
+and a character with no logs anywhere gets a showcase of the top parses of its
+class and specialization instead of a refusal.
 
 **Depends on**: 001-battlenet-sso-character-dashboard (sessions, the guild gate, the
 character card and its equipment), 002-officer-tools (officer standing, the audit
@@ -223,7 +227,8 @@ Numbering continues from 002 (FR-026).
 - **FR-032 (privacy line)**: The upload page MUST say that a log contains everyone
   who was in the raid, and that only the member's own characters are kept.
 
-- **FR-033 (talents on the card)**: The character card MUST show a character's
+- **FR-033 (talents on the card)** *(withdrawn by the fifth amendment: the block is
+  gone from the card; the build still feeds the comparison's talent difference)*: The character card MUST show a character's
   currently chosen talents, from the game's official record, grouped the way the game
   groups them; unavailable talents MUST NOT stop the rest of the card rendering.
 
@@ -370,3 +375,126 @@ against each other; re-parsing an old upload with a newer parser (re-upload inst
 an in-game addon; a desktop uploader; sending anything to Warcraft Logs; a Discord
 posting of the result. Each is a reasonable later feature and none is needed for the
 guild master's by-hand workflow to become a button.
+
+## Amendment, 2026-09-16: the whole night, against the top player
+
+After the first version was built, the guild master directed that the comparison
+should first cover the **entire raid** a character was in, against the **top-ranked
+player of the same class and specialization**, with the per-pull view to come
+later as a drill-down on the same data. This section supersedes the parts of
+User Story 3 and FR-034..FR-038 it contradicts; everything else stands.
+
+- **Your side is one upload.** The member picks one of their uploads on the card;
+  every raid pull of that character in it is the night. Pulls are grouped by boss.
+  The night is taken at the difficulty the character raided most that upload
+  (ties go to the harder); pulls at another difficulty are left out and the
+  write-up is told how many.
+- **The other side is found, not named.** No link is pasted. The site looks up
+  the highest-ranked player of the character's class and specialization on the
+  boss pulled most (ties to the most recent) at that difficulty, and takes that
+  one player's best parse on every boss of the night, with the gear and talents
+  from it. A boss they have no ranked kill on is noted, not fatal. The class and
+  specialization come from the log's own record at the pulls; a log without it
+  (advanced logging off) is refused with a message saying so.
+- **The write-up covers the night**, boss by boss where it matters, then as a
+  whole; the computed upgrade table and talent diff are unchanged in kind, built
+  from the night's latest gear and talent snapshot against the top player's.
+- **Everything else holds**: raid pulls only, the 120-minute allowance, officers
+  unlimited, every run on the trail, results on the card with the newest first,
+  nothing ever sent to Warcraft Logs, and the top player fetched read-only and
+  cached a day per boss.
+- **FR-034 is withdrawn** (no link is pasted). **FR-035** now reads "fetch, read-only,
+  the top-ranked player of the character's class and specialization on the boss
+  pulled most, and that player's best parse on each boss of the night". **FR-037**
+  and **FR-038** read "night" for "fight". The per-pull comparison remains a
+  later feature, over the same stored pulls.
+
+## Second amendment, 2026-09-16: the member's side from Warcraft Logs first
+
+The guild master then directed that the site should take the character's latest
+raid parses from Warcraft Logs itself, and not rely on an upload initially.
+
+- **Default source: Warcraft Logs.** On the card, Analyse offers "My latest raid on
+  Warcraft Logs" first, for every character, whether or not anything was ever
+  uploaded. The site reads, read-only, the character's standing in the current
+  raid — which bosses they have ranked kills on, as which specialization, at which
+  difficulty — and their most recent ranked kill on each of those bosses, with the
+  gear and talents from the newest of them. The top player is found on the boss
+  they have killed most.
+- **What that side can and cannot say.** A ranked kill carries the parse (DPS or
+  HPS, rank percent, duration, date), gear and talents. It does not carry wipes,
+  pull counts or ability use, and the write-up is told so. Those come only from
+  an uploaded log, which stays available as the other choice in the same picker
+  ("My upload … · N raid pulls").
+- **Refusals.** A character Warcraft Logs does not know, or knows with no ranked
+  kill in the current raid, is refused with a message that names the two ways to
+  get one: log raids with the Warcraft Logs uploader, or upload a combat log here
+  and pick it as the source.
+- **Everything else holds**: the allowance, officers unlimited, the trail, the
+  computed table and diff, the newest result on the card, nothing ever sent to
+  Warcraft Logs. Every analysis records its source.
+
+## Third amendment, 2026-09-16: a showcase when the character has no logs
+
+The guild master then directed: "If there's no logs for the character, provide a
+breakdown of the rotation, talents, and itemization of the top parse(s) for that
+player's class and specialization."
+
+- **No logs is not a refusal.** When the source is Warcraft Logs and the site
+  finds no character, or no ranked kill in the current raid, and the member did
+  not pick an upload, Analyse still runs — as a **showcase**. The class and
+  specialization come from Blizzard's profile (the character card already has
+  them); the raid is Warcraft Logs' current raid; the top-ranked player of that
+  class and spec is found on its first boss, at Mythic if anyone is ranked there,
+  else Heroic, and that sets the difficulty for the rest.
+- **What the showcase holds.** For every boss of the raid: the top-ranked parse
+  (player, rank percent, DPS or HPS, duration), the talents used and the gear
+  worn. The first boss's talents are the build. The upgrade table and talent
+  diff are computed as ever, against the character's **current** equipment and,
+  when Blizzard gives it, current build, both fetched as the site (no member
+  token needed). *Revised the same evening*: no cast counts and no rotation.
+  With no log of the raider's there is nothing to set play against, so the
+  showcase is talents and gear only, and the report's cast table is not read.
+- **The write-up** is a briefing, not a review: the build and what it is built
+  around, the itemization slot by slot against the character's current gear, a
+  short summary of what a ready character looks like, and "Do these first" for a
+  raider who has not yet logged a raid. It says nothing about rotation or
+  ability use. The card says so: "No logs of yours yet, so this is the other
+  way round".
+- **Refusals that remain**: Blizzard has no specialization for the character
+  (`nospec`); the raid list cannot be read, or nobody of the class and spec is
+  ranked on the first boss at either difficulty (`nologs`: "no logs for this
+  character and the top parses of its class could not be read just now", which
+  names the upload alternative). A showcase counts against the allowance like
+  any other run.
+- **Everything else holds**: officers unlimited, the trail (the entry reads
+  "showcase of top <spec> <class> parses in <raid>"), leaderboard answers cached
+  a day per boss, nothing ever sent to Warcraft
+  Logs. Analyses record the source `showcase`.
+
+## Fourth amendment, 2026-09-16: the card's layout
+
+The guild master then directed where the comparison lives on My Characters:
+the controls (source picker, Analyse, notices) sit inside the character's
+Armory panel directly under the render, and the result — the upgrade table, the talent
+difference and the write-up — sits in a third column to the right of the
+character card. Nobody scrolls to the foot of the page to run one or read one.
+On a narrow screen the three stack: rail, card, result.
+
+## Fifth amendment, 2026-09-17: the card at full width, no talents block, same region
+
+After the first working run the guild master directed four things:
+
+- **No talents block on the card.** The Talents section under Equipped (FR-033)
+  goes; nobody needs to read a build off the card. The build still feeds the
+  comparison: the talent difference against the top player's parse stays, and is
+  headed as such in the result.
+- **The character at the full width.** The Armory panel takes the whole column
+  beside the character list, and the comparison's result sits under it in its
+  own section: the upgrade table and the talent difference on the left, the
+  write-up on the right. The controls stay under the render.
+- **Same region only.** The top player is found among players of the site's own
+  region (`BNET_REGION`, "us"), through the leaderboard's `serverRegion`
+  filter (checked live 2026-09-17). A member is measured against somebody they
+  could actually raid with, and the region's realm slugs resolve for the
+  follow-up reads.

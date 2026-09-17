@@ -179,9 +179,9 @@ const (
 	AFailed AnalysisState = "failed"
 )
 
-// ComparisonPlayer is a player named by a Warcraft Logs link, and what was
-// fetched about them for one boss and difficulty. Shared across members and
-// kept a day (FR-035).
+// ComparisonPlayer is a player on Warcraft Logs and what was fetched about
+// them for one boss and difficulty. Shared across members and kept a day
+// (FR-035).
 type ComparisonPlayer struct {
 	ID int64
 
@@ -194,6 +194,7 @@ type ComparisonPlayer struct {
 
 	FetchedAt   time.Time
 	ClassID     int
+	Class       string // the class name, when known
 	Spec        string
 	RankPercent float64
 	Amount      float64
@@ -212,10 +213,30 @@ type ComparisonKey struct {
 	Metric                  string
 }
 
-// Analysis is one run of the comparison (FR-038..FR-041).
+// Analysis sources.
+const (
+	// SourceWCL is the character's latest ranked kill on each boss, read
+	// from Warcraft Logs. The default: no upload needed.
+	SourceWCL = "wcl"
+	// SourceUpload is a night the member uploaded.
+	SourceUpload = "upload"
+	// SourceShowcase is a character with no logs anywhere: the top parses
+	// of the class and spec are broken down instead, against the
+	// character's current gear.
+	SourceShowcase = "showcase"
+)
+
+// Analysis is one run of the comparison (FR-038..FR-041): a character's
+// latest raid -- from Warcraft Logs, or from one upload -- against the top
+// player of their class and spec.
 type Analysis struct {
-	ID        int64
-	UserID    int64
+	ID     int64
+	UserID int64
+	// Source is SourceWCL or SourceUpload; UploadID is set for the latter.
+	Source   string
+	UploadID int64
+	// SummaryID is a single pull, for the per-fight view to come; zero for
+	// a night.
 	SummaryID int64
 	Name      string // the character, denormalised for the card
 	RealmSlug string
@@ -238,9 +259,11 @@ type Analysis struct {
 	StartedAt  *time.Time
 	FinishedAt *time.Time
 
-	// Comparison and Summary are filled by the store for the card.
+	// Comparison and Summaries are filled by the store for the worker and
+	// the card: the top player's row on the main boss, and every pull of
+	// the character in the upload, each with its Fight.
 	Comparison *ComparisonPlayer
-	Summary    *Summary
+	Summaries  []Summary
 }
 
 // AllowanceWindow is how long a member waits between analyses (FR-039).

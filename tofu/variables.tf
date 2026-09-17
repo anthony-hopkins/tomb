@@ -73,7 +73,7 @@ variable "data_disk_size" {
     prevent_destroy.
   EOT
   type        = number
-  default     = 20  # was 10; combat logs wait here between upload and parse (spec 003)
+  default     = 20 # was 10; combat logs wait here between upload and parse (spec 003)
 }
 
 variable "disk_type" {
@@ -310,6 +310,12 @@ variable "timezone" {
   default     = ""
 }
 
+variable "discord_invite" {
+  description = "The guild's Discord invite link, shown on the public front door (spec 004). A public https:// link, not a secret. Empty means the page says to ask an officer. Reaches the app as TOMB_DISCORD_INVITE."
+  type        = string
+  default     = ""
+}
+
 # --- Combat logs and the AI comparison (spec 003) --------------------------
 
 variable "upload_dir" {
@@ -319,13 +325,13 @@ variable "upload_dir" {
 }
 
 variable "ai_model" {
-  description = "The Vertex AI model that writes a comparison. Empty is the app's default, gemini-3.1-pro. Reaches the app as TOMB_AI_MODEL."
+  description = "The Vertex AI model that writes a comparison. Empty is the app's default, gemini-3.1-pro-preview, which Vertex AI serves at the global location only. Reaches the app as TOMB_AI_MODEL."
   type        = string
   default     = ""
 }
 
 variable "ai_region" {
-  description = "The region the model is called in. Empty is the app's default, us-central1. Reaches the app as TOMB_AI_REGION."
+  description = "The Vertex AI location the model is called in: a region such as us-central1, or global, where the newest models are served. Empty is the app's default, global. Reaches the app as TOMB_AI_REGION."
   type        = string
   default     = ""
 }

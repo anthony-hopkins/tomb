@@ -29,6 +29,25 @@ func (f fakeWCL) BestRank(context.Context, wcl.CharacterRef, int, int, string) (
 	return f.rank, nil
 }
 
+func (f fakeWCL) TopPlayer(context.Context, int, int, string, string, string) (wcl.CharacterRef, wcl.Ranking, error) {
+	return wcl.CharacterRef{Region: "us", Slug: "area-52", Name: "Toptank"}, f.rank, nil
+}
+
+func (f fakeWCL) ZoneRankings(context.Context, wcl.CharacterRef) (wcl.Zone, error) {
+	return wcl.Zone{Class: "Death Knight", Spec: "Blood", Difficulty: 5, Metric: "dps",
+		Encounters: []wcl.ZoneEncounter{{ID: 3009, Name: "Vexie and the Geargrinders", Kills: 6}, {ID: 3010, Name: "Cauldron of Carnage", Kills: 4}}}, nil
+}
+
+func (f fakeWCL) CurrentZone(context.Context) (wcl.RaidZone, error) {
+	return wcl.RaidZone{ID: 44, Name: "The Venomous Abyss", Encounters: []wcl.ZoneEncounter{{ID: 3009, Name: "Vexie and the Geargrinders"}}}, nil
+}
+
+func (f fakeWCL) LatestRank(context.Context, wcl.CharacterRef, int, int, string) (wcl.Ranking, error) {
+	return wcl.Ranking{Name: "Nekromoo", Class: "Death Knight", Spec: "Blood", Metric: "dps", RankPercent: 74, Amount: 1102000, Duration: 250 * time.Second,
+		StartedAt: time.Date(2026, 9, 14, 20, 0, 0, 0, time.UTC),
+		Gear:      []wcl.Gear{{ID: 212345, Name: "Casque", ItemLevel: 311}}, Talents: []wcl.Talent{{ID: 2, Name: "Marrowrend"}}}, nil
+}
+
 type fakeAI struct{ text string }
 
 func (f fakeAI) Write(context.Context, string, string) (string, ai.Usage, error) {
@@ -50,7 +69,7 @@ func stackBoth(t *testing.T, store *fights.MemStore, audit *memAudit) (http.Hand
 		Deps: platform.Deps{
 			Logger: logger, Blizzard: client, Audit: audit, CSRF: csrf,
 			Config: platform.Config{UploadDir: t.TempDir(), Timezone: time.UTC, AIModel: "gemini-3.1-pro"},
-			WCL: fakeWCL{rank: wcl.Ranking{Name: "Toptank", ClassID: 1, Spec: "Blood", Metric: "dps", RankPercent: 97, Amount: 1498220,
+			WCL: fakeWCL{rank: wcl.Ranking{Name: "Toptank", Class: "Death Knight", Spec: "Blood", Metric: "dps", RankPercent: 97, Amount: 1498220,
 				Gear: []wcl.Gear{{ID: 212345, Name: "Casque", ItemLevel: 320}}, Talents: []wcl.Talent{{ID: 1, Name: "Consumption"}}}},
 			AI: fakeAI{text: "Overview\n\nYou pressed Death Strike twice in two minutes.\n\nDo these first\n\n- Press it more."},
 		},
@@ -81,8 +100,9 @@ func stackBoth(t *testing.T, store *fights.MemStore, audit *memAudit) (http.Hand
 	}), logs
 }
 
-// uploadNight sends the fixture through the protocol and parses it.
-func uploadNight(t *testing.T, h http.Handler, app *combatlogs.App) {
+// uploadNight sends the fixture through the protocol and parses it,
+// returning the upload's id.
+func uploadNight(t *testing.T, h http.Handler, app *combatlogs.App) int64 {
 	t.Helper()
 	var buf bytes.Buffer
 	zw := gzip.NewWriter(&buf)
@@ -102,6 +122,7 @@ func uploadNight(t *testing.T, h http.Handler, app *combatlogs.App) {
 	if !app.ParseOnce(context.Background()) {
 		t.Fatal("nothing parsed")
 	}
+	return began.ID
 }
 
 func postForm(h http.Handler, path string, form url.Values) *httptest.ResponseRecorder {
@@ -120,24 +141,18 @@ func TestAnalyseEndToEnd(t *testing.T) {
 	store := fights.NewMemStore()
 	audit := &memAudit{}
 	h, app := stackBoth(t, store, audit)
-	uploadNight(t, h, app)
+	uploadID := uploadNight(t, h, app)
 
-	// The card offers the raid pulls.
+	// The card offers the night.
 	rec := do(h, httptest.NewRequest(http.MethodGet, "/app/dashboard?c=area-52/nekromoo", nil))
 	card := rec.Body.String()
-	if !strings.Contains(card, `action="/app/combatlogs/analyses"`) || !strings.Contains(card, "Vexie and the Geargrinders · Mythic · Kill") {
+	if !strings.Contains(card, `action="/app/combatlogs/analyses"`) || !strings.Contains(card, `<option value="wcl">`) || !strings.Contains(card, "WoWCombatLog.txt") || !strings.Contains(card, "2 raid pulls") {
 		t.Fatalf("card has no analyse form: %.300s", card)
 	}
-	sums, _ := store.SummariesForCharacter(context.Background(), 1, "Nekromoo", "area-52")
-	var vexie int64
-	for _, sm := range sums {
-		if sm.Fight.EncounterID == 3009 {
-			vexie = sm.ID
-		}
-	}
+	form := url.Values{"source": {"upload:" + itoa(uploadID)}, "character": {"area-52/nekromoo"}}
 
 	// Run it.
-	rec = postForm(h, "/app/combatlogs/analyses", url.Values{"summary": {itoa(vexie)}, "link": {"https://www.warcraftlogs.com/character/us/area-52/toptank"}})
+	rec = postForm(h, "/app/combatlogs/analyses", form)
 	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/app/dashboard?c=area-52%2Fnekromoo" {
 		t.Fatalf("analyse = %d %q %s", rec.Code, rec.Header().Get("Location"), rec.Body.String())
 	}
@@ -150,7 +165,7 @@ func TestAnalyseEndToEnd(t *testing.T) {
 	}
 	rec = do(h, httptest.NewRequest(http.MethodGet, "/app/dashboard?c=area-52/nekromoo", nil))
 	card = rec.Body.String()
-	for _, want := range []string{"Analysed", "<strong>Toptank</strong>", "Head", "Same item", "Consumption", "<h4>Overview</h4>", "Press it more"} {
+	for _, want := range []string{"Analysed", "<strong>Toptank</strong>, top Blood Death Knight on", "Head", "Same item", "Consumption", "<h4>Overview</h4>", "Press it more"} {
 		if !strings.Contains(card, want) {
 			t.Errorf("result card is missing %q", want)
 		}
@@ -169,7 +184,7 @@ func TestAnalyseEndToEnd(t *testing.T) {
 	}
 
 	// A member's second run inside two hours is refused, and the card says so.
-	rec = postForm(h, "/app/combatlogs/analyses", url.Values{"summary": {itoa(vexie)}, "link": {"https://www.warcraftlogs.com/character/us/area-52/toptank"}})
+	rec = postForm(h, "/app/combatlogs/analyses", form)
 	loc := rec.Header().Get("Location")
 	if !strings.Contains(loc, "msg=wait") {
 		t.Fatalf("second run = %q", loc)
@@ -179,10 +194,10 @@ func TestAnalyseEndToEnd(t *testing.T) {
 		t.Error("the card does not word the wait")
 	}
 
-	// A bad link creates nothing and the card says why.
+	// A character not on the account is refused outright.
 	before := len(store.Analyses)
-	rec = postForm(h, "/app/combatlogs/analyses", url.Values{"summary": {itoa(vexie)}, "link": {"https://example.com/nope"}})
-	if len(store.Analyses) != before || !strings.Contains(rec.Header().Get("Location"), "msg=badlink") {
-		t.Errorf("bad link = %q, analyses %d -> %d", rec.Header().Get("Location"), before, len(store.Analyses))
+	rec = postForm(h, "/app/combatlogs/analyses", url.Values{"source": {"upload:" + itoa(uploadID)}, "character": {"area-52/nobody"}})
+	if len(store.Analyses) != before || rec.Code != http.StatusNotFound {
+		t.Errorf("unknown character = %d, analyses %d -> %d", rec.Code, before, len(store.Analyses))
 	}
 }

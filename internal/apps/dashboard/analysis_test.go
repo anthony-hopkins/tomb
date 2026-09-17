@@ -23,6 +23,20 @@ func (noWCL) BestRank(context.Context, wcl.CharacterRef, int, int, string) (wcl.
 	return wcl.Ranking{}, wcl.ErrNoRank
 }
 
+func (noWCL) TopPlayer(context.Context, int, int, string, string, string) (wcl.CharacterRef, wcl.Ranking, error) {
+	return wcl.CharacterRef{}, wcl.Ranking{}, wcl.ErrNoRank
+}
+
+func (noWCL) ZoneRankings(context.Context, wcl.CharacterRef) (wcl.Zone, error) {
+	return wcl.Zone{}, wcl.ErrNoLogs
+}
+
+func (noWCL) LatestRank(context.Context, wcl.CharacterRef, int, int, string) (wcl.Ranking, error) {
+	return wcl.Ranking{}, wcl.ErrNoRank
+}
+
+func (noWCL) CurrentZone(context.Context) (wcl.RaidZone, error) { return wcl.RaidZone{}, wcl.ErrNoRank }
+
 // stackAnalysis mounts the dashboard with a fights store and, when asked, a
 // Warcraft Logs client.
 func stackAnalysis(t *testing.T, store fights.Store, withWCL bool) http.Handler {
@@ -68,37 +82,31 @@ func stackAnalysis(t *testing.T, store fights.Store, withWCL bool) http.Handler 
 	})
 }
 
-// storeWith seeds a parsed raid pull (and a dungeon pull the picker must
-// leave out), and optionally analyses.
-func storeWith(t *testing.T, seed func(store *fights.MemStore, summaryID int64)) *fights.MemStore {
+// storeWith seeds a parsed upload with a raid pull (and a dungeon pull the
+// picker must not count), and optionally analyses.
+func storeWith(t *testing.T, seed func(store *fights.MemStore, uploadID int64)) *fights.MemStore {
 	t.Helper()
 	store := fights.NewMemStore()
 	ctx := context.Background()
-	u, _ := store.Begin(ctx, fights.Upload{UserID: 1, Fingerprint: []byte("x"), PiecesTotal: 1})
+	u, _ := store.Begin(ctx, fights.Upload{UserID: 1, Filename: "WoWCombatLog.txt", Fingerprint: []byte("x"), PiecesTotal: 1})
 	_ = store.AddFights(ctx, u.ID, []fights.Fight{
-		{EncounterName: "Vexie and the Geargrinders", DifficultyID: 16, Kill: true, StartedAt: time.Date(2026, 9, 14, 20, 0, 0, 0, time.UTC),
+		{EncounterID: 3009, EncounterName: "Vexie and the Geargrinders", DifficultyID: 16, Kill: true, StartedAt: time.Date(2026, 9, 14, 20, 0, 0, 0, time.UTC),
 			Summaries: []fights.Summary{{Name: "Nekromoo", RealmSlug: "area-52", SpecID: 250}}},
-		{EncounterName: "Some Dungeon Boss", DifficultyID: 8, Kill: true, StartedAt: time.Date(2026, 9, 14, 21, 0, 0, 0, time.UTC),
+		{EncounterID: 1, EncounterName: "Some Dungeon Boss", DifficultyID: 8, Kill: true, StartedAt: time.Date(2026, 9, 14, 21, 0, 0, 0, time.UTC),
 			Summaries: []fights.Summary{{Name: "Nekromoo", RealmSlug: "area-52", SpecID: 250}}},
 	})
-	sums, _ := store.SummariesForCharacter(ctx, 1, "Nekromoo", "area-52")
-	var raid int64
-	for _, sm := range sums {
-		if sm.Fight.DifficultyID == 16 {
-			raid = sm.ID
-		}
-	}
+	store.Uploads[u.ID].State = fights.Parsed
 	if seed != nil {
-		seed(store, raid)
+		seed(store, u.ID)
 	}
 	return store
 }
 
-func analysed(store *fights.MemStore, summaryID int64, state fights.AnalysisState, failure string) {
+func analysed(store *fights.MemStore, uploadID int64, state fights.AnalysisState, failure string) {
 	ctx := context.Background()
 	cp, _ := store.PutComparisonPlayer(ctx, fights.ComparisonPlayer{Region: "us", RealmSlug: "area-52", Name: "toptank", Encounter: 3009, WCLDiff: 5, Metric: "dps",
-		FetchedAt: time.Now(), Spec: "Blood", Payload: []byte(`{"Name":"Toptank","Spec":"Blood"}`)})
-	an, _ := store.CreateAnalysis(ctx, fights.Analysis{UserID: 1, SummaryID: summaryID, Name: "Nekromoo", RealmSlug: "area-52", ComparisonID: cp.ID}, true)
+		FetchedAt: time.Now(), Class: "Death Knight", Spec: "Blood", Payload: []byte(`{"Name":"Toptank","Class":"Death Knight","Spec":"Blood"}`)})
+	an, _ := store.CreateAnalysis(ctx, fights.Analysis{UserID: 1, UploadID: uploadID, Name: "Nekromoo", RealmSlug: "area-52", ComparisonID: cp.ID}, true)
 	switch state {
 	case fights.Done:
 		_ = store.FinishAnalysis(ctx, an.ID, []fights.UpgradeRow{
@@ -111,8 +119,8 @@ func analysed(store *fights.MemStore, summaryID int64, state fights.AnalysisStat
 	}
 }
 
-// TestAnalysisSection: the picker lists raid pulls only, the form posts to
-// the Combat logs app, and the section follows the newest analysis.
+// TestAnalysisSection: the picker lists uploads with raid pulls, the form
+// posts to the Combat logs app, and the section follows the newest analysis.
 func TestAnalysisSection(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -123,25 +131,28 @@ func TestAnalysisSection(t *testing.T) {
 		wantNot []string
 		refresh bool
 	}{
-		{"no fights", fights.NewMemStore(), true, "/app/dashboard",
-			[]string{"No parsed raid pulls", "/app/combatlogs"}, []string{"analyse-form"}, false},
-		{"fights, no analysis", storeWith(t, nil), true, "/app/dashboard",
-			[]string{`action="/app/combatlogs/analyses"`, "Vexie and the Geargrinders · Mythic · Kill · 14 Sep 2026 20:00", `name="summary"`, `name="link"`, `name="csrf_token"`, "appears here once an analysis has run"},
+		{"no uploads: Warcraft Logs is the source", fights.NewMemStore(), true, "/app/dashboard",
+			[]string{`action="/app/combatlogs/analyses"`, `<option value="wcl">My latest raid on Warcraft Logs</option>`, `name="source"`, `name="character" value="area-52/nekromoo"`},
+			[]string{"upload:"}, false},
+		{"upload, no analysis", storeWith(t, nil), true, "/app/dashboard",
+			[]string{`<div class="armory-aside">`, `action="/app/combatlogs/analyses"`, `<option value="wcl">`, `<option value="upload:1">My upload WoWCombatLog.txt`, "1 raid pull<", `name="csrf_token"`, "top-ranked player of your class", "appears here once an analysis has run"},
 			[]string{"Some Dungeon Boss", "Analysed"}, false},
 		{"comparisons not set up", storeWith(t, nil), false, "/app/dashboard",
 			[]string{"not set up on this site"}, []string{"analyse-form"}, false},
 		{"pending", storeWith(t, func(s *fights.MemStore, id int64) { analysed(s, id, fights.Pending, "") }), true, "/app/dashboard",
 			[]string{"Analysing"}, []string{"Analysed"}, true},
 		{"done", storeWith(t, func(s *fights.MemStore, id int64) { analysed(s, id, fights.Done, "") }), true, "/app/dashboard",
-			[]string{"Analysed", "<strong>Toptank</strong>", "Old Casque", "New Casque", "Upgrade to chase (+9)", "Same item", "Consumption", "<h4>Overview</h4>", "<h4>Do these first</h4>", "lost twenty seconds", "<p>- Use Dancing Rune Weapon on pull.</p>"},
+			[]string{"Analysed", "<strong>Toptank</strong>, top Blood Death Knight on Vexie and the Geargrinders", "Old Casque", "New Casque", "Upgrade to chase (+9)", "Same item", "Consumption", "<h4>Overview</h4>", "<h4>Do these first</h4>", "lost twenty seconds", "<p>- Use Dancing Rune Weapon on pull.</p>"},
 			[]string{"Analysing"}, false},
 		{"failed over done", storeWith(t, func(s *fights.MemStore, id int64) {
 			analysed(s, id, fights.Done, "")
 			analysed(s, id, fights.AFailed, "the model is busy")
 		}), true, "/app/dashboard",
 			[]string{"could not be completed: the model is busy", "Old Casque"}, nil, false},
-		{"message: bad link", storeWith(t, nil), true, "/app/dashboard?c=area-52/nekromoo&msg=badlink",
-			[]string{"not a Warcraft Logs character link"}, nil, false},
+		{"message: no spec", storeWith(t, nil), true, "/app/dashboard?c=area-52/nekromoo&msg=nospec",
+			[]string{"specialization is not known"}, nil, false},
+		{"message: no logs", storeWith(t, nil), true, "/app/dashboard?c=area-52/nekromoo&msg=nologs",
+			[]string{"no logs for this character"}, nil, false},
 		{"message: wait", storeWith(t, nil), true, "/app/dashboard?msg=wait&min=90",
 			[]string{"another analysis in 90 minutes"}, nil, false},
 		{"message: unknown code renders nothing", storeWith(t, nil), true, "/app/dashboard?msg=<script>",

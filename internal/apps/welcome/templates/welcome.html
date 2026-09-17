@@ -1,0 +1,163 @@
+{{define "welcome.html"}}
+{{/* The front door (spec 004). Everything here is drawn from memory: the
+     snapshot the app holds, and the configuration. Nothing on this page is
+     about a member's account -- character names and the public Armory facts
+     about them, the same as Blizzard's own Armory shows for any guild. */}}
+<div class="welcome">
+
+  <section class="hero welcome-hero">
+    <div>
+      <h1>Welcome to {{.Guild}}</h1>
+      <p class="tagline">A World of Warcraft guild on {{.Realm}}, named after the one place in Azeroth we keep getting sent back from.</p>
+      <p>
+        We raid, we push keys, we hold strong opinions about transmog, and we show
+        up for each other on the nights that have nothing to do with the game.
+        Behind every name on this page is a real person, and that is the part we
+        are proudest of.
+      </p>
+      <p>
+        Join our Discord! Everyone is welcome in, but if you're looking to compete
+        and grow with &lt;{{.Guild}}&gt;, apply within our server!
+      </p>
+    </div>
+    <div class="hero-actions">
+      {{with .Message}}<p class="notice" role="status">{{.}}</p>{{end}}
+      {{if .SignedIn}}
+      <p>You are signed in.</p>
+      <a class="primary-link" href="/">Open the guild</a>
+      {{else}}
+      <form method="post" action="/auth/login">
+        <button class="primary" type="submit">Sign in with Battle.net</button>
+      </form>
+      <p class="fineprint">
+        Members: sign in to see your characters, the roster and the calendar.
+        You will be sent to Blizzard's official Battle.net page to approve
+        access. TOMB never sees or stores your Blizzard password.
+      </p>
+      {{end}}
+      {{if .Discord}}
+      <a class="primary-link discord-link" href="{{.Discord}}" rel="noopener">Join the TOMB Discord</a>
+      {{else}}
+      <p class="fineprint">Looking for the Discord? Whisper any officer below in game and they will send the invite.</p>
+      {{end}}
+    </div>
+  </section>
+
+  <div class="welcome-grid">
+    <section class="panel" aria-label="Who runs the place">
+      <h2 class="summary-heading">Who runs the place</h2>
+      {{if not .Have}}
+      <p class="fineprint">The roster is on its way from Blizzard. Give it a moment and look again.</p>
+      {{else if not .Officers}}
+      <p class="fineprint">Blizzard listed nobody at an officer rank just now.</p>
+      {{else}}
+      <ul class="officer-list">
+        {{range .Officers}}
+        <li>
+          <span class="class-name cls-{{.ClassSlug}}">{{template "rank-mark" .RankIndex}}{{.Name}}</span>
+          <span class="officer-rank">{{.Rank}}</span>
+          <span class="officer-meta">{{if .Spec}}{{.Spec}} {{end}}{{.Class}}{{if .ItemLevel}} &middot; {{.ItemLevel}} item level{{end}}{{if .Realm}} &middot; {{.Realm}}{{end}}</span>
+        </li>
+        {{end}}
+      </ul>
+      <p class="fineprint">Recruiting questions go to any of them, in game or on Discord.</p>
+      {{end}}
+      {{if .Have}}
+      <p class="welcome-stat"><b>{{.Total}}</b> characters on the roster <small>as of {{.AsOf}}</small></p>
+      {{end}}
+    </section>
+
+    <section class="panel" aria-label="Top of the guild">
+      <h2 class="summary-heading">Top of the guild</h2>
+      {{if not .Have}}
+      <p class="fineprint">The numbers are on their way from Blizzard.</p>
+      {{else if not .Boards}}
+      <p class="fineprint">Nothing to rank yet: Blizzard has served no member profiles this hour.</p>
+      {{else}}
+      <div class="leaderboards">
+        {{range .Boards}}
+        <section class="board">
+          <h3 class="summary-heading">{{.Title}}</h3>
+          <ol class="board-list">
+            {{range .Entries}}
+            <li>
+              {{/* The bar behind the row, in the class's colour, as long as
+                   the row's standing on the board; the number is the
+                   measurement. Names are not links: there is nothing an
+                   anonymous visitor may open. */}}
+              <svg class="board-bar" aria-hidden="true">
+                <rect class="bar-fill cls-{{.Class}}" width="{{.Pct}}%" height="100%" rx="4"/>
+              </svg>
+              <span class="board-rank">{{.Rank}}</span>
+              <span class="board-name class-name cls-{{.Class}}">{{template "rank-mark" .RankIndex}}{{.Name}}</span>
+              <span class="board-n">{{.Value}}</span>
+            </li>
+            {{end}}
+          </ol>
+        </section>
+        {{end}}
+      </div>
+      {{end}}
+    </section>
+  </div>
+
+  <section class="panel cares" aria-label="TOMB Cares">
+    <h2 class="summary-heading">TOMB Cares</h2>
+    <p class="tagline">Mental health awareness &middot; Community support &middot; Resources</p>
+    <p>
+      <b>{{.Guild}}</b> has always been about more than games, progression and
+      achievements. Behind every username is a real person with their own goals,
+      challenges, victories and difficult moments.
+    </p>
+    <p>
+      <b>TOMB Cares</b> is an initiative focused on mental health awareness,
+      emotional well-being, and connecting members of our community with reliable
+      resources when they need support. Our goal is simple: no one should feel
+      they have to navigate a difficult moment completely alone.
+    </p>
+    <div class="cares-columns">
+      <div>
+        <h3>What TOMB Cares is</h3>
+        <ul>
+          <li>Mental health awareness and education</li>
+          <li>Access to reputable support resources</li>
+          <li>A community where asking for help is not treated as weakness</li>
+          <li>Encouragement for healthy communication and boundaries</li>
+          <li>Guidance toward professional support when appropriate</li>
+          <li>A culture built around compassion and respect</li>
+        </ul>
+        <p>
+          Sometimes someone needs advice. Sometimes they need someone willing to
+          listen. And sometimes the best thing we can do is help them find someone
+          professionally equipped to help.
+        </p>
+      </div>
+      <div>
+        <h3>What TOMB Cares is not</h3>
+        <ul>
+          <li>TOMB Cares is not therapy or professional mental-health treatment.</li>
+          <li>TOMB staff and community members are not expected to diagnose
+            conditions, provide medical advice, recommend treatments, or become
+            responsible for another person's mental health.</li>
+        </ul>
+        <p>Our responsibility is much simpler:</p>
+        <p class="cares-motto">Listen. Support. Connect.</p>
+        <p>We can care about someone without pretending we are qualified to treat them.</p>
+      </div>
+    </div>
+    <p class="notice" role="note">
+      If you are in crisis or thinking about harming yourself, please contact
+      your local emergency number or a crisis line right now. In the US and
+      Canada, call or text <b>988</b>. Elsewhere,
+      <a href="https://findahelpline.com" rel="noopener">findahelpline.com</a>
+      lists free, confidential lines by country.
+    </p>
+  </section>
+
+  <p class="fineprint">
+    Names on this page are characters, not people: the same public information
+    Blizzard's Armory shows about any guild. Nothing about a member's account
+    appears here.
+  </p>
+</div>
+{{end}}

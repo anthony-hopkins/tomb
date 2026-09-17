@@ -9,12 +9,17 @@ import (
 // and the mismatch flag is what the caller set.
 func TestBuild(t *testing.T) {
 	in := Input{
-		Fight: Fight{Boss: "Vexie and the Geargrinders", Difficulty: "Mythic", Kill: true, Duration: "5:12", Date: "14 Sep 2026"},
-		You: Player{Name: "Nekromoo", Spec: "Blood", Damage: 3600, Deaths: 0, ActiveTime: "5:10",
-			Casts:   []Cast{{Name: "Death Strike", Count: 41}, {Name: "Dancing Rune Weapon", Count: 3, At: []float64{2, 92, 184}}},
+		Raid: Raid{Difficulty: "Mythic", Date: "14 Sep 2026", Pulls: 9, Kills: 2, Wipes: 7, Note: "2 pulls at another difficulty were left out"},
+		Bosses: []Boss{
+			{Name: "Vexie and the Geargrinders", Pulls: 1, Kills: 1, YourBestDPS: 30, YourBestDuration: "2:00", YourBestWasKill: true,
+				YourCasts: []Cast{{Name: "Death Strike", Count: 41}, {Name: "Dancing Rune Weapon", Count: 3, At: []float64{2, 92, 184}}},
+				TheirDPS:  1498220, TheirRankPercent: 97.3, TheirDuration: "5:12"},
+			{Name: "Cauldron of Carnage", Pulls: 8, Kills: 1, Note: "the top player has no ranked kill of this boss at this difficulty"},
+		},
+		You: Player{Name: "Nekromoo", Spec: "Blood", Damage: 3600, Deaths: 1,
 			Gear:    []Gear{{Slot: "Head", Name: "Baleful Grave-Knight's Casque", Level: 311}},
 			Talents: []string{"Marrowrend", "Bonestorm"}},
-		Them: Player{Name: "Toptank", Spec: "Blood", DPS: 1498220, RankPercent: 97.3,
+		Them: Player{Name: "Toptank", Spec: "Blood",
 			Gear:    []Gear{{Slot: "Head", Name: "Baleful Grave-Knight's Casque", Level: 320}},
 			Talents: []string{"Marrowrend", "Consumption"}},
 		Table:    []map[string]any{{"slot": "Head", "verdict": "chase"}},
@@ -22,8 +27,9 @@ func TestBuild(t *testing.T) {
 		Mismatch: true,
 	}
 	got := Build(in)
-	for _, want := range []string{"## fight", "## you", "## them", "## upgrade_table", "## talent_diff", "## mismatch\ntrue",
-		"Vexie and the Geargrinders", "Dancing Rune Weapon", "at_seconds", "Consumption", "Baleful Grave-Knight's Casque", `"rank_percent": 97.3`} {
+	for _, want := range []string{"## raid", "## bosses", "## you", "## them", "## upgrade_table", "## talent_diff", "## mismatch\ntrue",
+		"Vexie and the Geargrinders", "Cauldron of Carnage", "Dancing Rune Weapon", "at_seconds", "Consumption", "Baleful Grave-Knight's Casque",
+		`"their_rank_percent": 97.3`, "no ranked kill", "left out"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("prompt is missing %q", want)
 		}
@@ -31,7 +37,7 @@ func TestBuild(t *testing.T) {
 	if strings.Contains(got, "212345") {
 		t.Error("an item id leaked into the prompt")
 	}
-	if !strings.Contains(System, "Do these first") || !strings.Contains(System, "Do not restate the gear table") {
+	if !strings.Contains(System, "Do these first") || !strings.Contains(System, "Do not restate the gear table") || !strings.Contains(System, "boss by boss") {
 		t.Error("the system instruction lost its rules")
 	}
 }

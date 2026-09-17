@@ -104,6 +104,16 @@ mistake here should never reach a request.
   `platform.ProfileFrom(r.Context()).Membership.IsOfficer` in your handler.
   The threshold is `TOMB_GUILD_OFFICER_RANK` (default 1: the guild master and
   the rank below).
+- **Public pages.** Set `Public: true` and the core applies no session gate:
+  your handlers run for anyone, with `platform.SessionFrom` reporting a
+  viewer only when there is one. It cannot be combined with `RequiresGuild`
+  or `OfficerOnly`; `Mount` refuses that. One Public app may also set
+  `Landing: true`: its root page then answers `/` for anonymous visitors
+  (the welcome app does), and the core's notices for that page arrive as
+  `platform.LandingMessage(r)`. A public page must not call Blizzard with a
+  member's token, because there is none; the site's own token is
+  `blizzard.AppTokenSource`, an optional interface on `Deps.Blizzard`, and
+  it reads only what Blizzard makes public.
 - **Home.** One app may set `Home: true`; that is where `/` sends a signed-in
   viewer, where sign-in lands, and where the brand link goes. Give that app an
   empty `NavLabel`, or it is listed beside a link that already goes there.

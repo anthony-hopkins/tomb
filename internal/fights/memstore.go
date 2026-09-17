@@ -176,6 +176,11 @@ func (m *MemStore) Remove(_ context.Context, id, userID int64) (Upload, error) {
 }
 
 func (m *MemStore) dropFights(uploadID int64) {
+	for aid, a := range m.Analyses {
+		if a.UploadID == uploadID {
+			delete(m.Analyses, aid)
+		}
+	}
 	for fid, f := range m.Fights {
 		if f.UploadID != uploadID {
 			continue
@@ -381,6 +386,12 @@ func (m *MemStore) CreateAnalysis(_ context.Context, a Analysis, unlimited bool)
 	a.ID = m.id()
 	a.State = Pending
 	a.CreatedAt = m.Now()
+	if a.Source == "" {
+		a.Source = SourceUpload
+		if a.UploadID == 0 {
+			a.Source = SourceWCL
+		}
+	}
 	ac := a
 	m.Analyses[a.ID] = &ac
 	return a, nil
@@ -414,24 +425,30 @@ func (m *MemStore) attach(ctx context.Context, a Analysis) (Analysis, error) {
 	}
 	pc := *p
 	a.Comparison = &pc
+	if a.UploadID == 0 {
+		return a, nil
+	}
 	m.mu.Lock()
-	var sm *Summary
+	var fs []*Fight
 	for _, f := range m.Fights {
+		if f.UploadID == a.UploadID {
+			fs = append(fs, f)
+		}
+	}
+	sort.Slice(fs, func(i, j int) bool { return fs[i].Ordinal < fs[j].Ordinal })
+	a.Summaries = nil
+	for _, f := range fs {
 		for _, s := range f.Summaries {
-			if s.ID == a.SummaryID {
+			if strings.EqualFold(s.Name, a.Name) && s.RealmSlug == a.RealmSlug {
 				sc := s
 				fc := *f
 				fc.Summaries = nil
 				sc.Fight = &fc
-				sm = &sc
+				a.Summaries = append(a.Summaries, sc)
 			}
 		}
 	}
 	m.mu.Unlock()
-	if sm == nil {
-		return Analysis{}, ErrNotFound
-	}
-	a.Summary = sm
 	return a, nil
 }
 

@@ -10,6 +10,7 @@ package wcl
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 )
 
@@ -41,12 +42,14 @@ type Talent struct {
 type Ranking struct {
 	Name    string // display case, as Warcraft Logs has it
 	ClassID int
+	Class   string // the class name, when the answer carried one
 	Spec    string
 
 	RankPercent float64
 	Amount      float64 // DPS or HPS, per Metric
 	Metric      string
 	Duration    time.Duration
+	StartedAt   time.Time // when the ranked kill was
 	ReportCode  string
 	FightID     int
 
@@ -54,13 +57,77 @@ type Ranking struct {
 	Talents []Talent
 }
 
-// Reader is what the site asks of Warcraft Logs, and all of it.
+// RaidZone is the current raid: its id, name and bosses.
+type RaidZone struct {
+	ID         int
+	Name       string
+	Encounters []ZoneEncounter
+}
+
+// Zone is what Warcraft Logs holds for a character in the current raid:
+// which bosses they have ranked kills on, at which difficulty, as which
+// spec, and how many.
+type Zone struct {
+	Name       string
+	ClassID    int
+	Class      string
+	Spec       string // of the best parses; the spec the comparison is made as
+	Difficulty int    // Warcraft Logs' numbering
+	Metric     string
+	Encounters []ZoneEncounter
+}
+
+// ZoneEncounter is one boss in a character's zone rankings.
+type ZoneEncounter struct {
+	ID          int
+	Name        string
+	Kills       int
+	RankPercent float64
+	BestAmount  float64
+}
+
+// Reader is what the site asks of Warcraft Logs, and all of it: four reads.
 type Reader interface {
+	// ZoneRankings is the character's standing in the current raid:
+	// ErrNoCharacter when Warcraft Logs knows no such player, ErrNoLogs
+	// when it knows them but they have no ranked kill there.
+	ZoneRankings(ctx context.Context, ref CharacterRef) (Zone, error)
+	// LatestRank fetches ref's most recent ranked kill on encounterID at
+	// wclDifficulty by metric, with gear and talents. ErrNoRank when none.
+	LatestRank(ctx context.Context, ref CharacterRef, encounterID, wclDifficulty int, metric string) (Ranking, error)
 	// BestRank fetches ref's best recorded performance on encounterID at
 	// wclDifficulty by metric, with gear and talents. ErrNoCharacter when
 	// Warcraft Logs knows no such player; ErrNoRank when it knows them but
 	// they have no recorded fight there.
 	BestRank(ctx context.Context, ref CharacterRef, encounterID, wclDifficulty int, metric string) (Ranking, error)
+	// TopPlayer finds the highest-ranked player of a class and spec on
+	// encounterID at wclDifficulty by metric, with their parse there.
+	// class is Warcraft Logs' spelling, without spaces (ClassSlug).
+	// ErrNoRank when nobody of that class and spec is ranked there.
+	TopPlayer(ctx context.Context, encounterID, wclDifficulty int, class, spec, metric string) (CharacterRef, Ranking, error)
+	// CurrentZone is the current raid and its bosses.
+	CurrentZone(ctx context.Context) (RaidZone, error)
+}
+
+// ClassSlug is a class name the way Warcraft Logs' API spells it in a
+// query: "Death Knight" is "DeathKnight".
+func ClassSlug(class string) string {
+	return strings.ReplaceAll(class, " ", "")
+}
+
+// ServerSlug is a realm name the way Warcraft Logs slugs it: "Area 52" is
+// "area-52", "Kel'Thuzad" is "kelthuzad".
+func ServerSlug(name string) string {
+	var b strings.Builder
+	for _, r := range strings.ToLower(name) {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
+			b.WriteRune(r)
+		case r == ' ' || r == '-':
+			b.WriteByte('-')
+		}
+	}
+	return b.String()
 }
 
 var (
@@ -69,6 +136,8 @@ var (
 	// ErrNoRank is a known player with no recorded fight on that boss and
 	// difficulty.
 	ErrNoRank = errors.New("no recorded fight on that boss at that difficulty")
+	// ErrNoLogs is a known player with no ranked kill in the current raid.
+	ErrNoLogs = errors.New("no ranked kills in the current raid")
 	// ErrBusy is Warcraft Logs asking the site to slow down.
 	ErrBusy = errors.New("warcraft logs is busy; try again later")
 	// ErrUnsupportedDifficulty is a fight that is not a raid.
@@ -107,6 +176,19 @@ var healerSpecs = map[int]bool{
 // top tank's is what the guild master did by hand, and what this reproduces.
 func MetricFor(specID int) string {
 	if healerSpecs[specID] {
+		return "hps"
+	}
+	return "dps"
+}
+
+// healerSpecNames are the healing specs by the name Warcraft Logs uses.
+var healerSpecNames = map[string]bool{
+	"Holy": true, "Discipline": true, "Restoration": true, "Mistweaver": true, "Preservation": true,
+}
+
+// MetricForSpec is MetricFor by spec name, for a spec Warcraft Logs named.
+func MetricForSpec(spec string) string {
+	if healerSpecNames[spec] {
 		return "hps"
 	}
 	return "dps"

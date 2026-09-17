@@ -1,11 +1,11 @@
 {
-  "_note": "HAND-WRITTEN from the shape documented by two client libraries (research D9). UNCONFIRMED: replace with a live capture (T050) and adjust the decoder if field names differ.",
+  "_note": "SHAPE CAPTURED from the live API on 2026-09-16 (T050): field names and types are real -- quality is a word, itemLevel is a string, talents are a tree of class and spec rows with the selected entry and its node. The VALUES are invented for the tests.",
   "data": {
     "characterData": {
       "character": {
         "id": 1234567,
         "name": "Toptank",
-        "classID": 6,
+        "classID": 1,
         "encounterRankings": {
           "bestAmount": 1534210.5,
           "medianPerformance": 91.2,
@@ -25,8 +25,16 @@
               "rankTotalParses": 4210,
               "historicalTotalParses": 8820,
               "todayTotalParses": 300,
-              "guild": {"id": 555, "name": "Some Guild", "faction": 1},
-              "report": {"code": "aBcD1234eFgH", "startTime": 1757900000000, "fightID": 7},
+              "guild": {
+                "id": 555,
+                "name": "Some Guild",
+                "faction": 1
+              },
+              "report": {
+                "code": "aBcD1234eFgH",
+                "startTime": 1757900000000,
+                "fightID": 7
+              },
               "duration": 312000,
               "startTime": 1757900123000,
               "amount": 1498220.1,
@@ -34,27 +42,143 @@
               "spec": "Blood",
               "bestSpec": "Blood",
               "faction": 1,
-              "talents": [
-                {"name": "Marrowrend", "id": 195182, "icon": "ability_deathknight_marrowrend.jpg", "type": 1},
-                {"name": "Death Strike", "id": 49998, "icon": "spell_deathknight_butcher2.jpg", "type": 1},
-                {"name": "Bonestorm", "id": 194844, "icon": "achievement_boss_lordmarrowgar.jpg", "type": 1}
-              ],
+              "talents": {
+                "class": {
+                  "7": [
+                    {
+                      "selectedEntryId": 195182,
+                      "pointsInvested": 1,
+                      "node": {
+                        "nodeId": 70007,
+                        "name": "Marrowrend",
+                        "type": "single",
+                        "row": 7,
+                        "maxRanks": 1,
+                        "abilities": [
+                          {
+                            "id": 195182,
+                            "definitionId": 200182,
+                            "name": "Marrowrend",
+                            "spellId": 195182,
+                            "type": "active",
+                            "maxRanks": 1
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                "spec": {
+                  "7": [
+                    {
+                      "selectedEntryId": 49998,
+                      "pointsInvested": 1,
+                      "node": {
+                        "nodeId": 70007,
+                        "name": "Death Strike",
+                        "type": "single",
+                        "row": 7,
+                        "maxRanks": 1,
+                        "abilities": [
+                          {
+                            "id": 49998,
+                            "definitionId": 54998,
+                            "name": "Death Strike",
+                            "spellId": 49998,
+                            "type": "active",
+                            "maxRanks": 1
+                          }
+                        ]
+                      }
+                    }
+                  ],
+                  "8": [
+                    {
+                      "selectedEntryId": 194844,
+                      "pointsInvested": 1,
+                      "node": {
+                        "nodeId": 70008,
+                        "name": "Bonestorm",
+                        "type": "single",
+                        "row": 8,
+                        "maxRanks": 1,
+                        "abilities": [
+                          {
+                            "id": 194844,
+                            "definitionId": 199844,
+                            "name": "Bonestorm",
+                            "spellId": 194844,
+                            "type": "active",
+                            "maxRanks": 1
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              },
               "gear": [
-                {"name": "Baleful Grave-Knight's Casque", "quality": 4, "id": 212345, "icon": "inv_helm_plate_raiddeathknight_d_01.jpg", "itemLevel": 320, "permanentEnchant": 0, "gems": [{"id": 213743, "itemLevel": 0, "icon": "inv_misc_gem_x4_uncommon_perfectcut_orange.jpg"}], "bonusIDs": [10390, 6652]},
-                {"name": "Pendant of Malefic Fury", "quality": 4, "id": 212346, "icon": "inv_misc_necklace.jpg", "itemLevel": 324, "permanentEnchant": 0, "gems": [], "bonusIDs": []},
-                {"name": "Baleful Grave-Knight's Gibbets", "quality": 4, "id": 212347, "icon": "inv_shoulder.jpg", "itemLevel": 320, "permanentEnchant": 0, "gems": [], "bonusIDs": []}
-              ]
+                {
+                  "name": "Baleful Grave-Knight's Casque",
+                  "quality": "epic",
+                  "id": 212345,
+                  "icon": "inv_misc.jpg",
+                  "itemLevel": "320",
+                  "bonusIDs": [
+                    "6652",
+                    "13696"
+                  ],
+                  "permanentEnchant": "7991",
+                  "gems": [
+                    {
+                      "id": "213743",
+                      "itemLevel": "0"
+                    }
+                  ]
+                },
+                {
+                  "name": "Pendant of Malefic Fury",
+                  "quality": "epic",
+                  "id": 212346,
+                  "icon": "inv_misc.jpg",
+                  "itemLevel": "324",
+                  "bonusIDs": [
+                    "6652",
+                    "13696"
+                  ]
+                },
+                {
+                  "name": "Baleful Grave-Knight's Gibbets",
+                  "quality": "epic",
+                  "id": 212347,
+                  "icon": "inv_misc.jpg",
+                  "itemLevel": "320",
+                  "bonusIDs": [
+                    "6652",
+                    "13696"
+                  ]
+                }
+              ],
+              "class": 1
             },
             {
               "lockedIn": true,
               "rankPercent": 88.0,
-              "report": {"code": "zZzZzZzZ", "startTime": 1757800000000, "fightID": 3},
+              "report": {
+                "code": "zZzZzZzZ",
+                "startTime": 1757800000000,
+                "fightID": 3
+              },
               "duration": 340000,
               "startTime": 1757800123000,
               "amount": 1401000.0,
               "spec": "Blood",
-              "talents": [],
-              "gear": []
+              "talents": {
+                "class": {},
+                "spec": {}
+              },
+              "gear": [],
+              "class": 1
             }
           ]
         }

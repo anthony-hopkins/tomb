@@ -135,6 +135,19 @@ eight weeks ahead; a one-off is shown however far off it is. Officers can
 skip one night of a repeating event without touching the rest; Edit and
 Remove act on the whole series.
 
+## The front door
+
+Anyone who opens the site without signing in gets the front door: a welcome,
+the guild master and officers, the top of the roster (item level, Mythic+
+rating, raid bosses down, five places each), the Discord link, the TOMB Cares
+initiative, and the way in for a member. The numbers are read from Blizzard
+with the site's own token, held between requests and refreshed in the
+background, so the page is drawn from memory. It shows character names and the
+public Armory facts about them, nothing about anyone's account.
+
+Configuration: `TOMB_DISCORD_INVITE`, the invite link (an `https://` link;
+without it the page says to whisper an officer).
+
 ## Combat logs
 
 Upload the game's combat log from a raid night under **Combat logs** and the
@@ -143,12 +156,19 @@ every one. The file is compressed and sent in pieces from your browser, resumes
 if the connection drops, and is deleted the moment it has been read. A log
 contains everyone in the raid; only your own characters are kept.
 
-On **My Characters**, a character with parsed pulls gains a comparison: pick a
-pull, paste the Warcraft Logs link of a player to measure against, and press
-Analyse. The site fetches that player's best parse, gear and talents on the same
-boss, works out a slot-by-slot upgrade table and a talent difference itself, and
-has a model write the review. Nothing is ever sent to Warcraft Logs. A member may
-run one every two hours; officers are not limited. Every run is in the Logs.
+On **My Characters**, every character gains a comparison. Press Analyse and the
+site reads your latest ranked kills in the current raid from Warcraft Logs, finds
+the top-ranked player of your class and specialization on the boss you have
+killed most, fetches their best parse, gear and talents on every boss, works out
+a slot-by-slot upgrade table and a talent difference itself, and has a model
+write the review, boss by boss and as a whole. Pick an uploaded night as the
+source instead and the review also covers wipes, pull counts and ability use,
+which Warcraft Logs' rankings do not carry. A character with no logs anywhere
+gets the reverse instead: the top parses of its class and specialization on every
+boss of the current raid, broken down into talents and itemization against the
+character's current gear and build. Nothing about rotation: there is no log to
+set it against. Nothing is ever sent to Warcraft Logs. A member may run one every two
+hours; officers are not limited. Every run is in the Logs.
 
 Configuration: `WCL_CLIENT_ID` and `WCL_CLIENT_SECRET` (a read-only Warcraft
 Logs API client; without them the card says comparisons are unavailable),

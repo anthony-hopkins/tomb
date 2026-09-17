@@ -1,0 +1,99 @@
+{
+  "_note": "SHAPE CAPTURED from the live API on 2026-09-16 (T050): field names and types are real -- quality is a word, itemLevel and the enchant and bonus ids are strings, talents are ids alone, the server has no slug. The VALUES are invented for the tests.",
+  "data": {
+    "worldData": {
+      "encounter": {
+        "id": 3009,
+        "name": "Vexie and the Geargrinders",
+        "characterRankings": {
+          "page": 1,
+          "hasMorePages": true,
+          "count": 100,
+          "rankings": [
+            {
+              "name": "Toptank",
+              "class": "DeathKnight",
+              "spec": "Blood",
+              "amount": 1498220.1,
+              "hardModeLevel": 0,
+              "duration": 312000,
+              "startTime": 1757900123000,
+              "report": {
+                "code": "aBcD1234eFgH",
+                "fightID": 7,
+                "startTime": 1757900000000
+              },
+              "server": {
+                "id": 1168,
+                "name": "Area 52",
+                "region": "US"
+              },
+              "bracketData": 320,
+              "faction": 1,
+              "medal": "gold",
+              "talents": [
+                {
+                  "talentID": 195182,
+                  "points": 1
+                },
+                {
+                  "talentID": 274156,
+                  "points": 1
+                }
+              ],
+              "gear": [
+                {
+                  "name": "Baleful Grave-Knight's Casque",
+                  "quality": "epic",
+                  "id": 212345,
+                  "icon": "inv_misc.jpg",
+                  "itemLevel": "320",
+                  "bonusIDs": [
+                    "6652",
+                    "13696"
+                  ],
+                  "permanentEnchant": "7991"
+                },
+                {
+                  "name": "Pendant of Malefic Fury",
+                  "quality": "epic",
+                  "id": 212346,
+                  "icon": "inv_misc.jpg",
+                  "itemLevel": "324",
+                  "bonusIDs": [
+                    "6652",
+                    "13696"
+                  ],
+                  "gems": [
+                    {
+                      "id": "240890",
+                      "itemLevel": "295"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "Secondbest",
+              "class": "DeathKnight",
+              "spec": "Blood",
+              "amount": 1401000.0,
+              "duration": 340000,
+              "report": {
+                "code": "zZzZzZzZ",
+                "fightID": 3
+              },
+              "server": {
+                "id": 57,
+                "name": "Illidan",
+                "region": "US"
+              },
+              "talents": [],
+              "gear": []
+            }
+          ]
+        }
+      }
+    }
+  }
+}

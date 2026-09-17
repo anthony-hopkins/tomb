@@ -14,6 +14,7 @@ package armory
 import (
 	"context"
 	"embed"
+	"html/template"
 	"log/slog"
 	"strings"
 	"sync"
@@ -82,6 +83,12 @@ type Panel struct {
 
 	// Gear is what the character is wearing, in the game's own slot order.
 	Gear []Item
+
+	// Aside is what the page puts under the render, already rendered: the
+	// comparison's controls on My Characters (spec 003, fourth amendment).
+	// The panel draws it as it is and knows nothing of what it says; empty
+	// leaves the figure alone, as on the guild roster.
+	Aside template.HTML
 }
 
 // Item is one equipped item, ready for the template.

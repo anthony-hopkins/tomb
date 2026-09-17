@@ -87,6 +87,13 @@ type Config struct {
 	AIModel  string
 	AIRegion string
 
+	// DiscordInvite is the guild's Discord invite link, from
+	// TOMB_DISCORD_INVITE, shown on the front door (spec 004). Empty means
+	// the page says to ask an officer instead. A public link, so a
+	// variable and not a secret; https only, so the page never links
+	// anywhere else.
+	DiscordInvite string
+
 	// SessionCookieSecure defaults to true. It may only be false for local
 	// plain-HTTP development (research.md D6).
 	SessionCookieSecure bool
@@ -159,8 +166,14 @@ func LoadConfig() (Config, error) {
 		UploadDir:        envOr("TOMB_UPLOAD_DIR", "/var/lib/tomb/uploads"),
 		WCLClientID:      strings.TrimSpace(os.Getenv("WCL_CLIENT_ID")),
 		WCLClientSecret:  strings.TrimSpace(os.Getenv("WCL_CLIENT_SECRET")),
-		AIModel:          envOr("TOMB_AI_MODEL", "gemini-3.1-pro"),
-		AIRegion:         envOr("TOMB_AI_REGION", "us-central1"),
+		// Checked against the live API on 2026-09-17: this model answers only
+		// at the "global" location; gemini-2.5-pro answers in us-central1 too.
+		AIModel:       envOr("TOMB_AI_MODEL", "gemini-3.1-pro-preview"),
+		AIRegion:      envOr("TOMB_AI_REGION", "global"),
+		DiscordInvite: strings.TrimSpace(os.Getenv("TOMB_DISCORD_INVITE")),
+	}
+	if c.DiscordInvite != "" && !strings.HasPrefix(c.DiscordInvite, "https://") {
+		return Config{}, fmt.Errorf("TOMB_DISCORD_INVITE must be an https:// link, got %q", c.DiscordInvite)
 	}
 
 	// Secure by default: only an explicit "false" opts out, so a typo or an

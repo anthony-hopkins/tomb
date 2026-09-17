@@ -71,7 +71,7 @@ func TestBestRank(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Name != "Toptank" || got.ClassID != 6 || got.Spec != "Blood" || got.RankPercent != 97.3 || got.Amount != 1498220.1 {
+	if got.Name != "Toptank" || got.ClassID != 1 || got.Class != "Death Knight" || got.Spec != "Blood" || got.RankPercent != 97.3 || got.Amount != 1498220.1 {
 		t.Errorf("ranking = %+v", got)
 	}
 	if got.ReportCode != "aBcD1234eFgH" || got.FightID != 7 || got.Duration != 312*time.Second || got.Metric != "dps" {
@@ -80,7 +80,8 @@ func TestBestRank(t *testing.T) {
 	if len(got.Gear) != 3 || got.Gear[1].Name != "Pendant of Malefic Fury" || got.Gear[1].ItemLevel != 324 || got.Gear[0].ID != 212345 {
 		t.Errorf("gear = %+v", got.Gear)
 	}
-	if len(got.Talents) != 3 || got.Talents[2].Name != "Bonestorm" {
+	// The tree, read class then spec, rows ascending, with the names.
+	if len(got.Talents) != 3 || got.Talents[0].Name != "Marrowrend" || got.Talents[2] != (Talent{ID: 194844, Name: "Bonestorm"}) || got.Gear[0].Quality != 4 {
 		t.Errorf("talents = %+v", got.Talents)
 	}
 	vars := (*asked)[0]

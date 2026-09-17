@@ -162,7 +162,7 @@ fakes.
 
 - [X] T048 [P] [US3] Write `internal/wcl/link.go`: `ParseCharacterLink(s string) (CharacterRef, error)` per the table in contracts/external-apis.md (scheme optional, `www.` optional, percent-decoding, `/character/id/N`, query ignored, `ErrNotCharacterLink` whose message shows the expected shape); `link_test.go` table with every row of that table plus report links and foreign hosts.
 - [X] T049 [P] [US3] Write `internal/wcl/model.go`: `CharacterRef{Region, Slug, Name string; ID int64}`, `Ranking{Name string; ClassID int; Spec string; RankPercent, Amount float64; Duration time.Duration; ReportCode string; FightID int; Gear []Gear; Talents []Talent}`, `Gear{ID int; Name string; ItemLevel, Quality int}`, `Talent{ID int; Name string}`; `WCLDifficulty(gameID int) (int, error)` mapping 14→3, 15→4, 16→5, 17→1 else `ErrUnsupportedDifficulty`; `MetricFor(specID int) string` (healer spec IDs → `hps`, else `dps`); `ErrNoRank`, `ErrNoCharacter`, `ErrBusy`. Table-driven tests for the mapping and the metric.
-- [ ] T050 [US3] Verification (D9): register the API client (docs/deployment.md step), run the GraphQL query from contracts/external-apis.md with `curl` against a known character, save the response verbatim as `internal/wcl/fixtures/encounter-rankings.json` and a no-ranks response as `encounter-rankings-empty.json`; correct the field names in contracts/external-apis.md and research.md D9 and remove the UNCONFIRMED marks. *(open: needs the Warcraft Logs client registered; the fixtures are hand-written and marked so)*
+- [X] T050 [US3] Verification (D9): register the API client (docs/deployment.md step), run the GraphQL query from contracts/external-apis.md with `curl` against a known character, save the response verbatim as `internal/wcl/fixtures/encounter-rankings.json` and a no-ranks response as `encounter-rankings-empty.json`; correct the field names in contracts/external-apis.md and research.md D9 and remove the UNCONFIRMED marks. *(done 2026-09-16 with the live probe; see the note under the third amendment)*
 - [X] T051 [US3] Write `internal/wcl/client.go`: `HTTPClient{ClientID, ClientSecret string; HTTP *http.Client; TokenURL, Endpoint string}` with `token(ctx)` (client credentials, cached, refreshed a minute early, mutex) and `BestRank(ctx, ref, encounterID, wclDifficulty, metric) (Ranking, error)` posting the query, decoding per the captured fixture, picking the highest `rankPercent`, mapping null character → `ErrNoCharacter`, empty ranks → `ErrNoRank`, GraphQL `errors[]` → error, 429 → `ErrBusy`; log `rateLimitData` when present. **One method; no other request path.**
 - [X] T052 [US3] Write `internal/wcl/client_test.go`: `httptest` server serving the token and the two fixtures; cases for token caching, best-of-several ranks, no ranks, unknown character, GraphQL error, 429, and a `by-id` reference.
 
@@ -194,6 +194,49 @@ fakes.
 **Checkpoint**: all three stories work on develop; quickstart sections 6–8 pass.
 
 ---
+
+## Amendment, 2026-09-16: the whole night against the top player
+
+Done the same day, after the guild master's direction (spec → Amendment): an
+analysis is one upload's raid pulls for a character (migration `0006`,
+`analyses.upload_id`), the target is the top-ranked player of the class and spec
+on the boss pulled most (`wcl.TopPlayer`), their parses on the other bosses are
+fetched in the worker, the prompt is a night with per-boss lines, and the card's
+form picks an upload instead of a pull and a link. Tests updated throughout. The
+link parser and per-pull plumbing stay for the drill-down to come.
+
+## Second amendment, 2026-09-16: the member's side from Warcraft Logs first
+
+Also done the same day, after the guild master's next direction (spec → Second
+amendment): Analyse needs no upload. `wcl.ZoneRankings` and `wcl.LatestRank`
+read the character's own standing and latest kill per boss; migration `0007`
+records each analysis's `source`; the route takes `source=wcl` (default) or
+`source=upload:<id>`; the worker builds the member's side from either; the card's
+picker offers Warcraft Logs first, then uploads. Tests updated throughout; the
+zone-rankings fixture is hand-written and UNCONFIRMED like the others.
+
+## Third amendment, 2026-09-16: a showcase when the character has no logs
+
+Also done the same day, after the guild master's next direction (spec → Third
+amendment): a character Warcraft Logs does not know gets a showcase instead of
+a refusal. `wcl.CurrentZone` reads the current raid; the route falls back to source `showcase`
+with the class and spec from Blizzard's profile and the top player on the
+raid's first boss (Mythic, then Heroic), cached a day under a class-and-spec
+key; the worker fills every boss with its top parse (talents and gear; the
+cast table was read for a few hours and then dropped, as revised), fetches
+the character's current gear and build as the site, and uses the showcase
+prompt (`ai.SystemShowcase`, `ai.ModeShowcase`); the card explains the
+reversal. Fixture `zones.json` is hand-written and UNCONFIRMED, so T040/T050
+cover it too.
+
+## Fourth amendment, 2026-09-16: the card's layout
+
+The comparison's controls moved inside the Armory panel under the render
+(`armory.Panel.Aside`, filled by the dashboard from its `analysis-controls`
+template) and its result to a third column right of the card (`dashboard.html`,
+`style.css` `.dashboard.has-analysis`); nothing else changed.
+
+*T050 done 2026-09-16 from the workstation with the develop credentials: `internal/wcl/live_test.go` captured the real shapes (gear quality as a word, string item levels, id-only leaderboard talents, a talent tree on a character's own ranking); the decoders and fixtures follow them.*
 
 ## Phase 6: Polish & cross-cutting
 
@@ -281,3 +324,11 @@ Task: "T031 uploader in internal/platform/static/upload.js"
   `make lint`.
 - The two verification tasks (T040, T050) are the only ones that need live services
   during development; everything else runs on fixtures.
+
+## Fifth amendment, 2026-09-17: full width, no talents block, same region
+
+The Talents block came off the card (`dashboard/talents.go` and its tests
+deleted; FR-033 withdrawn); the Armory panel fills the column and the
+comparison's result sits under it in a two-column section with the talent
+difference headed against the top player; `wcl.HTTPClient.Region` confines the
+leaderboard to the site's region through `serverRegion`.

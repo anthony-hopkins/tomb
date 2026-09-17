@@ -20,8 +20,51 @@ type Reader interface {
 }
 ```
 
-Read-only by construction: this is the only method, and the package has no other
-request path (FR-035).
+Read-only by construction: these are the only five methods, and the package has
+no other request path (FR-035). Added by the 2026-09-16 amendments:
+
+```go
+    // ZoneRankings is the character's standing in the current raid: bosses
+    // with ranked kills, spec, difficulty, metric. ErrNoLogs when none.
+    ZoneRankings(ctx context.Context, ref CharacterRef) (Zone, error)
+    // LatestRank is the character's most recent ranked kill on a boss.
+    LatestRank(ctx context.Context, ref CharacterRef, encounterID, wclDifficulty int, metric string) (Ranking, error)
+```
+
+`ZoneRankings` queries `character(...){ classID zoneRankings }` with no zone or
+difficulty given, taking Warcraft Logs' default of the current raid at the
+highest difficulty the character has rankings in (**confirmed live 2026-09-16**; fixture
+`zone-rankings.json`); `LatestRank` is `encounterRankings` picking the rank with
+the latest `startTime`. The member's own reference is the configured region,
+Blizzard's realm slug and the character name, which Warcraft Logs shares.
+
+```go
+    // TopPlayer finds the highest-ranked player of a class and spec on an
+    // encounter at a difficulty, with their parse there.
+    TopPlayer(ctx context.Context, encounterID, wclDifficulty int, class, spec, metric string) (CharacterRef, Ranking, error)
+```
+
+It queries `worldData.encounter(id:).characterRankings(difficulty:, className:,
+specName:, metric:, serverRegion:, includeCombatantInfo: true, page: 1)` -- the
+`serverRegion` being the site's own (`BNET_REGION` upper-case; fifth amendment,
+checked live 2026-09-17), or null for the world when the client has none -- and reads the first of
+`rankings[]` (**confirmed live 2026-09-16**, fixture `character-rankings.json`;
+`server.region` and `server.name`/`slug` give the character reference). Class names
+are spelled without spaces in the query (`DeathKnight`).
+
+Added by the third amendment (the showcase for a character with no logs):
+
+```go
+    // CurrentZone is the current raid and its bosses.
+    CurrentZone(ctx context.Context) (RaidZone, error)
+```
+
+`CurrentZone` queries `worldData.zones { id name frozen expansion{id name}
+difficulties{id name} encounters{id name} }` and picks the newest zone (highest
+expansion id, then zone id) that is not frozen and is ranked at a raid difficulty
+(**confirmed live 2026-09-16**, fixture `zones.json`). Read-only like the rest.
+A `Casts` read of the report's cast table was added and removed the same day:
+the showcase is talents and gear only (spec → Third amendment, revised).
 
 **Authentication**: `POST https://www.warcraftlogs.com/oauth/token`, HTTP basic auth
 with `WCL_CLIENT_ID` / `WCL_CLIENT_SECRET`, body `grant_type=client_credentials`.
@@ -36,7 +79,7 @@ before expiry, under a mutex.
  "variables": {"name":"Nekromoo","slug":"area-52","region":"us","enc":3009,"diff":5,"metric":"dps"}}
 ```
 
-`encounterRankings` is a JSON scalar. Expected shape (**UNCONFIRMED** field names;
+`encounterRankings` is a JSON scalar. Shape **confirmed live 2026-09-16** (T050; what follows is the earlier sketch, kept for the field names; the live differences are below it;
 verify and capture):
 
 ```json
@@ -113,9 +156,15 @@ until a minute before expiry. Project ID from
 or a `finishReason` of `SAFETY` → error "the model declined". Non-200 → error with
 the status; 429/503 → "busy, try later". Timeout 90 s (the worker's context).
 
-**Configuration**: `TOMB_AI_MODEL` (default `gemini-3.1-pro`), `TOMB_AI_REGION`
-(default `us-central1`, the VM's region). Both pass through metadata →
-`configure.sh` → Compose like every optional variable.
+**Configuration**: `TOMB_AI_MODEL` (default `gemini-3.1-pro-preview`), `TOMB_AI_REGION`
+(default `global`). Both pass through metadata → `configure.sh` → Compose like
+every optional variable. Checked against the live API on 2026-09-17 (T074):
+`gemini-3.1-pro` does not exist; `gemini-3.1-pro-preview` and
+`gemini-3-flash-preview` answer at the `global` location only, which is served
+from `https://aiplatform.googleapis.com` with no regional host; `gemini-2.5-pro`
+and `gemini-2.5-flash` answer in `us-central1` and `global`. A 404 is
+`ai.ErrNoModel`, and the card says the model setting needs an officer's
+attention rather than "try again later".
 
 **Infrastructure** (`tofu/`): `google_project_service` for
 `aiplatform.googleapis.com`; `google_project_iam_member` granting
@@ -154,3 +203,30 @@ over HTTP basic auth, held in memory and refreshed before expiry — and have
 `Talent` and `Item` use it. No new secret; the same client that signs members in.
 
 Fixtures for all three are captured JSON under `internal/blizzard/fixtures/`.
+
+### What the live capture changed (T050, 2026-09-16)
+
+Run `internal/wcl/live_test.go` (`go test -tags live -run TestLive ./internal/wcl`
+with `WCL_CLIENT_ID`, `WCL_CLIENT_SECRET` and `WCL_LIVE_OUT` set) to capture the
+real answers. Against the sketches above:
+
+- **Gear**: `quality` is a word (`"epic"`), and `itemLevel`, `permanentEnchant`,
+  each `bonusIDs` entry and a gem's `id`/`itemLevel` are strings (`"334"`). The
+  decoders take either a number or a numeric string (`combatant.go`).
+- **Talents on a leaderboard entry**: `[{talentID, points}]`, ids only, every
+  point of them (78 for a full build). So the site re-reads the top player's own
+  ranking on that boss (`encounterRankings`, one more call) and takes its named
+  talent tree and gear, which is the shape the member's side comes in; the
+  leaderboard's answer stands when that read fails, with names then resolved
+  from Blizzard's Game Data through the site's talent-name cache.
+- **Talents on a character's own ranking**: a tree, `{class: {"<row>": [{selectedEntryId,
+  pointsInvested, node: {nodeId, name, abilities: [{id, name, spellId}]}}]}, spec: {...}}`.
+  The decoder walks class, spec, hero, rows ascending, and names each selected
+  entry from its ability.
+- **Leaderboard `server`**: `{id, name, region}` with the region upper-case
+  (`"EU"`) and no slug; the slug is derived from the name.
+- **zoneRankings**: as sketched; a boss with no kill has `rankPercent: null`,
+  `spec: null`, `totalKills: 0`. The default difficulty answered was Heroic (4)
+  for a character with Heroic kills only.
+- **zones**: as sketched; Delves and Mythic+ seasons are zones too, told apart
+  by their difficulties (raids carry 3/4/5).
