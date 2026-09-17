@@ -141,6 +141,10 @@ type Reader interface {
 	// Casts is one player's ability use in one kill, from the report the
 	// ranking names. ErrNoRank when the report or the player is not there.
 	Casts(ctx context.Context, reportCode string, fightID int, player string) (CastSet, error)
+	// Timeline is one player's casts of the named abilities in one kill,
+	// as seconds into the pull, with the pull's length and phases (spec
+	// 005). No abilities gives the bounds and phases alone.
+	Timeline(ctx context.Context, reportCode string, fightID int, player string, abilities []string) (Timeline, error)
 }
 
 // ClassSlug is a class name the way Warcraft Logs' API spells it in a

@@ -1724,6 +1724,9 @@ a.log-kind:focus { border-color: var(--accent); }
 .writeup-table { width: 100%; border-collapse: collapse; margin: 0.5rem 0 1rem; font-size: 0.88rem; }
 .writeup-table th, .writeup-table td { padding: 0.35rem 0.6rem; text-align: left; border-bottom: 1px solid var(--line); vertical-align: top; }
 .writeup-table th { font-size: 0.7rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.do-first li { margin: 0.4rem 0; font-weight: 600; }
+.verify-data { color: var(--accent); }
+.verify-inferred { color: #f5c26b; }
 
 @media (max-width: 48rem) {
   .upload-row { grid-template-columns: minmax(0, 1fr); }

@@ -45,6 +45,10 @@ func (noWCL) Casts(context.Context, string, int, string) (wcl.CastSet, error) {
 	return wcl.CastSet{}, wcl.ErrNoRank
 }
 
+func (noWCL) Timeline(context.Context, string, int, string, []string) (wcl.Timeline, error) {
+	return wcl.Timeline{}, wcl.ErrNoRank
+}
+
 // stackAnalysis mounts the dashboard with a fights store and, when asked, a
 // Warcraft Logs client.
 func stackAnalysis(t *testing.T, store fights.Store, withWCL bool) http.Handler {
@@ -110,6 +114,16 @@ func storeWith(t *testing.T, seed func(store *fights.MemStore, uploadID int64)) 
 	return store
 }
 
+// reviewJSON is a stored review in the shape the worker keeps (spec 005).
+const reviewJSON = `{"overview":"You stand well.","build":"### Points\n34/34","engine":"","benchmarks":"| a | b |\n|---|---|\n| 1 | 2 |","boss_by_boss":"","cooldowns":"Late.","opener":"","priority":"","survival":"","cooldown_rules":"","gear":"Chase wrists.","upgrade_path":"","do_these_first":["one","two","three"],"verify":[{"item":"Cooldowns","status":"inferred","note":"base values"}]}`
+
+func analysedReview(store *fights.MemStore, uploadID int64) {
+	ctx := context.Background()
+	cp, _ := store.PutComparisonPlayer(ctx, fights.ComparisonPlayer{Region: "us", RealmSlug: "area-52", Name: "toptank", Encounter: 3009, WCLDiff: 5, Metric: "dps", FetchedAt: time.Now(), Class: "Death Knight", Spec: "Blood", Payload: []byte(`{"Name":"Toptank","Class":"Death Knight","Spec":"Blood"}`)})
+	an, _ := store.CreateAnalysis(ctx, fights.Analysis{UserID: 1, UploadID: uploadID, Name: "Nekromoo", RealmSlug: "area-52", ComparisonID: cp.ID}, true)
+	_ = store.FinishAnalysis(ctx, an.ID, nil, fights.TalentDiff{}, reviewJSON, "gemini", 1, 1)
+}
+
 func analysed(store *fights.MemStore, uploadID int64, state fights.AnalysisState, failure string) {
 	ctx := context.Background()
 	cp, _ := store.PutComparisonPlayer(ctx, fights.ComparisonPlayer{Region: "us", RealmSlug: "area-52", Name: "toptank", Encounter: 3009, WCLDiff: 5, Metric: "dps",
@@ -152,6 +166,9 @@ func TestAnalysisSection(t *testing.T) {
 		{"done", storeWith(t, func(s *fights.MemStore, id int64) { analysed(s, id, fights.Done, "") }), true, "/app/dashboard",
 			[]string{"Analysed", "<strong>Toptank</strong>, top Blood Death Knight on Vexie and the Geargrinders", "Old Casque", "New Casque", "Upgrade to chase (+9)", "Same item", "Consumption", "<h4>Overview</h4>", "<h4>Do these first</h4>", "lost twenty seconds", "<li>Use Dancing Rune Weapon on pull.</li>", `<div class="writeup">`},
 			[]string{"Analysing"}, false},
+		{"review, section by section", storeWith(t, func(s *fights.MemStore, id int64) { analysedReview(s, id) }), true, "/app/dashboard",
+			[]string{"<h4>Overview</h4>", "<p>You stand well.</p>", "<h4>The build</h4>", "<h5>Points</h5>", "<h4>Cooldowns: sequence and timing</h4>", `<table class="writeup-table">`, `<ol class="do-first"><li>one</li><li>two</li><li>three</li></ol>`, `<td class="verify-inferred">inferred</td>`},
+			[]string{"<h4>The engine</h4>", "<h4>Opener</h4>"}, false},
 		{"failed over done", storeWith(t, func(s *fights.MemStore, id int64) {
 			analysed(s, id, fights.Done, "")
 			analysed(s, id, fights.AFailed, "the model is busy")
