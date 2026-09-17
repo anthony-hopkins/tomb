@@ -154,9 +154,15 @@ until a minute before expiry. Project ID from
 or a `finishReason` of `SAFETY` → error "the model declined". Non-200 → error with
 the status; 429/503 → "busy, try later". Timeout 90 s (the worker's context).
 
-**Configuration**: `TOMB_AI_MODEL` (default `gemini-3.1-pro`), `TOMB_AI_REGION`
-(default `us-central1`, the VM's region). Both pass through metadata →
-`configure.sh` → Compose like every optional variable.
+**Configuration**: `TOMB_AI_MODEL` (default `gemini-3.1-pro-preview`), `TOMB_AI_REGION`
+(default `global`). Both pass through metadata → `configure.sh` → Compose like
+every optional variable. Checked against the live API on 2026-09-17 (T074):
+`gemini-3.1-pro` does not exist; `gemini-3.1-pro-preview` and
+`gemini-3-flash-preview` answer at the `global` location only, which is served
+from `https://aiplatform.googleapis.com` with no regional host; `gemini-2.5-pro`
+and `gemini-2.5-flash` answer in `us-central1` and `global`. A 404 is
+`ai.ErrNoModel`, and the card says the model setting needs an officer's
+attention rather than "try again later".
 
 **Infrastructure** (`tofu/`): `google_project_service` for
 `aiplatform.googleapis.com`; `google_project_iam_member` granting

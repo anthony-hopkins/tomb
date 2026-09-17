@@ -237,6 +237,10 @@ func (a *App) run(ctx context.Context, an fights.Analysis) {
 	case errors.Is(err, ai.ErrDeclined):
 		fail("the model declined to write this one")
 		return
+	case errors.Is(err, ai.ErrNoModel):
+		log.Error("model call", "error", err)
+		fail("the site's model setting names a model Vertex AI does not serve; an officer needs to check TOMB_AI_MODEL and TOMB_AI_REGION")
+		return
 	case err != nil:
 		log.Error("model call", "error", err)
 		fail("the model could not be reached")

@@ -28,4 +28,7 @@ var (
 	// ErrDeclined is the model returning nothing usable -- a safety stop,
 	// or an empty answer.
 	ErrDeclined = errors.New("the model declined to answer")
+	// ErrNoModel is Vertex AI not serving the configured model at the
+	// configured location: a setting to fix, not a minute to wait out.
+	ErrNoModel = errors.New("vertex ai does not serve that model there")
 )

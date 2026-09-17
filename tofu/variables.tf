@@ -325,13 +325,13 @@ variable "upload_dir" {
 }
 
 variable "ai_model" {
-  description = "The Vertex AI model that writes a comparison. Empty is the app's default, gemini-3.1-pro. Reaches the app as TOMB_AI_MODEL."
+  description = "The Vertex AI model that writes a comparison. Empty is the app's default, gemini-3.1-pro-preview, which Vertex AI serves at the global location only. Reaches the app as TOMB_AI_MODEL."
   type        = string
   default     = ""
 }
 
 variable "ai_region" {
-  description = "The region the model is called in. Empty is the app's default, us-central1. Reaches the app as TOMB_AI_REGION."
+  description = "The Vertex AI location the model is called in: a region such as us-central1, or global, where the newest models are served. Empty is the app's default, global. Reaches the app as TOMB_AI_REGION."
   type        = string
   default     = ""
 }
