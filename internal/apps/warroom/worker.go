@@ -324,7 +324,7 @@ func (a *App) detail(ctx context.Context, code string, fightID int, rep wcl.Raid
 	for _, act := range rep.Actors {
 		names[act.ID] = act.Name
 	}
-	side.Detail(fr, casts, hits, names)
+	side.Detail(fr, casts, hits, names, rep.Abilities)
 }
 
 // bestPull is the kill, else the pull that got furthest, else the longest.

@@ -39,7 +39,8 @@ type BossReview struct {
 	DPSPlan    string `json:"dps_plan"`
 }
 
-// Sections is a boss's sections in reading order, empty ones left out.
+// Sections is a boss's sections in reading order, empty ones left out,
+// each body cleaned of the model's escaped newlines.
 func (b BossReview) Sections() []Section {
 	all := []Section{
 		{"summary", "Against the top kill", b.Summary},
@@ -56,11 +57,24 @@ func (b BossReview) Sections() []Section {
 	}
 	out := make([]Section, 0, len(all))
 	for _, s := range all {
+		s.Body = Clean(s.Body)
 		if strings.TrimSpace(s.Body) != "" {
 			out = append(out, s)
 		}
 	}
 	return out
+}
+
+// Clean undoes what a model does to Markdown inside JSON now and then:
+// it writes its line breaks as the two characters backslash and n, which
+// survive the JSON decoding as text and render as one long line with
+// "\n" through it. A literal backslash-n never belongs in prose, so every
+// one becomes the newline it meant. Tabs likewise.
+func Clean(s string) string {
+	s = strings.ReplaceAll(s, `\n`, "\n")
+	s = strings.ReplaceAll(s, `\n`, "\n")
+	s = strings.ReplaceAll(s, `\t`, "  ")
+	return s
 }
 
 // RaidReportSchema is the shape the model is held to.
@@ -149,15 +163,17 @@ Per boss:
 - mechanics: the avoidable abilities by name with who took them and how much, against the top kill's zero; dispels and interrupts stopped against casts on each side; what the top kill did that the raid did not.
 - adds: a table of the adds (name, our mean time to death, theirs, damage into it each side, our top sources); which adds lived too long and who should be on them.
 - wipes: for a wall, the deep dive: a table of every pull (pull, length, boss percent left, phase, first deaths and their cause); the pattern -- what ends the pulls, at what point, and who; against the top kill at that point; then "The plan for the next pull", a numbered list of at most seven concrete changes in order, each with the player or role and the moment. For a boss killed first or second pull, one line.
-- tank_plan: for each tank by name, a heading, then: a table of their spikes (second, taken, hit by, covered by) and what to press instead -- name the defensive from their kit and the ability to press it before, e.g. "Demon Spikes before Empowering Slam, Fiery Brand on the second Bloodvenom Injection"; the kit defensives never pressed and where they belonged; their cast rates against the top tank of the same spec with the two or three rates to fix; if they died, the last fifteen seconds and what would have lived. Concrete, in the imperative, one line per change.
-- healer_plan: for each healer by name, a heading, then: HPS and overhealing against the top kill's same spec; cooldowns pressed and when against where the raid's damage spikes fell (use the deaths and the tanks' spikes as the raid's spikes); which cooldown to move to which moment; whether their throughput or their overhealing says they could flex to damage for this boss, and if the raid runs more healers than the top kill, which one, by the numbers; their cast rates to fix.
-- dps_plan: for each damage dealer by name, a heading, then: their DPS against the top kill's same spec with the active time gap; the rotation, from "rotations": the abilities cast too rarely or too often per minute with the numbers -- the answer to "why is their damage low" is here, name the abilities; damage into the adds when they were up; avoidable damage they took and the personal that would have covered it; if they died, the last fifteen seconds, what was pressed and what was not. One line per change, in the imperative.
+- tank_plan: for each tank a "#### Name (Spec Class)" heading, then, under it, in this order: a table of their spikes (second, taken, hit by, covered by) and what to press instead -- name the defensive from their kit and the ability to press it before, e.g. "Demon Spikes before Empowering Slam, Fiery Brand on the second Bloodvenom Injection"; the kit defensives never pressed and where they belonged; their cast rates against the top tank of the same spec with the two or three rates to fix; if they died, the last fifteen seconds and what would have lived. Concrete, in the imperative, one line per change.
+- healer_plan: for each healer a "#### Name (Spec Class)" heading, then, under it, in this order: HPS and overhealing against the top kill's same spec; cooldowns pressed and when against where the raid's damage spikes fell (use the deaths and the tanks' spikes as the raid's spikes); which cooldown to move to which moment; whether their throughput or their overhealing says they could flex to damage for this boss, and if the raid runs more healers than the top kill, which one, by the numbers; their cast rates to fix.
+- dps_plan: for each damage dealer a "#### Name (Spec Class)" heading, then, under it, in this order: their DPS against the top kill's same spec with the active time gap; the rotation, from "rotations": the abilities cast too rarely or too often per minute with the numbers -- the answer to "why is their damage low" is here, name the abilities; damage into the adds when they were up; avoidable damage they took and the personal that would have covered it; if they died, the last fifteen seconds, what was pressed and what was not. One line per change, in the imperative.
 
 Rules:
 - Name specific players, abilities and numbers. "Boomy took 1.2M from Living Venom across the pull; nobody in the top kill took any" is useful; "avoid mechanics" is not.
 - Where you infer a cause (a cooldown not used, a position), say so in place and in verify.
 - Never invent a player, ability or number that is not in the data. A section with no data behind it gets one line saying so.
 - The plans are the point of the report for the officers: every player on the raid's side gets their lines, with their numbers. A player whose numbers are fine gets one line saying so and what to keep doing.
+- In a plan, open each player with one bold line: the verdict ("**Verdict:** intake unmitigated on four of five spikes; two cooldowns never used"). Then the table of their spikes or rates, then "**Do:**" followed by the numbered changes. Write "Demon Spikes before Empowering Slam", never "before ability 1284109": the hits are named; where one is not, say "an unnamed hit" rather than quoting an id.
+- Use real line breaks between lines. Never write the characters backslash-n.
 - About 900 to 1,400 words per boss, more for a wall.`
 
 // BuildWarRoom writes the user message: a framing line and the night as

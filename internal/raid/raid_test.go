@@ -183,7 +183,7 @@ func TestDetail(t *testing.T) {
 		"Healz": {Set: wcl.CastSet{Active: 280 * time.Second, Total: 300 * time.Second, Abilities: []wcl.CastCount{{Name: "Heal", Count: 90}}},
 			Timeline: wcl.Timeline{Casts: []wcl.CastEvent{{At: 100 * time.Second, Ability: "Divine Hymn"}}}},
 	}
-	s.Detail(fr, casts, hits, names)
+	s.Detail(fr, casts, hits, names, map[int]string{77: "Living Venom"})
 	if len(s.Players) != 5 {
 		t.Fatalf("players = %d", len(s.Players))
 	}
@@ -223,8 +223,11 @@ func TestDetail(t *testing.T) {
 	if len(stab.Death.Used) != 0 || !contains(stab.Death.Unused, "Cloak of Shadows") || !contains(stab.Death.Unused, "Feint") {
 		t.Errorf("death context = %+v (Feint at 50 s is outside the 20 s window)", stab.Death)
 	}
-	if stab.Spikes[0].Abilities[0] != "ability 77" {
-		t.Errorf("unnamed ability = %+v", stab.Spikes[0])
+	if stab.Spikes[0].Abilities[0] != "Living Venom" {
+		t.Errorf("named ability = %+v", stab.Spikes[0])
+	}
+	if got := abilityLabel(99, nil); got != "ability 99" {
+		t.Errorf("unnamed ability = %q", got)
 	}
 	healz := byName["Healz"]
 	if healz.OverhealPct != 40 || len(healz.Healing) != 1 || healz.Healing[0].Name != "Heal" {

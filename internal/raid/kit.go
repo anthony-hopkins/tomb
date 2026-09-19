@@ -22,7 +22,7 @@ type Kit struct {
 
 // classKit is what every specialisation of a class has.
 var classKit = map[string]Kit{
-	"DeathKnight": {Defensives: []string{"Anti-Magic Shell", "Icebound Fortitude", "Death Strike", "Lichborne"}, Raid: []string{"Anti-Magic Zone"}},
+	"DeathKnight": {Defensives: []string{"Anti-Magic Shell", "Icebound Fortitude", "Lichborne"}, Raid: []string{"Anti-Magic Zone"}},
 	"DemonHunter": {Defensives: []string{"Blur", "Netherwalk"}, Raid: []string{"Darkness"}},
 	"Druid":       {Defensives: []string{"Barkskin", "Survival Instincts", "Bear Form", "Renewal"}, Raid: []string{"Stampeding Roar"}},
 	"Evoker":      {Defensives: []string{"Obsidian Scales", "Renewing Blaze"}, Raid: []string{"Zephyr", "Rescue"}},
@@ -30,7 +30,7 @@ var classKit = map[string]Kit{
 	"Mage":        {Defensives: []string{"Ice Block", "Alter Time", "Mirror Image", "Mass Barrier", "Ice Cold"}, Raid: []string{"Mass Barrier"}},
 	"Monk":        {Defensives: []string{"Fortifying Brew", "Diffuse Magic", "Dampen Harm", "Touch of Karma"}},
 	"Paladin":     {Defensives: []string{"Divine Shield", "Divine Protection", "Blessing of Protection", "Lay on Hands"}, Raid: []string{"Blessing of Sacrifice", "Aura Mastery"}},
-	"Priest":      {Defensives: []string{"Desperate Prayer", "Dispersion", "Fade", "Power Word: Shield"}},
+	"Priest":      {Defensives: []string{"Desperate Prayer", "Dispersion", "Fade"}},
 	"Rogue":       {Defensives: []string{"Feint", "Cloak of Shadows", "Evasion", "Crimson Vial"}},
 	"Shaman":      {Defensives: []string{"Astral Shift", "Stone Bulwark Totem", "Ancestral Guidance"}, Raid: []string{"Spirit Link Totem"}},
 	"Warlock":     {Defensives: []string{"Unending Resolve", "Dark Pact", "Healthstone"}},
@@ -40,11 +40,14 @@ var classKit = map[string]Kit{
 // specKit is what a specialisation adds: the tank's mitigation, the
 // healer's cooldowns.
 var specKit = map[string]Kit{
-	"Blood":        {Defensives: []string{"Vampiric Blood", "Dancing Rune Weapon", "Rune Tap", "Bone Shield", "Marrowrend", "Death Strike", "Tombstone"}},
-	"Vengeance":    {Defensives: []string{"Demon Spikes", "Fiery Brand", "Metamorphosis", "Fel Devastation", "Soul Cleave", "Spirit Bomb"}},
-	"Guardian":     {Defensives: []string{"Ironfur", "Frenzied Regeneration", "Rage of the Sleeper", "Incarnation: Guardian of Ursoc", "Berserk"}},
+	// Active mitigation and cooldowns only: a rotational button that also
+	// heals (Death Strike, Soul Cleave) is not a defensive anyone "forgot",
+	// and naming it as one made the report read like noise.
+	"Blood":        {Defensives: []string{"Vampiric Blood", "Dancing Rune Weapon", "Rune Tap", "Tombstone"}},
+	"Vengeance":    {Defensives: []string{"Demon Spikes", "Fiery Brand", "Metamorphosis", "Fel Devastation"}},
+	"Guardian":     {Defensives: []string{"Ironfur", "Frenzied Regeneration", "Rage of the Sleeper", "Incarnation: Guardian of Ursoc"}},
 	"Brewmaster":   {Defensives: []string{"Celestial Brew", "Purifying Brew", "Zen Meditation", "Invoke Niuzao, the Black Ox", "Black Ox Brew"}},
-	"Protection":   {Defensives: []string{"Shield Block", "Ignore Pain", "Shield Wall", "Last Stand", "Demoralizing Shout", "Shield of the Righteous", "Ardent Defender", "Guardian of Ancient Kings", "Eye of Tyr", "Sentinel", "Divine Toll"}},
+	"Protection":   {Defensives: []string{"Shield Block", "Ignore Pain", "Shield Wall", "Last Stand", "Demoralizing Shout", "Shield of the Righteous", "Ardent Defender", "Guardian of Ancient Kings", "Eye of Tyr", "Sentinel"}},
 	"Restoration":  {Cooldowns: []string{"Tranquility", "Convoke the Spirits", "Incarnation: Tree of Life", "Flourish", "Nature's Swiftness", "Healing Tide Totem", "Spirit Link Totem", "Ascendance", "Ancestral Protection Totem"}},
 	"Holy":         {Cooldowns: []string{"Divine Hymn", "Apotheosis", "Holy Word: Salvation", "Guardian Spirit", "Avenging Wrath", "Aura Mastery", "Divine Toll", "Holy Word: Sanctify", "Light of Dawn"}},
 	"Discipline":   {Cooldowns: []string{"Power Word: Barrier", "Rapture", "Evangelism", "Pain Suppression", "Ultimate Penitence", "Shadowfiend", "Mindbender"}},

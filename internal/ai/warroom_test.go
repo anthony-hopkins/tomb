@@ -41,8 +41,22 @@ func TestParseRaidReport(t *testing.T) {
 // TestWarRoomInstruction: the instruction asks for what the officers want
 // -- every role criticised, positioning, mechanics, adds, the wall's plan
 // -- and the schema requires every section.
+// TestClean: the model's escaped newlines become newlines, so tables and
+// headings render instead of running into one line.
+func TestClean(t *testing.T) {
+	in := `### Cwoodz\n| a | b |\n|---|---|\n| 1 | 2 |\n\n- Press it.`
+	got := Clean(in)
+	if strings.Contains(got, `\n`) || !strings.Contains(got, "### Cwoodz\n| a | b |\n|---|---|") {
+		t.Errorf("Clean = %q", got)
+	}
+	b := BossReview{Name: "x", Summary: `one\ntwo`}
+	if s := b.Sections(); len(s) != 1 || s[0].Body != "one\ntwo" {
+		t.Errorf("sections not cleaned: %+v", s)
+	}
+}
+
 func TestWarRoomInstruction(t *testing.T) {
-	for _, want := range []string{"- tanks:", "- healers:", "- dps:", "- positioning:", "- mechanics:", "- adds:", "- wipes:", "- tank_plan:", "- healer_plan:", "- dps_plan:", "Demon Spikes before Empowering Slam", "flex to damage", "why is their damage low", "The plan for the next pull", "exactly three strings", "never recompute", `"avoidable"`, `"rotations"`, "Never invent a player"} {
+	for _, want := range []string{"- tanks:", "- healers:", "- dps:", "- positioning:", "- mechanics:", "- adds:", "- wipes:", "- tank_plan:", "- healer_plan:", "- dps_plan:", "Demon Spikes before Empowering Slam", "flex to damage", "why is their damage low", "The plan for the next pull", "#### Name (Spec Class)", "**Verdict:**", "never \"before ability 1284109\"", "exactly three strings", "never recompute", `"avoidable"`, `"rotations"`, "Never invent a player"} {
 		if !strings.Contains(SystemWarRoom, want) {
 			t.Errorf("instruction is missing %q", want)
 		}
