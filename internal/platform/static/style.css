@@ -2083,3 +2083,33 @@ main:has(.welcome) { max-width: 64rem; }
   .assistant-launcher { align-self: flex-end; }
   .assistant-panel { width: auto; max-height: 75vh; }
 }
+
+/* The War Room (spec 007): the front page's tables and the review, boss by
+   boss, in the review card's dress. */
+.warroom .panel + .panel { margin-top: 1.25rem; }
+.warroom-reports form { margin: 0; }
+.warroom-reports button { font-size: 0.85rem; }
+.warroom .muted { color: var(--muted); }
+.warroom-code { margin-top: 1rem; }
+.warroom-code label { display: block; margin-bottom: 0.4rem; color: var(--muted); font-size: 0.85rem; }
+.warroom-code-row { display: flex; gap: 0.6rem; flex-wrap: wrap; }
+.warroom-code-row input {
+  flex: 1 1 20rem;
+  min-width: 0;
+  background: rgba(0, 3, 7, 0.6);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.5rem 0.7rem;
+  font: inherit;
+}
+.warroom-code-row input:focus { border-color: var(--accent); outline: none; }
+.warroom-review .writeup { max-width: none; }
+.warroom-boss { margin-top: 2rem; padding-top: 1rem; border-top: 2px solid var(--line); }
+.warroom-boss-name { margin: 0 0 0.6rem; font-size: 1.3rem; color: var(--accent); }
+.warroom-boss-name small { display: block; margin-top: 0.2rem; font-size: 0.8rem; font-weight: 400; color: var(--muted); letter-spacing: 0.04em; }
+.warroom-sides { display: grid; grid-template-columns: max-content 1fr; gap: 0.25rem 1rem; margin: 0 0 0.8rem; font-size: 0.9rem; }
+.warroom-sides dt { color: var(--muted); font-size: 0.72rem; letter-spacing: 0.06em; text-transform: uppercase; align-self: baseline; }
+.warroom-sides dd { margin: 0; }
+.warroom-facts { margin: 0 0 1rem; padding-left: 1.2rem; font-size: 0.9rem; color: var(--ink); }
+.warroom-facts li { margin: 0.25rem 0; }
