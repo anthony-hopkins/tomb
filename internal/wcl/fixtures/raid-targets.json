@@ -1,0 +1,237 @@
+{
+ "_note": "CAPTURED live 2026-09-18 from report npFrfKgwVMJ84W36 fight 24 (entries trimmed to 3, abilities/sources to 3)",
+ "data": {
+  "reportData": {
+   "report": {
+    "table": {
+     "data": {
+      "entries": [
+       {
+        "name": "Venom Coagulation",
+        "id": 195,
+        "guid": 260766,
+        "type": "NPC",
+        "icon": "custom-icon-ability_rogue_venomouswounds.jpg",
+        "total": 94679030,
+        "totalReduced": 92983962,
+        "activeTime": 228023,
+        "activeTimeReduced": 228023,
+        "abilities": [
+         {
+          "guid": 7268,
+          "name": "Arcane Missiles",
+          "total": 9167375,
+          "type": 64,
+          "icon": "spell_nature_starfall.jpg"
+         },
+         {
+          "guid": 44425,
+          "name": "Arcane Barrage",
+          "total": 6102817,
+          "type": 64,
+          "icon": "ability_mage_arcanebarrage.jpg"
+         },
+         {
+          "guid": 78674,
+          "name": "Starsurge",
+          "total": 5989335,
+          "type": 72,
+          "icon": "spell_arcane_arcane03.jpg"
+         }
+        ],
+        "sources": [
+         {
+          "name": "Bloodlordzz",
+          "total": 14179479,
+          "type": "Paladin"
+         },
+         {
+          "name": "Boodytv",
+          "total": 11211789,
+          "totalReduced": 10758399,
+          "type": "Druid"
+         },
+         {
+          "name": "Supersoaker",
+          "total": 10713132,
+          "totalReduced": 10465962,
+          "type": "Mage"
+         }
+        ],
+        "totalRDPSTaken": 395346,
+        "totalRDPSGiven": 395346,
+        "given": [
+         {
+          "guid": 434481,
+          "name": "Bombardments",
+          "total": 395346,
+          "type": "Evoker",
+          "abilityIcon": "inv_ability_scalecommanderevoker_bombardments.jpg"
+         }
+        ],
+        "taken": [
+         {
+          "guid": 434481,
+          "name": "Bombardments",
+          "total": 395346,
+          "type": "Evoker",
+          "abilityIcon": "inv_ability_scalecommanderevoker_bombardments.jpg"
+         }
+        ]
+       },
+       {
+        "name": "Breath of Ula'tek",
+        "id": 179,
+        "guid": 258557,
+        "type": "Boss",
+        "icon": "custom-icon-inv_ability_poison_orb.jpg",
+        "total": 234806512,
+        "totalReduced": 229251299,
+        "activeTime": 531144,
+        "activeTimeReduced": 531144,
+        "abilities": [
+         {
+          "guid": 7268,
+          "name": "Arcane Missiles",
+          "total": 22243204,
+          "type": 64,
+          "icon": "spell_nature_starfall.jpg"
+         },
+         {
+          "guid": 44425,
+          "name": "Arcane Barrage",
+          "total": 13874845,
+          "type": 64,
+          "icon": "ability_mage_arcanebarrage.jpg"
+         },
+         {
+          "guid": 1295924,
+          "name": "Prismatic Bolt",
+          "total": 13334069,
+          "type": 64,
+          "icon": "8026694.jpg"
+         }
+        ],
+        "sources": [
+         {
+          "name": "Boodytv",
+          "total": 25867911,
+          "totalReduced": 25218685,
+          "type": "Druid"
+         },
+         {
+          "name": "Supersoaker",
+          "total": 25126556,
+          "totalReduced": 24304551,
+          "type": "Mage"
+         },
+         {
+          "name": "Sneakyrend",
+          "total": 24946727,
+          "type": "Rogue"
+         }
+        ],
+        "totalRDPSTaken": 732698,
+        "totalRDPSGiven": 732698,
+        "given": [
+         {
+          "guid": 434481,
+          "name": "Bombardments",
+          "total": 732698,
+          "type": "Evoker",
+          "abilityIcon": "inv_ability_scalecommanderevoker_bombardments.jpg"
+         }
+        ],
+        "taken": [
+         {
+          "guid": 434481,
+          "name": "Bombardments",
+          "total": 732698,
+          "type": "Evoker",
+          "abilityIcon": "inv_ability_scalecommanderevoker_bombardments.jpg"
+         }
+        ]
+       },
+       {
+        "name": "Blood of Ula'tek",
+        "id": 178,
+        "guid": 258558,
+        "type": "Boss",
+        "icon": "custom-icon-ability_warrior_bloodbath.jpg",
+        "total": 286981957,
+        "totalReduced": 279818417,
+        "activeTime": 527075,
+        "activeTimeReduced": 527075,
+        "abilities": [
+         {
+          "guid": 7268,
+          "name": "Arcane Missiles",
+          "total": 29702453,
+          "type": 64,
+          "icon": "spell_nature_starfall.jpg"
+         },
+         {
+          "guid": 44425,
+          "name": "Arcane Barrage",
+          "total": 20479954,
+          "type": 64,
+          "icon": "ability_mage_arcanebarrage.jpg"
+         },
+         {
+          "guid": 78674,
+          "name": "Starsurge",
+          "total": 16937151,
+          "type": 72,
+          "icon": "spell_arcane_arcane03.jpg"
+         }
+        ],
+        "sources": [
+         {
+          "name": "Supersoaker",
+          "total": 34943572,
+          "totalReduced": 34081538,
+          "type": "Mage"
+         },
+         {
+          "name": "Sneakyrend",
+          "total": 29385867,
+          "type": "Rogue"
+         },
+         {
+          "name": "Boodytv",
+          "total": 29218190,
+          "totalReduced": 27754557,
+          "type": "Druid"
+         }
+        ],
+        "totalRDPSTaken": 1206698,
+        "totalRDPSGiven": 1206698,
+        "given": [
+         {
+          "guid": 434481,
+          "name": "Bombardments",
+          "total": 1206698,
+          "type": "Evoker",
+          "abilityIcon": "inv_ability_scalecommanderevoker_bombardments.jpg"
+         }
+        ],
+        "taken": [
+         {
+          "guid": 434481,
+          "name": "Bombardments",
+          "total": 1206698,
+          "type": "Evoker",
+          "abilityIcon": "inv_ability_scalecommanderevoker_bombardments.jpg"
+         }
+        ]
+       }
+      ],
+      "totalTime": 531178,
+      "logVersion": 17,
+      "gameVersion": 1
+     }
+    }
+   }
+  }
+ }
+}

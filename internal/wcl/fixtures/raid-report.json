@@ -1,0 +1,165 @@
+{
+ "_note": "CAPTURED live 2026-09-18 from report npFrfKgwVMJ84W36 (fights and actors trimmed)",
+ "data": {
+  "reportData": {
+   "report": {
+    "code": "npFrfKgwVMJ84W36",
+    "title": "The Venomous Abyss",
+    "startTime": 1789772796651,
+    "endTime": 1789783172174,
+    "zone": {
+     "id": 53,
+     "name": "The Venomous Abyss"
+    },
+    "fights": [
+     {
+      "id": 2,
+      "encounterID": 3379,
+      "name": "Nymrissa Wavecaller",
+      "difficulty": 4,
+      "kill": true,
+      "startTime": 373903,
+      "endTime": 791295,
+      "fightPercentage": 0.01,
+      "lastPhase": 0,
+      "size": 20
+     },
+     {
+      "id": 6,
+      "encounterID": 3470,
+      "name": "Nek'zali the Soulcoiler",
+      "difficulty": 4,
+      "kill": false,
+      "startTime": 1762253,
+      "endTime": 2236787,
+      "fightPercentage": 14.09,
+      "lastPhase": 2,
+      "size": 19
+     },
+     {
+      "id": 7,
+      "encounterID": 3470,
+      "name": "Nek'zali the Soulcoiler",
+      "difficulty": 4,
+      "kill": true,
+      "startTime": 2572785,
+      "endTime": 3102651,
+      "fightPercentage": 0.01,
+      "lastPhase": 2,
+      "size": 19
+     },
+     {
+      "id": 12,
+      "encounterID": 3445,
+      "name": "Entombed Sentinels",
+      "difficulty": 4,
+      "kill": false,
+      "startTime": 3961215,
+      "endTime": 4031824,
+      "fightPercentage": 98.02,
+      "lastPhase": 1,
+      "size": 19
+     },
+     {
+      "id": 13,
+      "encounterID": 3445,
+      "name": "Entombed Sentinels",
+      "difficulty": 4,
+      "kill": false,
+      "startTime": 4157095,
+      "endTime": 4244508,
+      "fightPercentage": 87.6,
+      "lastPhase": 1,
+      "size": 19
+     },
+     {
+      "id": 15,
+      "encounterID": 3445,
+      "name": "Entombed Sentinels",
+      "difficulty": 4,
+      "kill": false,
+      "startTime": 4329276,
+      "endTime": 4423102,
+      "fightPercentage": 83.48,
+      "lastPhase": 1,
+      "size": 19
+     }
+    ],
+    "masterData": {
+     "actors": [
+      {
+       "id": 1,
+       "name": "Arcanost",
+       "type": "Player",
+       "subType": "Mage",
+       "gameID": 199508839
+      },
+      {
+       "id": 2,
+       "name": "Teit",
+       "type": "Player",
+       "subType": "Unknown",
+       "gameID": 178591107
+      },
+      {
+       "id": 3,
+       "name": "Mcgunner",
+       "type": "Player",
+       "subType": "Unknown",
+       "gameID": 157660281
+      },
+      {
+       "id": 4,
+       "name": "Algomer",
+       "type": "Player",
+       "subType": "Unknown",
+       "gameID": 157663498
+      },
+      {
+       "id": -1,
+       "name": "Environment",
+       "type": "NPC",
+       "subType": "Boss",
+       "gameID": 0
+      },
+      {
+       "id": 5,
+       "name": "Miasma Belcher",
+       "type": "NPC",
+       "subType": "Unknown",
+       "gameID": 264395
+      },
+      {
+       "id": 24,
+       "name": "Nymrissa Wavecaller",
+       "type": "NPC",
+       "subType": "Boss",
+       "gameID": 252959
+      },
+      {
+       "id": 25,
+       "name": "Shark",
+       "type": "NPC",
+       "subType": "NPC",
+       "gameID": 275082
+      },
+      {
+       "id": 27,
+       "name": "Tidebound Brute",
+       "type": "NPC",
+       "subType": "NPC",
+       "gameID": 270305
+      },
+      {
+       "id": 29,
+       "name": "Risen Ghoul",
+       "type": "NPC",
+       "subType": "NPC",
+       "gameID": 26125
+      }
+     ]
+    }
+   }
+  }
+ }
+}

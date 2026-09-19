@@ -1,0 +1,114 @@
+{
+ "_note": "CAPTURED live 2026-09-18 from report npFrfKgwVMJ84W36 fight 24 (entries trimmed to 2, abilities to 4)",
+ "data": {
+  "reportData": {
+   "report": {
+    "table": {
+     "data": {
+      "entries": [
+       {
+        "name": "Nekromoo",
+        "id": 16,
+        "guid": 250439304,
+        "type": "DeathKnight",
+        "icon": "DeathKnight-Blood",
+        "itemLevel": 313,
+        "total": 83726587,
+        "totalReduced": 58796798,
+        "activeTime": 528490,
+        "activeTimeReduced": 528490,
+        "overheal": 103847301,
+        "tmi": 156270.55644512625,
+        "efftmi": 92620.6047465381,
+        "abilities": [
+         {
+          "guid": 1,
+          "name": "Melee",
+          "total": 30237891,
+          "totalReduced": 17084412,
+          "type": 1,
+          "icon": "inv_axe_02.jpg"
+         },
+         {
+          "guid": 1310126,
+          "name": "Bloodvenom Injection",
+          "total": 15488946,
+          "totalReduced": 12064279,
+          "type": 32,
+          "icon": "ability_warrior_bloodbath.jpg"
+         },
+         {
+          "guid": 1284458,
+          "name": "Empowering Slam",
+          "total": 7488423,
+          "totalReduced": 5826082,
+          "type": 1,
+          "icon": "inv_mace_1h_pvppandarias3_c_01.jpg"
+         },
+         {
+          "guid": 1284500,
+          "name": "Mark of Acid",
+          "total": 7231934,
+          "totalReduced": 5136815,
+          "type": 8,
+          "icon": "inv_arcanegolem2mount_green.jpg"
+         }
+        ]
+       },
+       {
+        "name": "Boodytv",
+        "id": 172,
+        "guid": 159695565,
+        "type": "Druid",
+        "icon": "Druid-Balance",
+        "itemLevel": 314,
+        "total": 28817789,
+        "totalReduced": 26155334,
+        "activeTime": 523482,
+        "activeTimeReduced": 523482,
+        "overheal": 5853080,
+        "abilities": [
+         {
+          "guid": 1284506,
+          "name": "Mark of Blood",
+          "total": 9669536,
+          "totalReduced": 8697801,
+          "type": 32,
+          "icon": "inv_arcanegolem2mount_red.jpg"
+         },
+         {
+          "guid": 1284500,
+          "name": "Mark of Acid",
+          "total": 9541460,
+          "totalReduced": 8653990,
+          "type": 8,
+          "icon": "inv_arcanegolem2mount_green.jpg"
+         },
+         {
+          "guid": 1284258,
+          "name": "Contaminate",
+          "total": 4652148,
+          "totalReduced": 4380522,
+          "type": 8,
+          "icon": "ability_rogue_venomouswounds.jpg"
+         },
+         {
+          "guid": 1288282,
+          "name": "Unstable Miasma",
+          "total": 1629659,
+          "totalReduced": 1300427,
+          "type": 32,
+          "icon": "ability_deathwing_bloodcorruption_death.jpg"
+         }
+        ]
+       }
+      ],
+      "totalTime": 531178,
+      "logVersion": 17,
+      "gameVersion": 1
+     }
+    }
+   }
+  }
+ }
+}

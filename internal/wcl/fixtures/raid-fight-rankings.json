@@ -1,0 +1,99 @@
+{
+ "_note": "CAPTURED live 2026-09-18 for encounter 3445 heroic, US, speed (rankings trimmed to 3)",
+ "data": {
+  "worldData": {
+   "encounter": {
+    "id": 3445,
+    "name": "Entombed Sentinels",
+    "fightRankings": {
+     "page": 1,
+     "hasMorePages": true,
+     "count": 50,
+     "rankings": [
+      {
+       "server": {
+        "id": 18,
+        "name": "Area 52",
+        "region": "US"
+       },
+       "duration": 216415,
+       "startTime": 1789521946567,
+       "report": {
+        "code": "xKd7rX1MhT9W3wJA",
+        "fightID": 27,
+        "startTime": 1789506383024
+       },
+       "damageTaken": 252786328,
+       "deaths": 0,
+       "tanks": 2,
+       "healers": 5,
+       "melee": 7,
+       "ranged": 14,
+       "guild": {
+        "id": 253240,
+        "name": "Sacred Lotus",
+        "faction": 1
+       },
+       "bracketData": 322.741,
+       "size": 28
+      },
+      {
+       "server": {
+        "id": 245,
+        "name": "Zul'jin",
+        "region": "US"
+       },
+       "duration": 222272,
+       "startTime": 1789521558371,
+       "report": {
+        "code": "4KD1fRWHjkV89hLm",
+        "fightID": 5,
+        "startTime": 1789518083498
+       },
+       "damageTaken": 245365179,
+       "deaths": 0,
+       "tanks": 2,
+       "healers": 3,
+       "melee": 7,
+       "ranged": 13,
+       "guild": {
+        "id": 2950,
+        "name": "Bound",
+        "faction": 1
+       },
+       "bracketData": 321.32,
+       "size": 25
+      },
+      {
+       "server": {
+        "id": 99,
+        "name": "Frostmourne",
+        "region": "US"
+       },
+       "duration": 222938,
+       "startTime": 1789561667952,
+       "report": {
+        "code": "Cf2FVbwDnBMmqvWA",
+        "fightID": 16,
+        "startTime": 1789558574661
+       },
+       "damageTaken": 226544435,
+       "deaths": 0,
+       "tanks": 2,
+       "healers": 3,
+       "melee": 4,
+       "ranged": 12,
+       "guild": {
+        "id": 772056,
+        "name": "Your Mate",
+        "faction": 0
+       },
+       "bracketData": 321.238,
+       "size": 21
+      }
+     ]
+    }
+   }
+  }
+ }
+}

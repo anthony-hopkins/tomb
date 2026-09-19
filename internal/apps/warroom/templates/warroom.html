@@ -1,0 +1,71 @@
+{{define "warroom.html"}}
+{{/* The War Room's front page (spec 007): the raid's recent reports, found
+     through the raiders' own Warcraft Logs pages; a field for a link; the
+     reviews done and running. Officers only; the core settled that. */}}
+<div class="warroom">
+  <section class="panel">
+    <h1 class="summary-heading">War Room</h1>
+    <p class="tagline">The raid, boss by boss, against the region's fastest kills.</p>
+    {{if .Notice}}<p class="notice" role="status">{{.Notice}}</p>{{end}}
+    {{if not .Available}}
+    <p class="fineprint">{{.Reason}}</p>
+    {{else}}
+    <h2 class="summary-heading">Recent raid nights</h2>
+    {{if .Reports}}
+    <table class="writeup-table warroom-reports">
+      <thead><tr><th>When</th><th>Report</th><th>Logged by</th><th></th></tr></thead>
+      <tbody>
+      {{range .Reports}}
+      <tr>
+        <td>{{.When}}</td>
+        <td>{{.Title}}{{if .Zone}} <small class="muted">{{.Zone}}</small>{{end}}</td>
+        <td>{{.Owner}}</td>
+        <td>
+          <form method="post" action="/app/war-room/reviews">
+            <input type="hidden" name="csrf_token" value="{{$.CSRF}}">
+            <input type="hidden" name="code" value="{{.Code}}">
+            <input type="hidden" name="title" value="{{.Title}}">
+            <button type="submit">Review</button>
+          </form>
+        </td>
+      </tr>
+      {{end}}
+      </tbody>
+    </table>
+    {{else}}
+    <p class="fineprint">No raid night found on the raiders' Warcraft Logs pages in the last two weeks. Paste a report below.</p>
+    {{end}}
+    <form class="warroom-code" method="post" action="/app/war-room/reviews">
+      <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+      <label for="warroom-code">A Warcraft Logs report link or code</label>
+      <div class="warroom-code-row">
+        <input id="warroom-code" name="code" type="text" placeholder="https://www.warcraftlogs.com/reports/…" required>
+        <button class="primary" type="submit">Review</button>
+      </div>
+    </form>
+    <p class="fineprint">A review reads the report and the top kills from Warcraft Logs and takes a few minutes. Nothing is uploaded anywhere; the site only reads.</p>
+    {{end}}
+  </section>
+
+  <section class="panel">
+    <h2 class="summary-heading">Reviews</h2>
+    {{if .Reviews}}
+    <table class="writeup-table">
+      <thead><tr><th>When</th><th>Report</th><th>Asked by</th><th>State</th></tr></thead>
+      <tbody>
+      {{range .Reviews}}
+      <tr>
+        <td>{{.When}}</td>
+        <td><a href="/app/war-room/reviews/{{.ID}}">{{if .Title}}{{.Title}}{{else}}{{.Code}}{{end}}</a></td>
+        <td>{{.By}}</td>
+        <td>{{if .Pending}}running{{else if .Failure}}failed: {{.Failure}}{{else}}{{.State}}{{end}}</td>
+      </tr>
+      {{end}}
+      </tbody>
+    </table>
+    {{else}}
+    <p class="fineprint">No reviews yet.</p>
+    {{end}}
+  </section>
+</div>
+{{end}}

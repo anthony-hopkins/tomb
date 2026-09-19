@@ -1,0 +1,278 @@
+{
+ "_note": "CAPTURED live 2026-09-18 from report npFrfKgwVMJ84W36 fight 24 (lists trimmed to 3, combatantInfo dropped)",
+ "data": {
+  "reportData": {
+   "report": {
+    "table": {
+     "data": {
+      "totalTime": 531178,
+      "itemLevel": 313.79998779296875,
+      "composition": [
+       {
+        "name": "Boodytv",
+        "id": 172,
+        "guid": 159695565,
+        "type": "Druid",
+        "specs": [
+         {
+          "spec": "Balance",
+          "role": "dps"
+         }
+        ]
+       },
+       {
+        "name": "Nekromoo",
+        "id": 16,
+        "guid": 250439304,
+        "type": "DeathKnight",
+        "specs": [
+         {
+          "spec": "Blood",
+          "role": "tank"
+         }
+        ]
+       },
+       {
+        "name": "Sneakyrend",
+        "id": 152,
+        "guid": 191185994,
+        "type": "Rogue",
+        "specs": [
+         {
+          "spec": "Subtlety",
+          "role": "dps"
+         }
+        ]
+       }
+      ],
+      "damageDone": [
+       {
+        "name": "Boodytv",
+        "id": 172,
+        "guid": 159695565,
+        "type": "Druid",
+        "icon": "Druid-Balance",
+        "total": 66297890
+       },
+       {
+        "name": "Nekromoo",
+        "id": 16,
+        "guid": 250439304,
+        "type": "DeathKnight",
+        "icon": "DeathKnight-Blood",
+        "total": 23388630
+       },
+       {
+        "name": "Sneakyrend",
+        "id": 152,
+        "guid": 191185994,
+        "type": "Rogue",
+        "icon": "Rogue-Subtlety",
+        "total": 60718804
+       }
+      ],
+      "healingDone": [
+       {
+        "name": "Nekromoo",
+        "id": 16,
+        "guid": 250439304,
+        "type": "DeathKnight",
+        "icon": "DeathKnight-Blood",
+        "total": 41417290
+       },
+       {
+        "name": "Boodytv",
+        "id": 172,
+        "guid": 159695565,
+        "type": "Druid",
+        "icon": "Druid-Balance",
+        "total": 2110883
+       },
+       {
+        "name": "Sneakyrend",
+        "id": 152,
+        "guid": 191185994,
+        "type": "Rogue",
+        "icon": "Rogue-Subtlety",
+        "total": 6021208
+       }
+      ],
+      "damageTaken": [
+       {
+        "name": "Seriously Sharp Seashell",
+        "guid": 1292299,
+        "type": 1,
+        "abilityIcon": "inv_misc_food_legion_seashelld2.jpg",
+        "total": 292250
+       },
+       {
+        "name": "Toxic Droplets",
+        "guid": 1284451,
+        "type": 8,
+        "abilityIcon": "inv_ability_poison_orb.jpg",
+        "total": 32070694
+       },
+       {
+        "name": "Living Venom",
+        "guid": 1284209,
+        "type": 8,
+        "abilityIcon": "inv_ability_poison_groundstate.jpg",
+        "total": 9345021
+       }
+      ],
+      "deathEvents": [
+       {
+        "name": "Trogdoor",
+        "id": 14,
+        "guid": 252104247,
+        "type": "Evoker",
+        "icon": "Evoker-Devastation",
+        "deathTime": 81310,
+        "ability": {
+         "name": "Mark of Blood",
+         "guid": 1284506,
+         "type": 32,
+         "abilityIcon": "inv_arcanegolem2mount_red.jpg"
+        }
+       },
+       {
+        "name": "Lyti",
+        "id": 40,
+        "guid": 244078125,
+        "type": "Mage",
+        "icon": "Mage-Arcane",
+        "deathTime": 282434,
+        "ability": {
+         "name": "Mark of Acid",
+         "guid": 1284500,
+         "type": 8,
+         "abilityIcon": "inv_arcanegolem2mount_green.jpg"
+        }
+       },
+       {
+        "name": "Orastal",
+        "id": 6,
+        "guid": 258172421,
+        "type": "Mage",
+        "icon": "Mage-Frost",
+        "deathTime": 420721,
+        "ability": {
+         "name": "Living Venom",
+         "guid": 1284209,
+         "type": 8,
+         "abilityIcon": "inv_ability_poison_groundstate.jpg"
+        }
+       }
+      ],
+      "playerDetails": {
+       "dps": [
+        {
+         "name": "Supersoaker",
+         "id": 21,
+         "guid": 260253681,
+         "type": "Mage",
+         "server": "Stormrage",
+         "region": "US",
+         "icon": "Mage-Arcane",
+         "specs": [
+          "Arcane"
+         ],
+         "minItemLevel": 314,
+         "maxItemLevel": 314,
+         "potionUse": 0,
+         "healthstoneUse": 0
+        },
+        {
+         "name": "Boodytv",
+         "id": 172,
+         "guid": 159695565,
+         "type": "Druid",
+         "server": "Hyjal",
+         "region": "US",
+         "icon": "Druid-Balance",
+         "specs": [
+          "Balance"
+         ],
+         "minItemLevel": 314,
+         "maxItemLevel": 314,
+         "potionUse": 2,
+         "healthstoneUse": 0
+        }
+       ],
+       "tanks": [
+        {
+         "name": "Nekromoo",
+         "id": 16,
+         "guid": 250439304,
+         "type": "DeathKnight",
+         "server": "Area52",
+         "region": "US",
+         "icon": "DeathKnight-Blood",
+         "specs": [
+          "Blood"
+         ],
+         "minItemLevel": 313,
+         "maxItemLevel": 313,
+         "potionUse": 0,
+         "healthstoneUse": 0
+        },
+        {
+         "name": "Cwoodz",
+         "id": 22,
+         "guid": 267670462,
+         "type": "DemonHunter",
+         "server": "Elune",
+         "region": "US",
+         "icon": "DemonHunter-Vengeance",
+         "specs": [
+          "Vengeance"
+         ],
+         "minItemLevel": 315,
+         "maxItemLevel": 315,
+         "potionUse": 0,
+         "healthstoneUse": 0
+        }
+       ],
+       "healers": [
+        {
+         "name": "Nananinan\u00e3o",
+         "id": 9,
+         "guid": 249014353,
+         "type": "Shaman",
+         "server": "Area52",
+         "region": "US",
+         "icon": "Shaman-Restoration",
+         "specs": [
+          "Restoration"
+         ],
+         "minItemLevel": 320,
+         "maxItemLevel": 320,
+         "potionUse": 0,
+         "healthstoneUse": 0
+        },
+        {
+         "name": "Sortier",
+         "id": 10,
+         "guid": 221855029,
+         "type": "Priest",
+         "server": "Illidan",
+         "region": "US",
+         "icon": "Priest-Holy",
+         "specs": [
+          "Holy"
+         ],
+         "minItemLevel": 306,
+         "maxItemLevel": 306,
+         "potionUse": 0,
+         "healthstoneUse": 0
+        }
+       ]
+      },
+      "logVersion": 17,
+      "gameVersion": 1
+     }
+    }
+   }
+  }
+ }
+}

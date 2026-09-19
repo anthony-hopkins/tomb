@@ -1,0 +1,133 @@
+{
+ "_note": "CAPTURED live 2026-09-18 from report npFrfKgwVMJ84W36 fight 24 (dispel entries trimmed)",
+ "data": {
+  "reportData": {
+   "report": {
+    "i": {
+     "data": {
+      "entries": [
+       {
+        "entries": []
+       }
+      ],
+      "totalTime": 531178
+     }
+    },
+    "d": {
+     "data": {
+      "entries": [
+       {
+        "entries": [
+         {
+          "name": "Blighted Blood",
+          "guid": 1284471,
+          "type": 32,
+          "abilityIcon": "spell_shadow_lifedrain.jpg",
+          "spellsBegun": 12,
+          "spellsCompleted": 2,
+          "spellsInterrupted": 10,
+          "spellChannelsInterrupted": 0,
+          "timestamp": 9232924,
+          "details": [
+           {
+            "name": "Nananinan\u00e3o",
+            "id": 9,
+            "guid": 249014353,
+            "type": "Shaman",
+            "icon": "Shaman",
+            "total": 5,
+            "actors": [
+             {
+              "name": "Bloodlordzz",
+              "total": 2,
+              "type": "Paladin"
+             },
+             {
+              "name": "Arcanost",
+              "total": 2,
+              "type": "Mage"
+             }
+            ],
+            "abilities": [
+             {
+              "name": "Purify Spirit",
+              "total": 5,
+              "type": 8
+             }
+            ]
+           },
+           {
+            "name": "Sortier",
+            "id": 10,
+            "guid": 221855029,
+            "type": "Priest",
+            "icon": "Priest",
+            "total": 5,
+            "actors": [
+             {
+              "name": "Sortier",
+              "total": 2,
+              "type": "Priest"
+             },
+             {
+              "name": "Supersoaker",
+              "total": 1,
+              "type": "Mage"
+             }
+            ],
+            "abilities": [
+             {
+              "name": "Purify",
+              "total": 5,
+              "type": 2
+             }
+            ]
+           }
+          ],
+          "missedCasts": [
+           {
+            "name": "Blood of Ula'tek",
+            "id": 178,
+            "guid": 258558,
+            "type": "Boss",
+            "icon": "custom-icon-ability_warrior_bloodbath.jpg",
+            "timestamp": 62695,
+            "target": {
+             "name": "Sham\u00dfulanc\u00e9",
+             "id": 46,
+             "guid": 178686152,
+             "type": "Shaman",
+             "icon": "Shaman-Restoration",
+             "server": "Tichondrius",
+             "region": "US"
+            }
+           },
+           {
+            "name": "Blood of Ula'tek",
+            "id": 178,
+            "guid": 258558,
+            "type": "Boss",
+            "icon": "custom-icon-ability_warrior_bloodbath.jpg",
+            "timestamp": 526788,
+            "target": {
+             "name": "Lyti",
+             "id": 40,
+             "guid": 244078125,
+             "type": "Mage",
+             "icon": "Mage-Arcane",
+             "server": "Area52",
+             "region": "US"
+            }
+           }
+          ]
+         }
+        ]
+       }
+      ],
+      "totalTime": 531178
+     }
+    }
+   }
+  }
+ }
+}
