@@ -77,12 +77,12 @@ func TestReport(t *testing.T) {
 
 // TestFightReading: the five tables of one pull, joined into one reading.
 func TestFightReading(t *testing.T) {
-	c, _, asked := server(t, inOrder(t, "raid-summary.json", "raid-damage-taken.json", "raid-targets.json", "raid-enemy-deaths.json", "raid-utility.json"))
+	c, _, asked := server(t, inOrder(t, "raid-summary.json", "raid-damage-taken.json", "raid-targets.json", "raid-enemy-deaths.json", "raid-healing.json", "raid-utility.json"))
 	r, err := c.FightReading(context.Background(), "npFrfKgwVMJ84W36", 24)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(*asked) != 5 || (*asked)[0]["fight"] != float64(24) {
+	if len(*asked) != 6 || (*asked)[0]["fight"] != float64(24) {
 		t.Fatalf("asked %d queries: %v", len(*asked), *asked)
 	}
 	if r.TotalTime != 531178*time.Millisecond || r.ItemLevel < 313 || len(r.Players) != 3 {
@@ -117,6 +117,9 @@ func TestFightReading(t *testing.T) {
 	if len(r.EnemyDeaths) != 5 || r.EnemyDeaths[0].ActorID != 195 || r.EnemyDeaths[0].Instance != 1 || r.EnemyDeaths[0].TimestampMS != 9213921 || r.EnemyDeaths[0].KillerID != 11 || r.EnemyDeaths[2].Instance != 2 {
 		t.Errorf("enemy deaths = %+v", r.EnemyDeaths)
 	}
+	if len(r.Healing) != 2 || r.Healing[0].Name != "Cwoodz" || r.Healing[0].Overheal != 10474430 || len(r.Healing[0].Abilities) != 3 || r.Healing[0].Abilities[0].Name != "Consume Soul" {
+		t.Errorf("healing = %+v", r.Healing)
+	}
 	if len(r.Interrupts) != 0 {
 		t.Errorf("interrupts = %+v", r.Interrupts)
 	}
@@ -125,8 +128,9 @@ func TestFightReading(t *testing.T) {
 	}
 }
 
-// TestFightPositions: the target's x/y off every hit, one page.
-func TestFightPositions(t *testing.T) {
+// TestFightHits: every hit with its amounts, the target's x/y where the
+// event carried them, paged.
+func TestFightHits(t *testing.T) {
 	var n atomic.Int32
 	c, _, asked := server(t, func(map[string]any) (int, []byte) {
 		if n.Add(1) == 1 {
@@ -134,7 +138,7 @@ func TestFightPositions(t *testing.T) {
 		}
 		return 200, []byte(`{"data":{"reportData":{"report":{"events":{"data":[],"nextPageTimestamp":null}}}}}`)
 	})
-	got, err := c.FightPositions(context.Background(), "npFrfKgwVMJ84W36", 24)
+	got, err := c.FightHits(context.Background(), "npFrfKgwVMJ84W36", 24)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -143,13 +147,8 @@ func TestFightPositions(t *testing.T) {
 	if len(*asked) != 2 || (*asked)[1]["start"] == nil {
 		t.Errorf("asked %v", *asked)
 	}
-	if len(got) == 0 || got[0].ActorID != 16 || got[0].X != 36357 || got[0].Y != 68488 || got[0].TimestampMS != 9189432 {
-		t.Errorf("positions = %+v", got)
-	}
-	for _, p := range got {
-		if p.X == 0 && p.Y == 0 {
-			t.Errorf("a sample with no position: %+v", p)
-		}
+	if len(got) == 0 || got[0].ActorID != 16 || !got[0].HasPos || got[0].X != 36357 || got[0].Y != 68488 || got[0].TimestampMS != 9189432 || got[0].Amount != 231523 || got[0].Unmitigated != 653859 || got[0].Absorbed != 5663 || got[0].AbilityID != 1 {
+		t.Errorf("hits = %+v", got)
 	}
 }
 

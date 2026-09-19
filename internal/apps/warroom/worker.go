@@ -24,8 +24,10 @@ const (
 	// modelTimeout bounds the model call; a report over a night of bosses
 	// is long, and the model thinks first.
 	modelTimeout = 8 * time.Minute
-	// readTimeout bounds all the Warcraft Logs reads of one review.
-	readTimeout = 6 * time.Minute
+	// readTimeout bounds all the Warcraft Logs reads of one review: a
+	// dozen tables per boss per side, plus a cast table per player and a
+	// kit timeline for the tanks, healers and the dead.
+	readTimeout = 10 * time.Minute
 	// wipePullsRead is how many of a wall's pulls are read for their
 	// deaths, from the last; the rest carry their outcome only.
 	wipePullsRead = 3
@@ -215,15 +217,15 @@ func (a *App) gather(ctx context.Context, code string) (raid.Payload, error) {
 				if err != nil {
 					return raid.Payload{}, err
 				}
-				var pos []wcl.PositionSample
+				var hits []wcl.Hit
 				if f.ID == best.ID || b.Wall {
-					pos, err = a.reader.FightPositions(ctx, code, f.ID)
+					hits, err = a.reader.FightHits(ctx, code, f.ID)
 					if err != nil {
-						a.deps.Logger.Warn("war room: positions", "code", code, "fight", f.ID, "error", err)
-						pos = nil
+						a.deps.Logger.Warn("war room: hits", "code", code, "fight", f.ID, "error", err)
+						hits = nil
 					}
 				}
-				side := raid.ReadSide(rep, f, fr, pos, a.deps.Guild.Name)
+				side := raid.ReadSide(rep, f, fr, hits, a.deps.Guild.Name)
 				for i, d := range side.Deaths {
 					if i == 3 {
 						break
@@ -231,6 +233,7 @@ func (a *App) gather(ctx context.Context, code string) (raid.Payload, error) {
 					p.FirstDeaths = append(p.FirstDeaths, d)
 				}
 				if f.ID == best.ID {
+					a.detail(ctx, code, f.ID, rep, fr, &side, hits, true)
 					ours = &side
 				}
 			}
@@ -268,11 +271,12 @@ func (a *App) gather(ctx context.Context, code string) (raid.Payload, error) {
 				if err != nil {
 					return raid.Payload{}, err
 				}
-				tpos, err := a.reader.FightPositions(ctx, top.Code, tf.ID)
+				thits, err := a.reader.FightHits(ctx, top.Code, tf.ID)
 				if err != nil {
-					tpos = nil
+					thits = nil
 				}
-				theirs := raid.ReadSide(trep, tf, tfr, tpos, top.Guild)
+				theirs := raid.ReadSide(trep, tf, tfr, thits, top.Guild)
+				a.detail(ctx, top.Code, tf.ID, trep, tfr, &theirs, thits, false)
 				if theirs.Guild == "" {
 					theirs.Guild = "a top guild on " + top.Server
 				}
@@ -283,6 +287,44 @@ func (a *App) gather(ctx context.Context, code string) (raid.Payload, error) {
 		out.Bosses = append(out.Bosses, b)
 	}
 	return out, nil
+}
+
+// detail reads each player's casts and, for the tanks, the healers and
+// (on our side) the dead, the timeline of their kit, and fills the side's
+// player details (FR-074). A read that fails costs that player their
+// detail, not the review.
+func (a *App) detail(ctx context.Context, code string, fightID int, rep wcl.RaidReport, fr wcl.FightReading, side *raid.Side, hits []wcl.Hit, ours bool) {
+	if a.deps.WCL == nil {
+		return
+	}
+	dead := map[string]bool{}
+	for _, d := range fr.Deaths {
+		dead[d.Name] = true
+	}
+	casts := map[string]raid.Casts{}
+	for _, p := range fr.Players {
+		set, err := a.deps.WCL.Casts(ctx, code, fightID, p.Name)
+		if err != nil {
+			a.deps.Logger.Warn("war room: casts", "code", code, "fight", fightID, "player", p.Name, "error", err)
+			continue
+		}
+		c := raid.Casts{Set: set}
+		watch := p.Role == "tank" || p.Role == "healer" || (ours && dead[p.Name])
+		if kit := raid.KitFor(p.Class, p.Spec).Watched(); watch && len(kit) > 0 {
+			tl, err := a.deps.WCL.Timeline(ctx, code, fightID, p.Name, kit)
+			if err != nil {
+				a.deps.Logger.Warn("war room: timeline", "code", code, "fight", fightID, "player", p.Name, "error", err)
+			} else {
+				c.Timeline = tl
+			}
+		}
+		casts[p.Name] = c
+	}
+	names := map[int]string{}
+	for _, act := range rep.Actors {
+		names[act.ID] = act.Name
+	}
+	side.Detail(fr, casts, hits, names)
 }
 
 // bestPull is the kill, else the pull that got furthest, else the longest.
