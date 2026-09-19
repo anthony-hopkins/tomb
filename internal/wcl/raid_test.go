@@ -73,6 +73,9 @@ func TestReport(t *testing.T) {
 	if a := rep.Actors[6]; a.Name != "Nymrissa Wavecaller" || a.Type != "NPC" || a.SubType != "Boss" || a.GameID != 252959 {
 		t.Errorf("actor = %+v", a)
 	}
+	if rep.Abilities[1288772] != "Toxic Droplets" || len(rep.Abilities) != 2 {
+		t.Errorf("abilities = %v", rep.Abilities)
+	}
 }
 
 // TestFightReading: the five tables of one pull, joined into one reading.

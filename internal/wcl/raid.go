@@ -59,6 +59,9 @@ type RaidReport struct {
 	ZoneName string
 	Fights   []RaidFight
 	Actors   []Actor
+	// Abilities names every ability the report saw, by game id: what the
+	// hits are named with.
+	Abilities map[int]string
 }
 
 // RaidFight is one pull of a boss.
@@ -320,7 +323,7 @@ const reportQuery = `query($code: String!) {
   reportData { report(code: $code) {
     code title startTime endTime zone { id name }
     fights(killType: Encounters) { id encounterID name difficulty kill startTime endTime fightPercentage lastPhase size }
-    masterData { actors { id name type subType gameID } }
+    masterData { actors { id name type subType gameID } abilities { gameID name } }
   } }
 }`
 
@@ -344,7 +347,11 @@ func (c *HTTPClient) Report(ctx context.Context, code string) (RaidReport, error
 						Size        int     `json:"size"`
 					} `json:"fights"`
 					MasterData struct {
-						Actors []actorJSON `json:"actors"`
+						Actors    []actorJSON `json:"actors"`
+						Abilities []struct {
+							GameID int    `json:"gameID"`
+							Name   string `json:"name"`
+						} `json:"abilities"`
 					} `json:"masterData"`
 				} `json:"report"`
 			} `json:"reportData"`
@@ -365,6 +372,12 @@ func (c *HTTPClient) Report(ctx context.Context, code string) (RaidReport, error
 	}
 	for _, a := range rep.MasterData.Actors {
 		out.Actors = append(out.Actors, a.actor())
+	}
+	out.Abilities = map[int]string{}
+	for _, a := range rep.MasterData.Abilities {
+		if a.GameID != 0 && a.Name != "" {
+			out.Abilities[a.GameID] = a.Name
+		}
 	}
 	return out, nil
 }

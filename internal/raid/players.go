@@ -91,15 +91,13 @@ type Casts struct {
 // Detail fills each player's own numbers from what the worker read:
 // casts and timelines by player name, and the pull's hits. Players with
 // nothing read still get a detail from the tables.
-func (s *Side) Detail(fr wcl.FightReading, casts map[string]Casts, hits []wcl.Hit, actorName map[int]string) {
+func (s *Side) Detail(fr wcl.FightReading, casts map[string]Casts, hits []wcl.Hit, actorName map[int]string, abilityName map[int]string) {
 	secs := s.Duration.Seconds()
 	if secs <= 0 {
 		secs = 1
 	}
-	abilityName := map[int]string{}
-	byName := map[int]string{}
-	for id, name := range actorName {
-		byName[id] = name
+	if abilityName == nil {
+		abilityName = map[int]string{}
 	}
 	idOf := map[string]int{}
 	for id, name := range actorName {
@@ -147,7 +145,6 @@ func (s *Side) Detail(fr wcl.FightReading, casts map[string]Casts, hits []wcl.Hi
 		pressed := map[string][]float64{}
 		for _, ev := range c.Timeline.Casts {
 			pressed[ev.Ability] = append(pressed[ev.Ability], math.Round(ev.At.Seconds()*10)/10)
-			abilityName[ev.AbilityID] = ev.Ability
 		}
 		add := func(list []string, kind string) {
 			for _, a := range list {
@@ -177,7 +174,7 @@ func (s *Side) Detail(fr wcl.FightReading, casts map[string]Casts, hits []wcl.Hi
 		if p.Role == "tank" {
 			n = 5
 		}
-		d.Spikes = spikes(hitsOf[idOf[p.Name]], startMS, n, pressed, kit.Defensives)
+		d.Spikes = spikes(hitsOf[idOf[p.Name]], startMS, n, pressed, kit.Defensives, abilityName)
 		// The death.
 		if death, ok := deathOf[p.Name]; ok {
 			d.Death = deathContext(death, hitsOf[idOf[p.Name]], startMS, pressed, kit.Defensives)
@@ -198,7 +195,7 @@ func (s *Side) Detail(fr wcl.FightReading, casts map[string]Casts, hits []wcl.Hi
 
 // spikes finds the n heaviest three-second windows, at least six seconds
 // apart, and names the defensive pressed around each.
-func spikes(hits []wcl.Hit, startMS int64, n int, pressed map[string][]float64, defensives []string) []Spike {
+func spikes(hits []wcl.Hit, startMS int64, n int, pressed map[string][]float64, defensives []string, abilityName map[int]string) []Spike {
 	if len(hits) == 0 {
 		return nil
 	}
@@ -284,7 +281,7 @@ func spikes(hits []wcl.Hit, startMS int64, n int, pressed map[string][]float64, 
 			if i == 3 {
 				break
 			}
-			sp.Abilities = append(sp.Abilities, abilityLabel(a.id))
+			sp.Abilities = append(sp.Abilities, abilityLabel(a.id, abilityName))
 		}
 		sp.Covered = coveredBy(float64(w.at), pressed, defensives, -8, 2)
 		out = append(out, sp)
@@ -293,12 +290,14 @@ func spikes(hits []wcl.Hit, startMS int64, n int, pressed map[string][]float64, 
 	return out
 }
 
-// abilityLabels names hit abilities where a name was learned; a bare id
-// otherwise, which the model is told to leave alone.
-var abilityLabels = map[int]string{1: "Melee"}
-
-func abilityLabel(id int) string {
-	if n, ok := abilityLabels[id]; ok {
+// abilityLabel names a hit ability from the report's list; melee is
+// never in it; an unnamed one keeps its id, which the model is told to
+// leave alone.
+func abilityLabel(id int, names map[int]string) string {
+	if id == 1 {
+		return "Melee"
+	}
+	if n, ok := names[id]; ok && n != "" {
 		return n
 	}
 	return "ability " + itoa(id)
