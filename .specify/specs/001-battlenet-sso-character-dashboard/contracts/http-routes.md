@@ -128,6 +128,16 @@ draws after every member page's body, and the page is linked from it.
 | `POST /app/assistant/ask` | CSRF-checked. `q` (at most 600 characters) is answered by the model with the member's characters as facts. `Accept: application/json` answers `{question, answer_html, sources, character}` or `{error}` (400 empty/long, 429 over the allowance, 503 busy or unavailable, 502 failed); otherwise a 303 to the page, with the reason as `?e=` on a refusal |
 | `POST /app/assistant/new` | CSRF-checked. Starts a new conversation. JSON `{ok}` or a 303 to the page |
 
+## War Room app routes (spec 007)
+
+Access: `officer` (the administrator counts as one). Nav label "War Room".
+
+| Route | Result |
+|---|---|
+| `GET /app/war-room` | Recent raid nights found through the raiders' Warcraft Logs pages, a field for a report link or code, and the reviews done or running; `?e=` words a refusal (`code`, `unavailable`, `failed`) |
+| `POST /app/war-room/reviews` | CSRF-checked. `code` (a link or code) starts a review, audited as `warroom.review`; a review of the same report younger than six hours is shown instead unless `again=1`; 303 to the review |
+| `GET /app/war-room/reviews/{id}` | The review: while running, the page refreshes itself every 5 s; failed, the reason and "Run again"; done, the overview, each boss's sections, "do these first" and "what to verify" |
+
 ## Cross-cutting contracts
 
 **Session cookie** (research D6): name `tomb_session`; `HttpOnly`; `Secure` (unless

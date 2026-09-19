@@ -1,0 +1,60 @@
+{
+ "_note": "CAPTURED live 2026-09-18 for a raider's recent reports (trimmed to 3)",
+ "data": {
+  "characterData": {
+   "character": {
+    "id": 112395974,
+    "name": "Nekromoo",
+    "recentReports": {
+     "data": [
+      {
+       "code": "npFrfKgwVMJ84W36",
+       "title": "The Venomous Abyss",
+       "startTime": 1789772796651,
+       "endTime": 1789783172174,
+       "zone": {
+        "id": 53,
+        "name": "The Venomous Abyss"
+       },
+       "owner": {
+        "name": "bloodlordz"
+       },
+       "guild": null
+      },
+      {
+       "code": "PhLaTtDFAwZy6qvB",
+       "title": "The Venomous Abyss",
+       "startTime": 1789771500742,
+       "endTime": 1789782630729,
+       "zone": {
+        "id": 53,
+        "name": "The Venomous Abyss"
+       },
+       "owner": {
+        "name": "Sneakyrend"
+       },
+       "guild": {
+        "id": 131745,
+        "name": "Rend's Logs"
+       }
+      },
+      {
+       "code": "9AWJ8HZcKR4TyC37",
+       "title": "Tomb",
+       "startTime": 1789768017879,
+       "endTime": 1789786674930,
+       "zone": {
+        "id": 53,
+        "name": "The Venomous Abyss"
+       },
+       "owner": {
+        "name": "Orastal"
+       },
+       "guild": null
+      }
+     ]
+    }
+   }
+  }
+ }
+}

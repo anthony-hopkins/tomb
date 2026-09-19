@@ -184,6 +184,11 @@ type Deps struct {
 	// assistant reads as "unavailable".
 	Chat ai.Chatter
 
+	// RaidAI writes the War Room's report (spec 007): the same model,
+	// held to the raid report's schema rather than the review's. Nil when
+	// the site has no model.
+	RaidAI ai.Writer
+
 	// RenderInLayout draws an app's rendered body inside the shared page
 	// shell, so apps own their own content without owning the site chrome,
 	// navigation, or the signed-in header. The core populates this.

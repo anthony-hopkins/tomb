@@ -1,0 +1,265 @@
+{
+ "_note": "CAPTURED live 2026-09-18 from report npFrfKgwVMJ84W36 fight 24: DamageTaken events with includeResources (6 events; x/y are the target's position)",
+ "data": {
+  "reportData": {
+   "report": {
+    "events": {
+     "data": [
+      {
+       "timestamp": 9189432,
+       "type": "damage",
+       "sourceID": 178,
+       "targetID": 16,
+       "abilityGameID": 1,
+       "fight": 24,
+       "buffs": "207203.195181.",
+       "hitType": 1,
+       "amount": 231523,
+       "mitigated": 416673,
+       "unmitigatedAmount": 653859,
+       "absorbed": 5663,
+       "isAoE": false,
+       "resourceActor": 2,
+       "classResources": [
+        {
+         "amount": 170,
+         "max": 1250,
+         "type": 6
+        }
+       ],
+       "hitPoints": 1104343,
+       "maxHitPoints": 1335866,
+       "attackPower": 3656,
+       "spellPower": 344,
+       "armor": 7762,
+       "absorb": 0,
+       "x": 36357,
+       "y": 68488,
+       "facing": -692,
+       "mapID": 2608,
+       "versatility": 1350,
+       "avoidance": 0,
+       "itemLevel": 313
+      },
+      {
+       "timestamp": 9189432,
+       "type": "damage",
+       "sourceID": 179,
+       "targetID": 22,
+       "abilityGameID": 1,
+       "fight": 24,
+       "buffs": "247456.",
+       "hitType": 1,
+       "amount": 197907,
+       "mitigated": 357619,
+       "unmitigatedAmount": 582786,
+       "absorbed": 27260,
+       "isAoE": false,
+       "resourceActor": 2,
+       "classResources": [
+        {
+         "amount": 48,
+         "max": 120,
+         "type": 17
+        }
+       ],
+       "hitPoints": 1104769,
+       "maxHitPoints": 1302676,
+       "attackPower": 4258,
+       "spellPower": 638,
+       "armor": 5643,
+       "absorb": 0,
+       "x": 38517,
+       "y": 73258,
+       "facing": -451,
+       "mapID": 2608,
+       "versatility": 1050,
+       "avoidance": 51,
+       "itemLevel": 315
+      },
+      {
+       "timestamp": 9190523,
+       "type": "damage",
+       "sourceID": 1,
+       "targetID": 1,
+       "abilityGameID": 1292299,
+       "fight": 24,
+       "buffs": "55342.1309793.",
+       "hitType": 1,
+       "amount": 839,
+       "mitigated": 118,
+       "unmitigatedAmount": 1316,
+       "absorbed": 359,
+       "isAoE": false,
+       "tick": true,
+       "resourceActor": 1,
+       "classResources": [
+        {
+         "amount": 128186,
+         "max": 332572,
+         "type": 0
+        }
+       ],
+       "hitPoints": 778881,
+       "maxHitPoints": 779720,
+       "attackPower": 414,
+       "spellPower": 3147,
+       "armor": 632,
+       "absorb": 0,
+       "x": 35520,
+       "y": 68131,
+       "facing": -668,
+       "mapID": 2608,
+       "versatility": 1235,
+       "avoidance": 277,
+       "itemLevel": 317
+      },
+      {
+       "timestamp": 9190930,
+       "type": "damage",
+       "sourceID": 179,
+       "targetID": 22,
+       "abilityGameID": 1,
+       "fight": 24,
+       "buffs": "212988.203819.247456.",
+       "hitType": 1,
+       "amount": 146343,
+       "mitigated": 438942,
+       "unmitigatedAmount": 585285,
+       "isAoE": false,
+       "resourceActor": 2,
+       "classResources": [
+        {
+         "amount": 13,
+         "max": 120,
+         "type": 17
+        }
+       ],
+       "hitPoints": 1033478,
+       "maxHitPoints": 1302676,
+       "attackPower": 4291,
+       "spellPower": 638,
+       "armor": 10241,
+       "absorb": 0,
+       "x": 38503,
+       "y": 73880,
+       "facing": -451,
+       "mapID": 2608,
+       "versatility": 1050,
+       "avoidance": 51,
+       "itemLevel": 315
+      },
+      {
+       "timestamp": 9190998,
+       "type": "damage",
+       "sourceID": 178,
+       "targetID": 16,
+       "abilityGameID": 1,
+       "fight": 24,
+       "hitType": 1,
+       "amount": 334093,
+       "mitigated": 294651,
+       "unmitigatedAmount": 653928,
+       "absorbed": 25184,
+       "isAoE": false,
+       "resourceActor": 2,
+       "classResources": [
+        {
+         "amount": 510,
+         "max": 1250,
+         "type": 6
+        }
+       ],
+       "hitPoints": 930721,
+       "maxHitPoints": 1322640,
+       "attackPower": 3821,
+       "spellPower": 344,
+       "armor": 3357,
+       "absorb": 0,
+       "x": 35784,
+       "y": 68067,
+       "facing": -692,
+       "mapID": 2608,
+       "versatility": 1350,
+       "avoidance": 0,
+       "itemLevel": 313
+      },
+      {
+       "timestamp": 9191537,
+       "type": "damage",
+       "sourceID": 1,
+       "targetID": 1,
+       "abilityGameID": 1292299,
+       "fight": 24,
+       "buffs": "55342.1309793.",
+       "hitType": 1,
+       "amount": 839,
+       "mitigated": 118,
+       "unmitigatedAmount": 1316,
+       "absorbed": 359,
+       "isAoE": false,
+       "tick": true,
+       "resourceActor": 1,
+       "classResources": [
+        {
+         "amount": 155763,
+         "max": 332572,
+         "type": 0
+        }
+       ],
+       "hitPoints": 778881,
+       "maxHitPoints": 779720,
+       "attackPower": 414,
+       "spellPower": 3179,
+       "armor": 632,
+       "absorb": 0,
+       "x": 35083,
+       "y": 68007,
+       "facing": -652,
+       "mapID": 2608,
+       "versatility": 1235,
+       "avoidance": 277,
+       "itemLevel": 317
+      },
+      {
+       "timestamp": 9191537,
+       "type": "damage",
+       "sourceID": 1,
+       "targetID": 1,
+       "abilityGameID": 1309786,
+       "fight": 24,
+       "buffs": "55342.1309793.",
+       "hitType": 1,
+       "amount": 90,
+       "unmitigatedAmount": 90,
+       "isAoE": false,
+       "tick": true,
+       "resourceActor": 1,
+       "classResources": [
+        {
+         "amount": 155763,
+         "max": 332572,
+         "type": 0
+        }
+       ],
+       "hitPoints": 778791,
+       "maxHitPoints": 779720,
+       "attackPower": 414,
+       "spellPower": 3179,
+       "armor": 632,
+       "absorb": 0,
+       "x": 35083,
+       "y": 68007,
+       "facing": -652,
+       "mapID": 2608,
+       "versatility": 1235,
+       "avoidance": 277,
+       "itemLevel": 317
+      }
+     ],
+     "nextPageTimestamp": 9192518
+    }
+   }
+  }
+ }
+}

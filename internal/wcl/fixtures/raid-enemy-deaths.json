@@ -1,0 +1,69 @@
+{
+ "_note": "CAPTURED live 2026-09-18 from report npFrfKgwVMJ84W36 fight 24 (events trimmed to 5)",
+ "data": {
+  "reportData": {
+   "report": {
+    "events": {
+     "data": [
+      {
+       "timestamp": 9213921,
+       "type": "death",
+       "sourceID": -1,
+       "targetID": 195,
+       "targetInstance": 1,
+       "abilityGameID": 0,
+       "fight": 24,
+       "killerID": 11,
+       "killingAbilityGameID": 202497
+      },
+      {
+       "timestamp": 9287436,
+       "type": "death",
+       "sourceID": -1,
+       "targetID": 195,
+       "targetInstance": 1,
+       "abilityGameID": 0,
+       "fight": 24,
+       "killerID": 40,
+       "killingAbilityGameID": 44425
+      },
+      {
+       "timestamp": 9329132,
+       "type": "death",
+       "sourceID": -1,
+       "targetID": 195,
+       "targetInstance": 2,
+       "abilityGameID": 0,
+       "fight": 24,
+       "killerID": 40,
+       "killingAbilityGameID": 153640
+      },
+      {
+       "timestamp": 9383160,
+       "type": "death",
+       "sourceID": -1,
+       "targetID": 195,
+       "targetInstance": 2,
+       "abilityGameID": 0,
+       "fight": 24,
+       "killerID": 6,
+       "killingAbilityGameID": 443722
+      },
+      {
+       "timestamp": 9427814,
+       "type": "death",
+       "sourceID": -1,
+       "targetID": 195,
+       "targetInstance": 3,
+       "abilityGameID": 0,
+       "fight": 24,
+       "killerID": 21,
+       "killingAbilityGameID": 7268
+      }
+     ],
+     "nextPageTimestamp": null
+    }
+   }
+  }
+ }
+}

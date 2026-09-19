@@ -108,6 +108,18 @@ fi
 # deploy reported success, because the health checks passed against the old URL.
 "$APP_DIR/configure.sh" "$IMAGE"
 
+# The uploads directory is a bind mount on the data disk (compose.yaml), and
+# the app writes to it as uid 65532. startup.sh creates it with that owner at
+# boot -- but only at boot. Production was already up when that step was
+# added, so the step never ran there: Docker created the host directory for
+# the bind mount itself, as root, and every upload failed with "permission
+# denied" on the first piece (2026-09-18). Set it right on every deploy;
+# idempotent, and harmless when startup.sh already did it.
+UPLOADS_DIR=/mnt/tomb-data/uploads
+mkdir -p "$UPLOADS_DIR"
+chown 65532:65532 "$UPLOADS_DIR"
+chmod 700 "$UPLOADS_DIR"
+
 dc() { docker compose --env-file "$APP_DIR/.env" "$@"; }
 
 log "restarting the stack"

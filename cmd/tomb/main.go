@@ -28,6 +28,7 @@ import (
 	"github.com/anthony-hopkins/tomb/internal/apps/dashboard"
 	"github.com/anthony-hopkins/tomb/internal/apps/guild"
 	"github.com/anthony-hopkins/tomb/internal/apps/logs"
+	"github.com/anthony-hopkins/tomb/internal/apps/warroom"
 	"github.com/anthony-hopkins/tomb/internal/apps/welcome"
 	"github.com/anthony-hopkins/tomb/internal/auth"
 	"github.com/anthony-hopkins/tomb/internal/blizzard"
@@ -138,6 +139,12 @@ func run() error {
 	// response schema (Vertex AI does not combine one with search grounding).
 	chat := ai.NewVertex(cfg.AIAssistantModel, cfg.AIRegion)
 	chat.HTTP.Timeout = 90 * time.Second
+	// The War Room's client: the review's model, held to the raid
+	// report's schema (spec 007). A night of bosses is a long answer.
+	raidAI := ai.NewVertex(cfg.AIModel, cfg.AIRegion)
+	raidAI.Schema = ai.RaidReportSchema
+	raidAI.MaxOutputTokens = 32768
+	raidAI.HTTP.Timeout = 8 * time.Minute
 
 	core := &platform.Core{
 		Deps: platform.Deps{
@@ -153,6 +160,7 @@ func run() error {
 			WCL:      wclReader,
 			AI:       vertex,
 			Chat:     chat,
+			RaidAI:   raidAI,
 		},
 		Sessions: sessions,
 		Profiles: &platform.ProfileFetcher{
@@ -235,6 +243,12 @@ func run() error {
 		return fmt.Errorf("build assistant app: %w", err)
 	}
 
+	// The War Room: the raid against the region's fastest kills (spec 007).
+	warRoom, err := warroom.New(core.Deps, &warroom.SQLStore{DB: db})
+	if err != nil {
+		return fmt.Errorf("build war room app: %w", err)
+	}
+
 	// The single registration point. Adding an app means adding one line here
 	// and nothing else (Principle II, contracts/app-registration.md).
 	//
@@ -251,6 +265,7 @@ func run() error {
 		auditLogs,
 		frontDoor,
 		helper,
+		warRoom,
 	}
 
 	handler, err := platform.Mount(core, authHandlers, apps)
@@ -266,6 +281,7 @@ func run() error {
 	go combatLogs.RunParser(ctx)
 	go combatLogs.RunAnalyst(ctx)
 	go helper.Housekeep(ctx)
+	go warRoom.Run(ctx)
 
 	srv := &http.Server{
 		Addr:    cfg.Addr,

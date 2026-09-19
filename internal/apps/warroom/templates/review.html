@@ -1,0 +1,83 @@
+{{define "review.html"}}
+{{/* One review (spec 007, FR-071): the night boss by boss, in the review
+     card's style -- sections of the model's Markdown as the shared renderer
+     drew them, "do these first" as a list, "what to verify" as a table. */}}
+<div class="warroom warroom-review">
+  <section class="panel">
+    <p class="analysis-meta"><a href="/app/war-room">War Room</a> &middot; asked {{.When}} by {{.By}} &middot; <a href="{{.Link}}" rel="noopener">the report on Warcraft Logs</a></p>
+    <h1 class="summary-heading">{{.Title}}</h1>
+    {{if .Zone}}<p class="tagline">{{.Zone}}</p>{{end}}
+
+    {{if .Pending}}
+    <div class="analysing" role="status" aria-live="polite">
+      <span class="analysing-orb" aria-hidden="true"></span>
+      <span class="analysing-words">{{range .Phrases}}<span class="analysing-phrase">{{.}}</span>{{end}}</span>
+      <span class="visually-hidden">Reviewing. This page updates itself.</span>
+    </div>
+    <p class="fineprint">A review takes a few minutes: a dozen reads from Warcraft Logs for every boss, on each side, then the model writes.</p>
+    {{else if .Failure}}
+    <p class="notice" role="alert">The review could not be completed: {{.Failure}}.</p>
+    <form method="post" action="/app/war-room/reviews">
+      <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+      <input type="hidden" name="code" value="{{.Code}}">
+      <input type="hidden" name="title" value="{{.Title}}">
+      <input type="hidden" name="again" value="1">
+      <button class="primary" type="submit">Run again</button>
+    </form>
+    {{else}}
+    <div class="writeup">
+      <h4>Overview</h4>
+      {{.Overview}}
+    </div>
+
+    {{range .Bosses}}
+    <section class="warroom-boss">
+      <h2 class="warroom-boss-name">{{.Name}} <small>{{.Difficulty}} &middot; {{.Pulls}} pull{{if ne .Pulls 1}}s{{end}} &middot; {{if .Killed}}killed{{else if .Wall}}wiped, no kill{{else}}no kill{{end}}</small></h2>
+      <dl class="warroom-sides">
+        <dt>Ours</dt><dd>{{.Ours}}</dd>
+        {{if .Top}}<dt>Top kill</dt><dd>{{.Top}}</dd>{{end}}
+        {{if .TopNote}}<dt>Note</dt><dd>{{.TopNote}}</dd>{{end}}
+      </dl>
+      {{if .Summary}}
+      <ul class="warroom-facts">
+        {{range .Summary}}<li>{{.}}</li>{{end}}
+      </ul>
+      {{end}}
+      <div class="writeup">
+        {{range .Sections}}
+        <h4>{{.Title}}</h4>
+        {{.Body}}
+        {{end}}
+      </div>
+    </section>
+    {{end}}
+
+    <div class="writeup">
+      <h4>Do these first</h4>
+      <ol class="do-first">
+        {{range .DoFirst}}<li>{{.}}</li>{{end}}
+      </ol>
+      {{if .Verify}}
+      <h4>What to verify</h4>
+      <div class="writeup-scroll">
+      <table class="writeup-table">
+        <thead><tr><th>Item</th><th>Status</th><th>Note</th></tr></thead>
+        <tbody>
+        {{range .Verify}}<tr><td>{{.Item}}</td><td class="verify-{{.Status}}">{{.Status}}</td><td>{{.Note}}</td></tr>{{end}}
+        </tbody>
+      </table>
+      </div>
+      {{end}}
+    </div>
+    <p class="fineprint">Written by {{.Model}} over what the site computed from Warcraft Logs; {{.Tokens}} tokens. Names are the characters' as Warcraft Logs shows them.</p>
+    <form method="post" action="/app/war-room/reviews">
+      <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+      <input type="hidden" name="code" value="{{.Code}}">
+      <input type="hidden" name="title" value="{{.Title}}">
+      <input type="hidden" name="again" value="1">
+      <button type="submit">Run again</button>
+    </form>
+    {{end}}
+  </section>
+</div>
+{{end}}
