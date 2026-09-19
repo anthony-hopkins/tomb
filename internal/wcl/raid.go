@@ -24,12 +24,13 @@ type RaidReader interface {
 	// Report reads a report's boss pulls and actors.
 	Report(ctx context.Context, code string) (RaidReport, error)
 	// FightReading reads what happened in one pull: who, what they did and
-	// took, who died to what, the adds and who hit them, dispels and
-	// interrupts. Five queries.
+	// took, who died to what, the adds and who hit them, healing with its
+	// overhealing, dispels and interrupts. Six queries.
 	FightReading(ctx context.Context, code string, fightID int) (FightReading, error)
-	// FightPositions reads where friendly units stood, from the pull's
-	// damage events; empty when the log carries no positions.
-	FightPositions(ctx context.Context, code string, fightID int) ([]PositionSample, error)
+	// FightHits reads every hit a friendly unit took in the pull, with the
+	// unit's position where the log carries one: what the spikes and the
+	// death spots are read from.
+	FightHits(ctx context.Context, code string, fightID int) ([]Hit, error)
 	// TopKills is the region's fastest kills of a boss at a difficulty.
 	TopKills(ctx context.Context, encounterID, difficulty int) ([]TopKill, error)
 }
@@ -100,6 +101,7 @@ type FightReading struct {
 	RaidDamageTaken []AbilityTotal
 	Deaths          []RaidDeath
 	Intake          []PlayerIntake
+	Healing         []PlayerHealing
 	Targets         []TargetDamage
 	EnemyDeaths     []EnemyDeath
 	Interrupts      []UtilityAbility
@@ -154,6 +156,17 @@ type PlayerIntake struct {
 	Abilities []AbilityTotal
 }
 
+// PlayerHealing is healing done by one player, with the overhealing.
+type PlayerHealing struct {
+	PlayerID  int
+	Name      string
+	Class     string
+	Total     int64
+	Overheal  int64
+	Active    time.Duration
+	Abilities []AbilityTotal
+}
+
 // TargetDamage is damage into one enemy unit and who dealt it.
 type TargetDamage struct {
 	ID      int
@@ -190,10 +203,17 @@ type UtilityAbility struct {
 	Casters     []SourceTotal
 }
 
-// PositionSample is where a friendly unit stood when it was hit.
-type PositionSample struct {
+// Hit is one hit a friendly unit took: how hard, what it would have been
+// unmitigated, what was absorbed, and where the unit stood if the log
+// says.
+type Hit struct {
 	ActorID     int
 	TimestampMS int64
+	AbilityID   int
+	Amount      int64
+	Unmitigated int64
+	Absorbed    int64
+	HasPos      bool
 	X, Y        float64
 }
 
@@ -382,6 +402,9 @@ const (
     d: table(dataType: Dispels, fightIDs: [$fight])
   } }
 }`
+	fightHealingQuery = `query($code: String!, $fight: Int!) {
+  reportData { report(code: $code) { table(dataType: Healing, fightIDs: [$fight]) } }
+}`
 )
 
 type tableEnvelope struct {
@@ -453,6 +476,16 @@ func (c *HTTPClient) FightReading(ctx context.Context, code string, fightID int)
 				continue
 			}
 			out.EnemyDeaths = append(out.EnemyDeaths, EnemyDeath{ActorID: e.TargetID, Instance: e.Instance, TimestampMS: e.Timestamp, KillerID: e.KillerID})
+		}
+	}
+
+	env = tableEnvelope{}
+	if err := c.query(ctx, fightHealingQuery, vars, &env); err != nil {
+		return out, err
+	}
+	if env.Data.ReportData.Report != nil {
+		if err := decodeHealing(env.Data.ReportData.Report.Table, &out); err != nil {
+			return out, err
 		}
 	}
 
@@ -603,6 +636,37 @@ func decodeIntake(raw json.RawMessage, out *FightReading) error {
 	return nil
 }
 
+func decodeHealing(raw json.RawMessage, out *FightReading) error {
+	var t struct {
+		Data struct {
+			Entries []struct {
+				playerJSON
+				Overheal  int64 `json:"overheal"`
+				Active    int64 `json:"activeTime"`
+				Abilities []struct {
+					GUID  int64  `json:"guid"`
+					Name  string `json:"name"`
+					Total int64  `json:"total"`
+				} `json:"abilities"`
+			} `json:"entries"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(raw, &t); err != nil {
+		return fmt.Errorf("warcraft logs: healing table: %w", err)
+	}
+	for _, e := range t.Data.Entries {
+		h := PlayerHealing{PlayerID: e.ID, Name: e.Name, Class: e.Type, Total: e.Total, Overheal: e.Overheal, Active: time.Duration(e.Active) * time.Millisecond}
+		for i, a := range e.Abilities {
+			if i == 8 {
+				break
+			}
+			h.Abilities = append(h.Abilities, AbilityTotal{ID: a.GUID, Name: a.Name, Total: a.Total})
+		}
+		out.Healing = append(out.Healing, h)
+	}
+	return nil
+}
+
 func decodeTargets(raw json.RawMessage, out *FightReading) error {
 	var t struct {
 		Data struct {
@@ -667,26 +731,26 @@ func decodeUtility(raw json.RawMessage) ([]UtilityAbility, error) {
 	return out, nil
 }
 
-const fightPositionsQuery = `query($code: String!, $fight: Int!, $start: Float) {
+const fightHitsQuery = `query($code: String!, $fight: Int!, $start: Float) {
   reportData { report(code: $code) {
     events(dataType: DamageTaken, fightIDs: [$fight], hostilityType: Friendlies, includeResources: true, startTime: $start, limit: 1000) { data nextPageTimestamp }
   } }
 }`
 
-// positionPages bounds a pull's damage events: twenty thousand hits.
-const positionPages = 20
+// hitPages bounds a pull's damage events: twenty thousand hits.
+const hitPages = 20
 
-// FightPositions implements RaidReader.
-func (c *HTTPClient) FightPositions(ctx context.Context, code string, fightID int) ([]PositionSample, error) {
-	var out []PositionSample
+// FightHits implements RaidReader.
+func (c *HTTPClient) FightHits(ctx context.Context, code string, fightID int) ([]Hit, error) {
+	var out []Hit
 	var start *float64
-	for page := 0; page < positionPages; page++ {
+	for page := 0; page < hitPages; page++ {
 		vars := map[string]any{"code": code, "fight": fightID}
 		if start != nil {
 			vars["start"] = *start
 		}
 		var env tableEnvelope
-		if err := c.query(ctx, fightPositionsQuery, vars, &env); err != nil {
+		if err := c.query(ctx, fightHitsQuery, vars, &env); err != nil {
 			return out, err
 		}
 		if env.Data.ReportData.Report == nil || env.Data.ReportData.Report.Events == nil {
@@ -695,21 +759,27 @@ func (c *HTTPClient) FightPositions(ctx context.Context, code string, fightID in
 		for _, raw := range env.Data.ReportData.Report.Events.Data {
 			var e struct {
 				Timestamp     int64    `json:"timestamp"`
+				Type          string   `json:"type"`
 				TargetID      int      `json:"targetID"`
+				AbilityID     int      `json:"abilityGameID"`
+				Amount        int64    `json:"amount"`
+				Unmitigated   int64    `json:"unmitigatedAmount"`
+				Absorbed      int64    `json:"absorbed"`
 				ResourceActor int      `json:"resourceActor"`
 				X             *float64 `json:"x"`
 				Y             *float64 `json:"y"`
 			}
-			if err := json.Unmarshal(raw, &e); err != nil || e.X == nil || e.Y == nil {
+			if err := json.Unmarshal(raw, &e); err != nil || e.Type != "damage" {
 				continue
 			}
+			h := Hit{ActorID: e.TargetID, TimestampMS: e.Timestamp, AbilityID: e.AbilityID, Amount: e.Amount, Unmitigated: e.Unmitigated, Absorbed: e.Absorbed}
 			// The resources on a damage event are the target's (resourceActor
 			// 2), which is the friendly unit hit; anything else says nothing
 			// about where a friendly stood.
-			if e.ResourceActor != 2 {
-				continue
+			if e.ResourceActor == 2 && e.X != nil && e.Y != nil {
+				h.HasPos, h.X, h.Y = true, *e.X, *e.Y
 			}
-			out = append(out, PositionSample{ActorID: e.TargetID, TimestampMS: e.Timestamp, X: *e.X, Y: *e.Y})
+			out = append(out, h)
 		}
 		start = env.Data.ReportData.Report.Events.Next
 		if start == nil {

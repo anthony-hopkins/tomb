@@ -10,7 +10,7 @@ import (
 
 // reading is a small pull: two tanks, a healer, two dps, one add killed
 // twice, one death, one dispel, positions for everyone.
-func reading() (wcl.RaidReport, wcl.RaidFight, wcl.FightReading, []wcl.PositionSample) {
+func reading() (wcl.RaidReport, wcl.RaidFight, wcl.FightReading, []wcl.Hit) {
 	rep := wcl.RaidReport{Code: "ABC", Actors: []wcl.Actor{
 		{ID: 1, Name: "Maintank", Type: "Player"}, {ID: 2, Name: "Offtank", Type: "Player"}, {ID: 3, Name: "Healz", Type: "Player"},
 		{ID: 4, Name: "Boomy", Type: "Player"}, {ID: 5, Name: "Stabby", Type: "Player"},
@@ -40,23 +40,27 @@ func reading() (wcl.RaidReport, wcl.RaidFight, wcl.FightReading, []wcl.PositionS
 		EnemyDeaths: []wcl.EnemyDeath{{ActorID: 51, Instance: 1, TimestampMS: 160000}, {ActorID: 51, Instance: 2, TimestampMS: 220000}},
 		Dispels:     []wcl.UtilityAbility{{Name: "Blighted Blood", Begun: 12, Completed: 2, Interrupted: 10, Casters: []wcl.SourceTotal{{Name: "Healz", Total: 10}}}},
 	}
-	// Everyone stacked at (1000,1000) except Stabby, 20 yards out, hit
-	// just before dying.
-	var pos []wcl.PositionSample
+	// Everyone stacked at (1000,1000) except Stabby, 20 yards out; a hit
+	// every four seconds, with the tank's big one at 200 s into the pull.
+	var hits []wcl.Hit
 	for t := int64(100000); t < 400000; t += 4000 {
 		for id := 1; id <= 4; id++ {
-			pos = append(pos, wcl.PositionSample{ActorID: id, TimestampMS: t, X: 1000 + float64(id), Y: 1000})
+			amt := int64(100)
+			if id == 1 && t == 300000 {
+				amt = 90000
+			}
+			hits = append(hits, wcl.Hit{ActorID: id, TimestampMS: t, AbilityID: 1, Amount: amt, Unmitigated: amt * 2, HasPos: true, X: 1000 + float64(id), Y: 1000})
 		}
-		pos = append(pos, wcl.PositionSample{ActorID: 5, TimestampMS: t, X: 1000 + 20*yard, Y: 1000})
+		hits = append(hits, wcl.Hit{ActorID: 5, TimestampMS: t, AbilityID: 77, Amount: 500, HasPos: true, X: 1000 + 20*yard, Y: 1000})
 	}
-	return rep, f, fr, pos
+	return rep, f, fr, hits
 }
 
 // TestReadSide: roles, lines per role, deaths with their spot, adds with
 // their kill times, dispels, and the spread.
 func TestReadSide(t *testing.T) {
-	rep, f, fr, pos := reading()
-	s := ReadSide(rep, f, fr, pos, "TOMB")
+	rep, f, fr, hits := reading()
+	s := ReadSide(rep, f, fr, hits, "TOMB")
 	if s.Seconds != 300 || s.Size != 5 || s.Tanks != 2 || s.Healers != 1 || s.DPS != 2 || s.ItemLevel != 313.8 || s.Kill {
 		t.Errorf("side = %+v", s)
 	}
@@ -108,8 +112,8 @@ func TestReadSide(t *testing.T) {
 
 // TestCompare: the differences the model is handed, and the sentences.
 func TestCompare(t *testing.T) {
-	rep, f, fr, pos := reading()
-	ours := ReadSide(rep, f, fr, pos, "TOMB")
+	rep, f, fr, hits := reading()
+	ours := ReadSide(rep, f, fr, hits, "TOMB")
 	// The top kill: faster, no deaths, no Living Venom taken, adds down
 	// sooner, smoother tanks.
 	tf := f
@@ -157,5 +161,121 @@ func TestHuman(t *testing.T) {
 		if got := human(n); got != want {
 			t.Errorf("human(%d) = %q, want %q", n, got, want)
 		}
+	}
+}
+
+// TestDetail: each player's own numbers -- the kit's presses and the ones
+// never pressed, the spikes with the defensive that covered them, the death
+// with what was left unused, the cast rates, the healer's overhealing.
+func TestDetail(t *testing.T) {
+	rep, f, fr, hits := reading()
+	fr.Healing = []wcl.PlayerHealing{{PlayerID: 3, Name: "Healz", Total: 30000, Overheal: 20000, Abilities: []wcl.AbilityTotal{{Name: "Heal", Total: 30000}}}}
+	s := ReadSide(rep, f, fr, hits, "TOMB")
+	names := map[int]string{}
+	for _, a := range rep.Actors {
+		names[a.ID] = a.Name
+	}
+	casts := map[string]Casts{
+		"Maintank": {Set: wcl.CastSet{Active: 240 * time.Second, Total: 300 * time.Second, Abilities: []wcl.CastCount{{Name: "Shield Slam", Count: 60}, {Name: "Shield Block", Count: 10}}},
+			Timeline: wcl.Timeline{Casts: []wcl.CastEvent{{At: 198 * time.Second, Ability: "Shield Block"}, {At: 30 * time.Second, Ability: "Shield Block"}}}},
+		"Stabby": {Set: wcl.CastSet{Active: 100 * time.Second, Total: 300 * time.Second, Abilities: []wcl.CastCount{{Name: "Backstab", Count: 30}}},
+			Timeline: wcl.Timeline{Casts: []wcl.CastEvent{{At: 50 * time.Second, Ability: "Feint"}}}},
+		"Healz": {Set: wcl.CastSet{Active: 280 * time.Second, Total: 300 * time.Second, Abilities: []wcl.CastCount{{Name: "Heal", Count: 90}}},
+			Timeline: wcl.Timeline{Casts: []wcl.CastEvent{{At: 100 * time.Second, Ability: "Divine Hymn"}}}},
+	}
+	s.Detail(fr, casts, hits, names)
+	if len(s.Players) != 5 {
+		t.Fatalf("players = %d", len(s.Players))
+	}
+	byName := map[string]PlayerDetail{}
+	for _, p := range s.Players {
+		byName[p.Name] = p
+	}
+	tank := byName["Maintank"]
+	if tank.ActivePct != 80 || len(tank.Rates) != 2 || tank.Rates[0].Ability != "Shield Slam" || tank.Rates[0].PerMinute != 12 {
+		t.Errorf("tank rates = %+v active %v", tank.Rates, tank.ActivePct)
+	}
+	var block, wall *CooldownUse
+	for i := range tank.Cooldowns {
+		switch tank.Cooldowns[i].Ability {
+		case "Shield Block":
+			block = &tank.Cooldowns[i]
+		case "Shield Wall":
+			wall = &tank.Cooldowns[i]
+		}
+	}
+	if block == nil || block.Casts != 2 || block.At[0] != 198 || wall == nil || wall.Casts != 0 {
+		t.Errorf("tank cooldowns = %+v", tank.Cooldowns)
+	}
+	var big *Spike
+	for i := range tank.Spikes {
+		if tank.Spikes[i].Taken >= 90000 {
+			big = &tank.Spikes[i]
+		}
+	}
+	if len(tank.Spikes) != 5 || big == nil || big.At != 200 || big.Covered != "Shield Block 2 s before" || big.Abilities[0] != "Melee" {
+		t.Errorf("tank spikes = %+v", tank.Spikes)
+	}
+	stab := byName["Stabby"]
+	if stab.Death == nil || stab.Death.At != 120 || stab.Death.KilledBy != "Living Venom" || stab.Death.TakenLast15 != 2000 {
+		t.Fatalf("death = %+v", stab.Death)
+	}
+	if len(stab.Death.Used) != 0 || !contains(stab.Death.Unused, "Cloak of Shadows") || !contains(stab.Death.Unused, "Feint") {
+		t.Errorf("death context = %+v (Feint at 50 s is outside the 20 s window)", stab.Death)
+	}
+	if stab.Spikes[0].Abilities[0] != "ability 77" {
+		t.Errorf("unnamed ability = %+v", stab.Spikes[0])
+	}
+	healz := byName["Healz"]
+	if healz.OverhealPct != 40 || len(healz.Healing) != 1 || healz.Healing[0].Name != "Heal" {
+		t.Errorf("healer = %+v", healz)
+	}
+	var hymn *CooldownUse
+	for i := range healz.Cooldowns {
+		if healz.Cooldowns[i].Ability == "Divine Hymn" {
+			hymn = &healz.Cooldowns[i]
+		}
+	}
+	if hymn == nil || hymn.Casts != 1 || hymn.Kind != "healing" {
+		t.Errorf("healer cooldowns = %+v", healz.Cooldowns)
+	}
+	// No casts read for Boomy: a detail from the tables alone.
+	if b := byName["Boomy"]; len(b.Cooldowns) != 0 || len(b.Rates) != 0 || len(b.Spikes) == 0 {
+		t.Errorf("boomy = %+v", b)
+	}
+
+	// Rotations against the same spec on the other side.
+	theirs := s
+	theirs.Players = []PlayerDetail{{Name: "Toptank", Class: "Warrior", Spec: "Protection", Role: "tank", ActivePct: 95, Rates: []CastRate{{Ability: "Shield Slam", PerMinute: 15}, {Ability: "Revenge", PerMinute: 8}}}}
+	theirs.TankLines = []TankLine{{Name: "Toptank", Taken: 60000}}
+	rd := rotations(s, theirs)
+	if len(rd) != 1 || rd[0].Ours != "Maintank" || rd[0].Theirs != "Toptank" || rd[0].Abilities[0].Ability != "Revenge" || rd[0].Abilities[0].Delta != -8 || rd[0].Abilities[1].Delta != -3 || rd[0].TheirsActive != 95 {
+		t.Errorf("rotations = %+v", rd)
+	}
+}
+
+func contains(list []string, s string) bool {
+	for _, x := range list {
+		if x == s {
+			return true
+		}
+	}
+	return false
+}
+
+func TestKit(t *testing.T) {
+	k := KitFor("DemonHunter", "Vengeance")
+	if !contains(k.Defensives, "Demon Spikes") || !contains(k.Defensives, "Blur") || !contains(k.Raid, "Darkness") {
+		t.Errorf("vengeance kit = %+v", k)
+	}
+	w := k.Watched()
+	if len(w) != len(k.Defensives)+len(k.Raid) {
+		t.Errorf("watched = %v", w)
+	}
+	if h := KitFor("Priest", "Holy"); !contains(h.Cooldowns, "Divine Hymn") || !contains(h.Defensives, "Desperate Prayer") {
+		t.Errorf("holy kit = %+v", h)
+	}
+	if u := KitFor("Nobody", "Nothing"); len(u.Watched()) != 0 {
+		t.Errorf("unknown kit = %+v", u)
 	}
 }

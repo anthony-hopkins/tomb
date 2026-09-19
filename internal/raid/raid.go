@@ -40,6 +40,10 @@ type Side struct {
 	// player when it did.
 	Positions bool     `json:"positions_in_log"`
 	Spread    []Spread `json:"spread,omitempty"`
+	// Players is each player's own numbers (players.go).
+	Players []PlayerDetail `json:"players,omitempty"`
+
+	startMS int64
 }
 
 // Death is one player's death and, where the log allows, where they stood.
@@ -142,9 +146,9 @@ type Spread struct {
 // bossKinds are the target kinds that are the boss, not an add.
 func isAdd(t wcl.TargetDamage) bool { return t.Kind != "Boss" }
 
-// ReadSide builds a side from a pull's reading.
-func ReadSide(rep wcl.RaidReport, f wcl.RaidFight, fr wcl.FightReading, pos []wcl.PositionSample, guild string) Side {
-	s := Side{Guild: guild, Code: rep.Code, FightID: f.ID, Kill: f.Kill, Duration: f.Duration(), Size: len(fr.Players), ItemLevel: math.Round(fr.ItemLevel*10) / 10}
+// ReadSide builds a side from a pull's reading and its hits.
+func ReadSide(rep wcl.RaidReport, f wcl.RaidFight, fr wcl.FightReading, hits []wcl.Hit, guild string) Side {
+	s := Side{Guild: guild, Code: rep.Code, FightID: f.ID, Kill: f.Kill, Duration: f.Duration(), Size: len(fr.Players), ItemLevel: math.Round(fr.ItemLevel*10) / 10, startMS: f.StartMS}
 	if s.Size == 0 {
 		s.Size = f.Size
 	}
@@ -290,6 +294,12 @@ func ReadSide(rep wcl.RaidReport, f wcl.RaidFight, fr wcl.FightReading, pos []wc
 		s.Interrupts = append(s.Interrupts, Utility{Name: u.Name, Begun: u.Begun, Stopped: u.Interrupted, Completed: u.Completed, Casters: u.Casters})
 	}
 
+	var pos []wcl.Hit
+	for _, h := range hits {
+		if h.HasPos {
+			pos = append(pos, h)
+		}
+	}
 	if len(pos) > 0 {
 		s.Positions = true
 		s.placeDeaths(fr, f, pos, actorName, role)
@@ -304,7 +314,7 @@ type xy struct{ x, y float64 }
 
 // placeDeaths finds where each dead player stood against the raid, and
 // each player's mean distance from the raid's centre.
-func (s *Side) placeDeaths(fr wcl.FightReading, f wcl.RaidFight, pos []wcl.PositionSample, actorName map[int]string, role map[string]string) {
+func (s *Side) placeDeaths(fr wcl.FightReading, f wcl.RaidFight, pos []wcl.Hit, actorName map[int]string, role map[string]string) {
 	sort.Slice(pos, func(i, j int) bool { return pos[i].TimestampMS < pos[j].TimestampMS })
 	// last known position of every actor at a time: walk the samples once
 	// per query point; the query points are few (deaths and a 5 s grid).
@@ -430,7 +440,10 @@ type Diff struct {
 	HealingHPS   HPSDiff       `json:"healer_throughput"`
 	Adds         []AddDiff     `json:"adds"`
 	Dispels      []UtilityDiff `json:"dispels"`
-	Summary      []string      `json:"summary"`
+	// Rotation sets each of our players against the same spec in the top
+	// kill, cast rate by cast rate.
+	Rotation []RotationDiff `json:"rotations"`
+	Summary  []string       `json:"summary"`
 }
 
 // IntakeDiff is one ability's damage per player of a role, both sides.
@@ -514,6 +527,7 @@ func Compare(ours Side, theirs Side) *Diff {
 		t := theirDispels[u.Name]
 		d.Dispels = append(d.Dispels, UtilityDiff{Ability: u.Name, OursStopped: u.Stopped, OursCasts: u.Begun, TheirsStopped: t.Stopped, TheirsCasts: t.Begun})
 	}
+	d.Rotation = rotations(ours, theirs)
 	d.Summary = summarise(ours, theirs, d)
 	return d
 }
@@ -563,6 +577,37 @@ func summarise(ours, theirs Side, d *Diff) []string {
 	}
 	if d.HealingHPS.TheirsPerHealer > 0 {
 		out = append(out, sentence("Healers averaged %s HPS each against %s in the top kill.", human(int64(d.HealingHPS.OursPerHealer)), human(int64(d.HealingHPS.TheirsPerHealer))))
+	}
+	// Tank spikes nothing covered.
+	for _, p := range ours.Players {
+		if p.Role != "tank" {
+			continue
+		}
+		bare := 0
+		for _, sp := range p.Spikes {
+			if sp.Covered == "" {
+				bare++
+			}
+		}
+		if bare > 0 {
+			out = append(out, sentence("%s took %d of their %d heaviest three-second windows with no defensive pressed in the eight seconds before.", p.Name, bare, len(p.Spikes)))
+		}
+	}
+	// The widest rotation gaps.
+	for _, r := range d.Rotation {
+		if len(r.Abilities) == 0 || r.TheirsOutput <= 0 {
+			continue
+		}
+		a := r.Abilities[0]
+		if math.Abs(a.Delta) >= 1 && a.Theirs > 0 {
+			out = append(out, sentence("%s cast %s %.1f times a minute against %s's %.1f in the top kill.", r.Ours, a.Ability, a.Ours, r.Theirs, a.Theirs))
+		}
+	}
+	// Healers' overhealing.
+	for _, p := range ours.Players {
+		if p.Role == "healer" && p.OverhealPct >= 40 {
+			out = append(out, sentence("%s overhealed %.0f%% of what they cast.", p.Name, p.OverhealPct))
+		}
 	}
 	return out
 }
