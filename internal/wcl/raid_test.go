@@ -155,6 +155,31 @@ func TestFightHits(t *testing.T) {
 	}
 }
 
+// TestAddHits: hits into the adds, with the add's health and position,
+// the bosses excluded by name in the filter.
+func TestAddHits(t *testing.T) {
+	var n atomic.Int32
+	c, _, asked := server(t, func(map[string]any) (int, []byte) {
+		if n.Add(1) == 1 {
+			return 200, fixture(t, "raid-add-hits.json")
+		}
+		return 200, []byte(`{"data":{"reportData":{"report":{"events":{"data":[],"nextPageTimestamp":null}}}}}`)
+	})
+	got, err := c.AddHits(context.Background(), "npFrfKgwVMJ84W36", 24, []string{"Breath of Ula'tek", "Blood of Ula'tek"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 5 || got[0].TargetID != 195 || got[0].Instance != 1 || got[0].SourceID != 172 || got[0].Amount != 46715 || got[0].HitPoints != 9421188 || got[0].MaxHitPoints != 9467903 || !got[0].HasPos || got[0].X != 37100 {
+		t.Errorf("hits = %+v", got)
+	}
+	if f, _ := (*asked)[0]["filter"].(string); f != `target.type = "NPC" and target.name != "Breath of Ula'tek" and target.name != "Blood of Ula'tek"` {
+		t.Errorf("filter = %q", f)
+	}
+	if len(*asked) != 2 || (*asked)[1]["start"] == nil {
+		t.Errorf("paging: asked %v", *asked)
+	}
+}
+
 // TestTopKills: the region's fastest kills, with the guild and the report
 // to read, sizes filled in.
 func TestTopKills(t *testing.T) {

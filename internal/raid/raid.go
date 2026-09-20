@@ -42,6 +42,10 @@ type Side struct {
 	Spread    []Spread `json:"spread,omitempty"`
 	// Players is each player's own numbers (players.go).
 	Players []PlayerDetail `json:"players,omitempty"`
+	// AddDetail is every add instance and AddSummaries each kind of add
+	// across its instances (adds.go).
+	AddDetail    []AddInstance `json:"add_instances,omitempty"`
+	AddSummaries []AddSummary  `json:"add_summary,omitempty"`
 
 	startMS int64
 }
@@ -609,6 +613,7 @@ func summarise(ours, theirs Side, d *Diff) []string {
 			out = append(out, sentence("%s overhealed %.0f%% of what they cast.", p.Name, p.OverhealPct))
 		}
 	}
+	out = append(out, addSentences(ours, theirs)...)
 	return out
 }
 

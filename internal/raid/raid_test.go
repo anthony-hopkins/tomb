@@ -282,3 +282,55 @@ func TestKit(t *testing.T) {
 		t.Errorf("unknown kit = %+v", u)
 	}
 }
+
+// TestDetailAdds: each add instance's appearance, pickup, death or health
+// left, damage and who never touched it, its path against the raid, and
+// the summaries and sentences.
+func TestDetailAdds(t *testing.T) {
+	rep, f, fr, hits := reading()
+	s := ReadSide(rep, f, fr, hits, "TOMB")
+	names := map[int]string{}
+	for _, a := range rep.Actors {
+		names[a.ID] = a.Name
+	}
+	// Add #1: hit first by Boomy at 50 s, by the tank at 53 s, walks 30
+	// yards toward the raid, dies at 60 s (enemy death at 160000). Add #2:
+	// never tanked, hit only by Boomy, alive at the end with half health.
+	var ah []wcl.AddHit
+	for i := int64(0); i <= 10; i++ {
+		ah = append(ah, wcl.AddHit{TimestampMS: 150000 + i*1000, SourceID: 4, TargetID: 51, Instance: 1, Amount: 1000, HitPoints: 10000 - i*1000, MaxHitPoints: 10000, HasPos: true, X: 1000 + (30-3*float64(i))*yard, Y: 1000})
+	}
+	ah = append(ah, wcl.AddHit{TimestampMS: 153000, SourceID: 1, TargetID: 51, Instance: 1, Amount: 500, HitPoints: 7000, MaxHitPoints: 10000, HasPos: true, X: 1000 + 21*yard, Y: 1000})
+	ah = append(ah, wcl.AddHit{TimestampMS: 380000, SourceID: 4, TargetID: 51, Instance: 2, Amount: 5000, HitPoints: 5000, MaxHitPoints: 10000, HasPos: true, X: 1000, Y: 1000 + 40*yard})
+	fr.EnemyDeaths = []wcl.EnemyDeath{{ActorID: 51, Instance: 1, TimestampMS: 160000}}
+	s.DetailAdds(fr, ah, hits, names)
+	if len(s.AddDetail) != 2 {
+		t.Fatalf("add instances = %+v", s.AddDetail)
+	}
+	a := s.AddDetail[0]
+	if a.Name != "Venom Add" || a.Instance != 1 || a.AppearedAt != 50 || a.FirstHitBy != "Boomy" || a.PickedUpBy != "Maintank" || a.PickupDelay != 3 || a.NeverTanked || a.DiedAt == nil || *a.DiedAt != 60 || a.Lifetime != 10 || a.Damage != 11500 || a.Sources[0].Name != "Boomy" {
+		t.Errorf("add 1 = %+v", a)
+	}
+	if !contains(a.Untouched, "Stabby") || contains(a.Untouched, "Boomy") {
+		t.Errorf("untouched = %v", a.Untouched)
+	}
+	// The raid's centre sits a few yards off the stack (Stabby stands out).
+	if a.Path == nil || a.Path.Travelled < 29 || a.Path.Travelled > 31 || a.Path.StartFromRaid < 24 || a.Path.EndFromRaid > 5 || a.Path.ClosestToRaid > 3 {
+		t.Errorf("path = %+v", a.Path)
+	}
+	b := s.AddDetail[1]
+	if !b.NeverTanked || b.DiedAt != nil || b.HealthLeftPct != 50 || b.Lifetime != 0 {
+		t.Errorf("add 2 = %+v", b)
+	}
+	if len(s.AddSummaries) != 1 || s.AddSummaries[0].Instances != 2 || s.AddSummaries[0].Killed != 1 || s.AddSummaries[0].NeverTanked != 1 || s.AddSummaries[0].MeanPickupDelay != 3 {
+		t.Errorf("summaries = %+v", s.AddSummaries)
+	}
+	theirs := s
+	theirs.AddSummaries = []AddSummary{{Name: "Venom Add", Instances: 2, Killed: 2, MeanLifetime: 3, MeanPickupDelay: 0.5}}
+	joined := strings.Join(addSentences(s, theirs), " ")
+	for _, want := range []string{"1 of 2 Venom Add were never hit by a tank", "lived 5 s on average against 3 s", "picked up 3.0 s after appearing on average, against 0.5 s", "1 of 2 Venom Add outlived the pull"} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("sentences missing %q in %q", want, joined)
+		}
+	}
+}

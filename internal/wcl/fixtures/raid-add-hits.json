@@ -1,0 +1,189 @@
+{
+ "_note": "CAPTURED live 2026-09-20 from report npFrfKgwVMJ84W36 fight 24: DamageDone events by friendlies into one add, includeResources (4 events)",
+ "data": {
+  "reportData": {
+   "report": {
+    "events": {
+     "data": [
+      {
+       "timestamp": 9203492,
+       "type": "damage",
+       "sourceID": 172,
+       "targetID": 195,
+       "targetInstance": 1,
+       "abilityGameID": 194153,
+       "fight": 24,
+       "buffs": "102560.1301768.1241759.1295057.48517.1287772.378992.80353.24858.1236616.279709.48518.",
+       "hitType": 2,
+       "amount": 46715,
+       "unmitigatedAmount": 22228,
+       "isAoE": true,
+       "resourceActor": 2,
+       "classResources": [
+        {
+         "amount": 0,
+         "max": 100,
+         "type": 3
+        }
+       ],
+       "hitPoints": 9421188,
+       "maxHitPoints": 9467903,
+       "attackPower": 0,
+       "spellPower": 0,
+       "armor": 1470,
+       "absorb": 0,
+       "x": 37100,
+       "y": 75342,
+       "facing": -199,
+       "mapID": 2608,
+       "versatility": 0,
+       "avoidance": 0,
+       "itemLevel": 92
+      },
+      {
+       "timestamp": 9203609,
+       "type": "damage",
+       "sourceID": 22,
+       "targetID": 195,
+       "targetInstance": 1,
+       "abilityGameID": 258921,
+       "fight": 24,
+       "buffs": "207771.1293316.1241715.1229746.1256322.1270547.1287774.80353.258920.",
+       "hitType": 1,
+       "amount": 3149,
+       "unmitigatedAmount": 3149,
+       "isAoE": true,
+       "resourceActor": 2,
+       "classResources": [
+        {
+         "amount": 0,
+         "max": 100,
+         "type": 3
+        }
+       ],
+       "hitPoints": 9418039,
+       "maxHitPoints": 9467903,
+       "attackPower": 0,
+       "spellPower": 0,
+       "armor": 1470,
+       "absorb": 0,
+       "x": 37100,
+       "y": 75342,
+       "facing": -199,
+       "mapID": 2608,
+       "versatility": 0,
+       "avoidance": 0,
+       "itemLevel": 92
+      },
+      {
+       "timestamp": 9203959,
+       "type": "damage",
+       "sourceID": 6,
+       "targetID": 195,
+       "targetInstance": 1,
+       "abilityGameID": 444487,
+       "fight": 24,
+       "buffs": "1287771.205473.1241715.1229746.1296714.1236616.1247908.1295899.1263263.1235110.1234969.80353.",
+       "hitType": 1,
+       "amount": 2369,
+       "unmitigatedAmount": 2369,
+       "isAoE": true,
+       "resourceActor": 2,
+       "classResources": [
+        {
+         "amount": 0,
+         "max": 100,
+         "type": 3
+        }
+       ],
+       "hitPoints": 9415670,
+       "maxHitPoints": 9467903,
+       "attackPower": 0,
+       "spellPower": 0,
+       "armor": 1470,
+       "absorb": 0,
+       "x": 37100,
+       "y": 75342,
+       "facing": -199,
+       "mapID": 2608,
+       "versatility": 0,
+       "avoidance": 0,
+       "itemLevel": 92
+      },
+      {
+       "timestamp": 9204051,
+       "type": "damage",
+       "sourceID": 6,
+       "targetID": 195,
+       "targetInstance": 1,
+       "abilityGameID": 228598,
+       "fight": 24,
+       "buffs": "1287771.205473.1241715.1229746.1296714.1236616.1247908.1295899.1263263.1235110.1234969.80353.",
+       "hitType": 1,
+       "amount": 8364,
+       "unmitigatedAmount": 8119,
+       "isAoE": false,
+       "resourceActor": 2,
+       "classResources": [
+        {
+         "amount": 0,
+         "max": 100,
+         "type": 3
+        }
+       ],
+       "hitPoints": 9407306,
+       "maxHitPoints": 9467903,
+       "attackPower": 0,
+       "spellPower": 0,
+       "armor": 1470,
+       "absorb": 0,
+       "x": 37100,
+       "y": 75342,
+       "facing": -199,
+       "mapID": 2608,
+       "versatility": 0,
+       "avoidance": 0,
+       "itemLevel": 92
+      },
+      {
+       "timestamp": 9204051,
+       "type": "damage",
+       "sourceID": 6,
+       "targetID": 195,
+       "targetInstance": 1,
+       "abilityGameID": 444487,
+       "fight": 24,
+       "buffs": "1287771.205473.1241715.1229746.1296714.1236616.1247908.1295899.1263263.1235110.1234969.80353.",
+       "hitType": 1,
+       "amount": 5059,
+       "unmitigatedAmount": 5059,
+       "isAoE": true,
+       "resourceActor": 2,
+       "classResources": [
+        {
+         "amount": 0,
+         "max": 100,
+         "type": 3
+        }
+       ],
+       "hitPoints": 9402247,
+       "maxHitPoints": 9467903,
+       "attackPower": 0,
+       "spellPower": 0,
+       "armor": 1470,
+       "absorb": 0,
+       "x": 37100,
+       "y": 75342,
+       "facing": -199,
+       "mapID": 2608,
+       "versatility": 0,
+       "avoidance": 0,
+       "itemLevel": 92
+      }
+     ],
+     "nextPageTimestamp": 9204052
+    }
+   }
+  }
+ }
+}

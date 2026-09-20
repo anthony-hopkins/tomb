@@ -255,3 +255,31 @@ heals and tanks."
 - The instruction and schema gain the three fields; the card shows each
   plan after its role's section. Warcraft Logs reads per boss rise by about
   one per player per side; the read bound rises to ten minutes.
+
+## Amendment 2, 2026-09-20: add management
+
+Asked of the guild master: "a detailed breakdown of add management during
+boss fights. Who failed to pick them up at all, damage output, pathing,
+kill times, etc."
+
+- **FR-077 (each add, one instance at a time)**: For the raid's best pull
+  and the top kill the site MUST read every hit the raid put into enemy
+  units other than the boss (the log carries the add's position and health
+  on each) and compute per instance: when it appeared (its first hit) and
+  who hit it first; which tank first hit it and how many seconds after it
+  appeared, or that no tank ever did; when it died, or how much health it
+  had left when the pull ended; its lifetime; the damage into it and by
+  whom; the damage dealers who never hit it; and, where positions were in
+  the log, how far it walked and how far from the raid's centre it was when
+  it appeared, at its closest, and at the end. Per kind of add: instances,
+  killed, mean lifetime, mean pickup delay, never tanked, both sides.
+- **FR-078 (the breakdown)**: The adds section of the report MUST carry the
+  table of instances, the table of kinds against the top kill, the tank who
+  should have taken each add that was never tanked or was picked up late,
+  the damage dealers who never touched an add that lived too long, the adds
+  that outlived the pull, the pathing against the raid, and a "Do" list:
+  who takes which add, the swap, the target order, the moment. The computed
+  facts above each boss name adds never tanked, picked up late, living
+  longer than in the top kill, and outliving the pull.
+- Fixture `raid-add-hits.json` captured live 2026-09-20. One paged read per
+  side per boss, bounded like the hits.
