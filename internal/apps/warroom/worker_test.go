@@ -25,6 +25,7 @@ import (
 type fakeRaid struct {
 	wcl.Reader
 	readings  atomic.Int32
+	addHits   atomic.Int32
 	casts     atomic.Int32
 	timelines atomic.Int32
 	noTop     bool
@@ -33,6 +34,10 @@ type fakeRaid struct {
 }
 
 const ourCode, topCode = "OURREPORT0000001", "TOPREPORT0000001"
+
+// fightStart is each fake fight's start on the report's clock, so the
+// events the fakes serve sit inside their fight.
+var fightStart = map[int]int64{1: 0, 2: 300000, 3: 700000, 4: 800000, 5: 1000000, 6: 1200000, 9: 0, 10: 0}
 
 func (f *fakeRaid) RecentReports(_ context.Context, ref wcl.CharacterRef, _ int) ([]wcl.ReportSummary, error) {
 	if ref.Name == "Nobody" {
@@ -77,7 +82,7 @@ func (f *fakeRaid) FightReading(_ context.Context, code string, fightID int) (wc
 		Intake: []wcl.PlayerIntake{{PlayerID: 1, Name: "Maintank", Total: 5000, EffTMI: 100, Abilities: []wcl.AbilityTotal{{Name: "Melee", Total: 5000}}},
 			{PlayerID: 3, Name: "Boomy", Total: 900, Abilities: []wcl.AbilityTotal{{Name: "Toxic Droplets", Total: 900}}}},
 		Targets:     []wcl.TargetDamage{{ID: 50, Name: "Nymrissa", Kind: "Boss", Total: 50000}, {ID: 51, Name: "Shark", Kind: "NPC", Total: 1000, Sources: []wcl.SourceTotal{{Name: "Boomy", Total: 1000}}}},
-		EnemyDeaths: []wcl.EnemyDeath{{ActorID: 51, Instance: 1, TimestampMS: 90000}},
+		EnemyDeaths: []wcl.EnemyDeath{{ActorID: 51, Instance: 1, TimestampMS: fightStart[fightID] + 90000}},
 	}
 	if code == ourCode {
 		fr.Deaths = []wcl.RaidDeath{{PlayerID: 3, Name: "Boomy", Class: "Druid", At: time.Duration(fightID*10) * time.Second, Ability: "Toxic Droplets"}}
@@ -96,6 +101,20 @@ func (f *fakeRaid) FightHits(_ context.Context, code string, fightID int) ([]wcl
 		out = append(out, wcl.Hit{ActorID: 1, TimestampMS: t, Amount: 1000, HasPos: true, X: 100, Y: 100}, wcl.Hit{ActorID: 2, TimestampMS: t, Amount: 100, HasPos: true, X: 200, Y: 100}, wcl.Hit{ActorID: 3, TimestampMS: t, Amount: 300, HasPos: true, X: 3000, Y: 100})
 	}
 	return out, nil
+}
+
+// AddHits: the shark is hit by the druid at 20 s and by the tank at 24 s,
+// and dies at 90 s (the enemy death above).
+func (f *fakeRaid) AddHits(_ context.Context, code string, fightID int, bosses []string) ([]wcl.AddHit, error) {
+	f.addHits.Add(1)
+	if len(bosses) != 1 || bosses[0] != "Nymrissa" {
+		return nil, errors.New("bosses not excluded: " + strings.Join(bosses, ","))
+	}
+	base := fightStart[fightID]
+	return []wcl.AddHit{
+		{TimestampMS: base + 20000, SourceID: 3, TargetID: 51, Instance: 1, Amount: 500, HitPoints: 9500, MaxHitPoints: 10000, HasPos: true, X: 3000, Y: 100},
+		{TimestampMS: base + 24000, SourceID: 1, TargetID: 51, Instance: 1, Amount: 500, HitPoints: 9000, MaxHitPoints: 10000, HasPos: true, X: 2000, Y: 100},
+	}, nil
 }
 
 // Casts is one player's cast table: the tank presses Shield Slam, the
@@ -250,6 +269,13 @@ func TestReview(t *testing.T) {
 	}
 	if len(nym.Ours.Players) != 3 || len(nym.Theirs.Players) != 3 {
 		t.Fatalf("players = %d / %d", len(nym.Ours.Players), len(nym.Theirs.Players))
+	}
+	// The adds (amendment 2): both sides' best pull, the boss excluded.
+	if reader.addHits.Load() != 4 || len(nym.Ours.AddDetail) != 1 {
+		t.Fatalf("add hits read %d, instances %d", reader.addHits.Load(), len(nym.Ours.AddDetail))
+	}
+	if shark := nym.Ours.AddDetail[0]; shark.Name != "Shark" || shark.FirstHitBy != "Boomy" || shark.PickedUpBy != "Maintank" || shark.PickupDelay != 4 || shark.DiedAt == nil || *shark.DiedAt != 90 || shark.Lifetime != 70 || shark.Path == nil {
+		t.Errorf("shark = %+v", shark)
 	}
 	tank := nym.Ours.Players[0]
 	if tank.Name != "Maintank" || tank.ActivePct != 75 || len(tank.Rates) != 1 || tank.Rates[0].PerMinute != 4 || len(tank.Spikes) == 0 {

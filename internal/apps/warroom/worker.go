@@ -234,6 +234,7 @@ func (a *App) gather(ctx context.Context, code string) (raid.Payload, error) {
 				}
 				if f.ID == best.ID {
 					a.detail(ctx, code, f.ID, rep, fr, &side, hits, true)
+					a.adds(ctx, code, f.ID, rep, fr, &side, hits)
 					ours = &side
 				}
 			}
@@ -277,6 +278,7 @@ func (a *App) gather(ctx context.Context, code string) (raid.Payload, error) {
 				}
 				theirs := raid.ReadSide(trep, tf, tfr, thits, top.Guild)
 				a.detail(ctx, top.Code, tf.ID, trep, tfr, &theirs, thits, false)
+				a.adds(ctx, top.Code, tf.ID, trep, tfr, &theirs, thits)
 				if theirs.Guild == "" {
 					theirs.Guild = "a top guild on " + top.Server
 				}
@@ -325,6 +327,34 @@ func (a *App) detail(ctx context.Context, code string, fightID int, rep wcl.Raid
 		names[act.ID] = act.Name
 	}
 	side.Detail(fr, casts, hits, names, rep.Abilities)
+}
+
+// adds reads the hits into the pull's adds -- every enemy unit the tables
+// saw that is not a boss -- and fills the side's add instances (FR-077).
+// A failed read costs the pull its add breakdown, not the review.
+func (a *App) adds(ctx context.Context, code string, fightID int, rep wcl.RaidReport, fr wcl.FightReading, side *raid.Side, hits []wcl.Hit) {
+	var bosses []string
+	hasAdds := false
+	for _, t := range fr.Targets {
+		if t.Kind == "Boss" {
+			bosses = append(bosses, t.Name)
+		} else {
+			hasAdds = true
+		}
+	}
+	if !hasAdds {
+		return
+	}
+	addHits, err := a.reader.AddHits(ctx, code, fightID, bosses)
+	if err != nil {
+		a.deps.Logger.Warn("war room: add hits", "code", code, "fight", fightID, "error", err)
+		return
+	}
+	names := map[int]string{}
+	for _, act := range rep.Actors {
+		names[act.ID] = act.Name
+	}
+	side.DetailAdds(fr, addHits, hits, names)
 }
 
 // bestPull is the kill, else the pull that got furthest, else the longest.

@@ -27,6 +27,10 @@
 - [X] T119 `raid`: `kit.go` (the site's kit per class and spec), `players.go` (`PlayerDetail`, spikes with cover, death context, cast rates, healer overhealing; `rotations` in the diff); summary sentences for bare spikes, rotation gaps and overhealing; tests.
 - [X] T120 `ai`: `tank_plan`, `healer_plan`, `dps_plan` in the schema, the sections and the instruction; the worker reads casts and kit timelines per player and fills the details; the card shows the plans.
 
+## Phase 4c: Add management (amendment 2)
+
+- [X] T121 `wcl.AddHits` (hits into non-boss enemies with position and health, paged, fixture captured live); `raid/adds.go` (`AddInstance`, `AddSummary`, `DetailAdds`, the sentences); the worker reads both sides' best pull; the adds section of the instruction asks for the breakdown and the "Do" list; tests.
+
 ## Phase 5: Validation
 
 - [ ] T117 On develop: review last night's report; every boss names its top guild; the wiped boss carries the deep dive; the run finishes inside ten minutes (SC-023).

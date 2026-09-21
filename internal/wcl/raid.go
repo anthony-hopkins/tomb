@@ -31,6 +31,10 @@ type RaidReader interface {
 	// unit's position where the log carries one: what the spikes and the
 	// death spots are read from.
 	FightHits(ctx context.Context, code string, fightID int) ([]Hit, error)
+	// AddHits reads every hit the raid put into enemy units other than the
+	// named bosses, with the unit's position and health on each: what add
+	// management is read from.
+	AddHits(ctx context.Context, code string, fightID int, bosses []string) ([]AddHit, error)
 	// TopKills is the region's fastest kills of a boss at a difficulty.
 	TopKills(ctx context.Context, encounterID, difficulty int) ([]TopKill, error)
 }
@@ -218,6 +222,22 @@ type Hit struct {
 	Absorbed    int64
 	HasPos      bool
 	X, Y        float64
+}
+
+// AddHit is one hit by a friendly unit into an add: who, which instance,
+// how much, and the add's position and health at that moment where the
+// log carries them.
+type AddHit struct {
+	TimestampMS  int64
+	SourceID     int
+	TargetID     int
+	Instance     int
+	AbilityID    int
+	Amount       int64
+	HitPoints    int64
+	MaxHitPoints int64
+	HasPos       bool
+	X, Y         float64
 }
 
 // TopKill is one ranked kill of a boss.
@@ -791,6 +811,68 @@ func (c *HTTPClient) FightHits(ctx context.Context, code string, fightID int) ([
 			// about where a friendly stood.
 			if e.ResourceActor == 2 && e.X != nil && e.Y != nil {
 				h.HasPos, h.X, h.Y = true, *e.X, *e.Y
+			}
+			out = append(out, h)
+		}
+		start = env.Data.ReportData.Report.Events.Next
+		if start == nil {
+			break
+		}
+	}
+	return out, nil
+}
+
+const addHitsQuery = `query($code: String!, $fight: Int!, $filter: String!, $start: Float) {
+  reportData { report(code: $code) {
+    events(dataType: DamageDone, fightIDs: [$fight], hostilityType: Friendlies, filterExpression: $filter, includeResources: true, startTime: $start, limit: 1000) { data nextPageTimestamp }
+  } }
+}`
+
+// AddHits implements RaidReader.
+func (c *HTTPClient) AddHits(ctx context.Context, code string, fightID int, bosses []string) ([]AddHit, error) {
+	filter := `target.type = "NPC"`
+	for _, b := range bosses {
+		filter += ` and target.name != "` + strings.ReplaceAll(b, `"`, "") + `"`
+	}
+	var out []AddHit
+	var start *float64
+	for page := 0; page < hitPages; page++ {
+		vars := map[string]any{"code": code, "fight": fightID, "filter": filter}
+		if start != nil {
+			vars["start"] = *start
+		}
+		var env tableEnvelope
+		if err := c.query(ctx, addHitsQuery, vars, &env); err != nil {
+			return out, err
+		}
+		if env.Data.ReportData.Report == nil || env.Data.ReportData.Report.Events == nil {
+			return out, nil
+		}
+		for _, raw := range env.Data.ReportData.Report.Events.Data {
+			var e struct {
+				Timestamp     int64    `json:"timestamp"`
+				Type          string   `json:"type"`
+				SourceID      int      `json:"sourceID"`
+				TargetID      int      `json:"targetID"`
+				Instance      int      `json:"targetInstance"`
+				AbilityID     int      `json:"abilityGameID"`
+				Amount        int64    `json:"amount"`
+				HitPoints     int64    `json:"hitPoints"`
+				MaxHitPoints  int64    `json:"maxHitPoints"`
+				ResourceActor int      `json:"resourceActor"`
+				X             *float64 `json:"x"`
+				Y             *float64 `json:"y"`
+			}
+			if err := json.Unmarshal(raw, &e); err != nil || e.Type != "damage" {
+				continue
+			}
+			h := AddHit{TimestampMS: e.Timestamp, SourceID: e.SourceID, TargetID: e.TargetID, Instance: e.Instance, AbilityID: e.AbilityID, Amount: e.Amount}
+			// The resources are the target's -- the add's -- on these events.
+			if e.ResourceActor == 2 {
+				h.HitPoints, h.MaxHitPoints = e.HitPoints, e.MaxHitPoints
+				if e.X != nil && e.Y != nil {
+					h.HasPos, h.X, h.Y = true, *e.X, *e.Y
+				}
 			}
 			out = append(out, h)
 		}

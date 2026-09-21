@@ -56,7 +56,7 @@ func TestClean(t *testing.T) {
 }
 
 func TestWarRoomInstruction(t *testing.T) {
-	for _, want := range []string{"- tanks:", "- healers:", "- dps:", "- positioning:", "- mechanics:", "- adds:", "- wipes:", "- tank_plan:", "- healer_plan:", "- dps_plan:", "Demon Spikes before Empowering Slam", "flex to damage", "why is their damage low", "The plan for the next pull", "#### Name (Spec Class)", "**Verdict:**", "never \"before ability 1284109\"", "exactly three strings", "never recompute", `"avoidable"`, `"rotations"`, "Never invent a player"} {
+	for _, want := range []string{"- tanks:", "- healers:", "- dps:", "- positioning:", "- mechanics:", "- adds:", "- wipes:", "- tank_plan:", "- healer_plan:", "- dps_plan:", "Demon Spikes before Empowering Slam", "flex to damage", "why is their damage low", "The plan for the next pull", `"add_instances"`, "picked up by and how late", "who takes which add", "#### Name (Spec Class)", "**Verdict:**", "never \"before ability 1284109\"", "exactly three strings", "never recompute", `"avoidable"`, `"rotations"`, "Never invent a player"} {
 		if !strings.Contains(SystemWarRoom, want) {
 			t.Errorf("instruction is missing %q", want)
 		}
