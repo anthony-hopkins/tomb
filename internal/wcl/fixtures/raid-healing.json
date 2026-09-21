@@ -1,0 +1,92 @@
+{
+ "_note": "CAPTURED live 2026-09-19 from report npFrfKgwVMJ84W36 fight 24: Healing table (entries trimmed to 2, abilities to 3)",
+ "data": {
+  "reportData": {
+   "report": {
+    "table": {
+     "data": {
+      "entries": [
+       {
+        "name": "Cwoodz",
+        "id": 22,
+        "guid": 267670462,
+        "type": "DemonHunter",
+        "icon": "DemonHunter-Vengeance",
+        "itemLevel": 315,
+        "total": 38819577,
+        "totalReduced": 30279502,
+        "activeTime": 530337,
+        "activeTimeReduced": 527692,
+        "overheal": 10474430,
+        "abilities": [
+         {
+          "guid": 203794,
+          "name": "Consume Soul",
+          "total": 13241181,
+          "type": 32,
+          "icon": "ability_warlock_improvedsoulleech.jpg"
+         },
+         {
+          "guid": 187827,
+          "name": "Metamorphosis",
+          "total": 6252847,
+          "type": 127,
+          "icon": "ability_demonhunter_metamorphasistank.jpg"
+         },
+         {
+          "guid": 263648,
+          "name": "Soul Barrier",
+          "total": 4933636,
+          "totalReduced": 0,
+          "type": 32,
+          "icon": "inv_soulbarrier.jpg"
+         }
+        ]
+       },
+       {
+        "name": "Smokebeef",
+        "id": 11,
+        "guid": 249855116,
+        "type": "Druid",
+        "icon": "Druid-Balance",
+        "itemLevel": 316,
+        "total": 4045029,
+        "totalReduced": 3341415,
+        "activeTime": 521394,
+        "activeTimeReduced": 521394,
+        "overheal": 590610,
+        "abilities": [
+         {
+          "guid": 143924,
+          "name": "Leech",
+          "total": 1244325,
+          "type": 1,
+          "icon": "spell_shadow_lifedrain02.jpg"
+         },
+         {
+          "guid": 22842,
+          "name": "Frenzied Regeneration",
+          "total": 1154138,
+          "type": 1,
+          "icon": "ability_bullrush.jpg"
+         },
+         {
+          "guid": 385787,
+          "name": "Matted Fur",
+          "total": 703614,
+          "totalReduced": 0,
+          "type": 1,
+          "icon": "inv_misc_pelt_15.jpg"
+         }
+        ]
+       }
+      ],
+      "totalTime": 531178,
+      "logVersion": 17,
+      "gameVersion": 1
+     }
+    }
+   }
+  }
+ }
+}

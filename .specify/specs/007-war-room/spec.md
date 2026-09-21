@@ -216,3 +216,70 @@ The app is `internal/apps/warroom`, slug `war-room`, `RequiresGuild: true`,
 `OfficerOnly: true`, nav label "War Room" after Logs. It needs nothing new
 from the core. `wcl.Reader` widens by the raid queries (`RaidReader`,
 optional, asserted by the app at start) and `ai` gains the report schema.
+
+## Amendment 1, 2026-09-19: a plan per player
+
+Asked of the guild master after the first reports: "a little too vague ...
+it didn't try to deep dive my timings of defensives or suggest me anything
+... 'try using Demon Spikes before [ability] or pop Darkness' ... 'HPS was
+great but you're overhealing, throw [person] on dps' ... 'Trogdoor and
+Renegade have tank dps but why? Where are their rotations fucked?' ... a
+serious breakdown for each role with an active mitigation plan for DPS,
+heals and tanks."
+
+- **FR-074 (each player's own numbers)**: For the raid's best pull and the
+  top kill the site MUST read every player's cast table and, for the tanks,
+  the healers and the players who died on the raid's side and the tanks and
+  healers on the top side, the timeline of their kit -- the site's own list
+  per class and specialisation of defensives, healing cooldowns and raid
+  cooldowns (`internal/raid/kit.go`) -- and compute per player: cast rates
+  per minute and active time; each kit ability's presses and when, the
+  never-pressed ones listed; the heaviest three-second windows of intake
+  with what hit them and the defensive pressed in the eight seconds before
+  or two after, if any; for a death, the last fifteen seconds' intake, the
+  defensives pressed in the twenty before and the kit's not pressed; for a
+  healer, the overhealing share and healing by ability. The reading of a
+  pull's hits (already read for positions) supplies the intake; the kit
+  list is named as the site's in what to verify.
+- **FR-075 (rotations against the same spec)**: For each of our players the
+  site MUST pair the same class and specialisation in the top kill (the
+  highest output one) and set their cast rates side by side, widest gap
+  first, with output and active time.
+- **FR-076 (the plans)**: The report MUST carry, per boss, a tank plan, a
+  healer plan and a DPS plan: for every player on the raid's side by name,
+  the concrete changes in the imperative with the numbers -- which defensive
+  before which ability, which cooldown moved to which moment, which
+  abilities cast too rarely or too often per minute, whether a healer's
+  numbers say they could flex to damage, and for a death what would have
+  lived. A player whose numbers are fine gets a line saying so.
+- The instruction and schema gain the three fields; the card shows each
+  plan after its role's section. Warcraft Logs reads per boss rise by about
+  one per player per side; the read bound rises to ten minutes.
+
+## Amendment 2, 2026-09-20: add management
+
+Asked of the guild master: "a detailed breakdown of add management during
+boss fights. Who failed to pick them up at all, damage output, pathing,
+kill times, etc."
+
+- **FR-077 (each add, one instance at a time)**: For the raid's best pull
+  and the top kill the site MUST read every hit the raid put into enemy
+  units other than the boss (the log carries the add's position and health
+  on each) and compute per instance: when it appeared (its first hit) and
+  who hit it first; which tank first hit it and how many seconds after it
+  appeared, or that no tank ever did; when it died, or how much health it
+  had left when the pull ended; its lifetime; the damage into it and by
+  whom; the damage dealers who never hit it; and, where positions were in
+  the log, how far it walked and how far from the raid's centre it was when
+  it appeared, at its closest, and at the end. Per kind of add: instances,
+  killed, mean lifetime, mean pickup delay, never tanked, both sides.
+- **FR-078 (the breakdown)**: The adds section of the report MUST carry the
+  table of instances, the table of kinds against the top kill, the tank who
+  should have taken each add that was never tanked or was picked up late,
+  the damage dealers who never touched an add that lived too long, the adds
+  that outlived the pull, the pathing against the raid, and a "Do" list:
+  who takes which add, the swap, the target order, the moment. The computed
+  facts above each boss name adds never tanked, picked up late, living
+  longer than in the top kill, and outliving the pull.
+- Fixture `raid-add-hits.json` captured live 2026-09-20. One paged read per
+  side per boss, bounded like the hits.

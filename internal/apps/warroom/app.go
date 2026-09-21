@@ -358,8 +358,11 @@ func (a *App) fill(v *reviewView, rv Review) {
 		v.Failure = "the stored report could not be read"
 		return
 	}
-	v.Overview = markup.Render(report.Overview)
-	v.DoFirst, v.Verify = report.DoTheseFirst, report.Verify
+	v.Overview = markup.Render(ai.Clean(report.Overview))
+	for _, d := range report.DoTheseFirst {
+		v.DoFirst = append(v.DoFirst, ai.Clean(d))
+	}
+	v.Verify = report.Verify
 	byName := map[string]raid.Boss{}
 	for _, b := range payload.Bosses {
 		byName[b.Name] = b

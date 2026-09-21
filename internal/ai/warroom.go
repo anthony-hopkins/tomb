@@ -32,15 +32,24 @@ type BossReview struct {
 	// Wipes is the deep dive, filled for a boss the raid walled on; one
 	// line otherwise.
 	Wipes string `json:"wipes"`
+	// The plans (amendment 1): per player, what to press, when, and what
+	// to change in the rotation.
+	TankPlan   string `json:"tank_plan"`
+	HealerPlan string `json:"healer_plan"`
+	DPSPlan    string `json:"dps_plan"`
 }
 
-// Sections is a boss's sections in reading order, empty ones left out.
+// Sections is a boss's sections in reading order, empty ones left out,
+// each body cleaned of the model's escaped newlines.
 func (b BossReview) Sections() []Section {
 	all := []Section{
 		{"summary", "Against the top kill", b.Summary},
 		{"tanks", "Tanks", b.Tanks},
+		{"tank_plan", "Tank plan: player by player", b.TankPlan},
 		{"healers", "Healers", b.Healers},
+		{"healer_plan", "Healer plan: player by player", b.HealerPlan},
 		{"dps", "Damage dealers", b.DPS},
+		{"dps_plan", "DPS plan: player by player", b.DPSPlan},
 		{"positioning", "Positioning", b.Positioning},
 		{"mechanics", "Mechanics", b.Mechanics},
 		{"adds", "Adds", b.Adds},
@@ -48,11 +57,24 @@ func (b BossReview) Sections() []Section {
 	}
 	out := make([]Section, 0, len(all))
 	for _, s := range all {
+		s.Body = Clean(s.Body)
 		if strings.TrimSpace(s.Body) != "" {
 			out = append(out, s)
 		}
 	}
 	return out
+}
+
+// Clean undoes what a model does to Markdown inside JSON now and then:
+// it writes its line breaks as the two characters backslash and n, which
+// survive the JSON decoding as text and render as one long line with
+// "\n" through it. A literal backslash-n never belongs in prose, so every
+// one becomes the newline it meant. Tabs likewise.
+func Clean(s string) string {
+	s = strings.ReplaceAll(s, `\n`, "\n")
+	s = strings.ReplaceAll(s, `\n`, "\n")
+	s = strings.ReplaceAll(s, `\t`, "  ")
+	return s
 }
 
 // RaidReportSchema is the shape the model is held to.
@@ -74,8 +96,11 @@ var RaidReportSchema = map[string]any{
 					"mechanics":   map[string]any{"type": "string"},
 					"adds":        map[string]any{"type": "string"},
 					"wipes":       map[string]any{"type": "string"},
+					"tank_plan":   map[string]any{"type": "string"},
+					"healer_plan": map[string]any{"type": "string"},
+					"dps_plan":    map[string]any{"type": "string"},
 				},
-				"required": []string{"name", "summary", "tanks", "healers", "dps", "positioning", "mechanics", "adds", "wipes"},
+				"required": []string{"name", "summary", "tanks", "healers", "dps", "positioning", "mechanics", "adds", "wipes", "tank_plan", "healer_plan", "dps_plan"},
 			},
 		},
 		"do_these_first": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
@@ -125,7 +150,7 @@ func ParseRaidReport(text string, bosses int) (RaidReport, error) {
 // SystemWarRoom is the instruction the raid report is written under.
 const SystemWarRoom = `You are an experienced World of Warcraft raid leader writing the officers' review of one raid night: the raid, boss by boss, set against the fastest kill of each boss by a top guild in the region at the same difficulty. Write for the officers, plainly and hard: name players, name abilities, give the numbers. Praise is one line where earned; the rest is what to fix and how.
 
-You are given, as JSON, the night: for each boss, every pull (kill or not, how much of the boss was left, the phase reached, the length, the raid size, and the first deaths of each pull with what killed them); the raid's best pull read in full ("ours"); the top guild's kill read the same way ("top_kill", with the guild named); and "difference", what the site computed between the two: pull length and deaths; damage taken per player by role and ability on each side, with "avoidable" marking an ability the top kill took none of; the tanks' effective TMI side by side (lower is smoother intake); healer throughput per healer; each add's mean time of death on each side and the damage into it; dispels stopped against casts. "wall" marks a boss wiped on more than twice without a kill. Everything computed is fact: refer to it, never recompute it. Where positions were in the log, each death carries yards from the raid's centre and how many raiders stood within eight yards, and each player carries a mean distance from the centre over the pull; the coordinate scale is the log's and the site's yards are a reading of it, so say so in verify.
+You are given, as JSON, the night: for each boss, every pull (kill or not, how much of the boss was left, the phase reached, the length, the raid size, and the first deaths of each pull with what killed them); the raid's best pull read in full ("ours"); the top guild's kill read the same way ("top_kill", with the guild named); and "difference", what the site computed between the two: pull length and deaths; damage taken per player by role and ability on each side, with "avoidable" marking an ability the top kill took none of; the tanks' effective TMI side by side (lower is smoother intake); healer throughput per healer; each add's mean time of death on each side and the damage into it; dispels stopped against casts. "wall" marks a boss wiped on more than twice without a kill. Each side also carries "players": every player's own numbers -- their cast rates per minute ("cast_rates"), active time, the site's list of their kit's defensives and (for healers) cooldowns with how many times each was pressed and when ("cooldowns"; casts 0 means never pressed), their heaviest three-second windows of intake with what hit them and which defensive was pressed around it ("spikes", "covered_by" empty means nothing was), and for a dead player the last fifteen seconds ("death": what killed them, what they took, which defensives they pressed in the twenty seconds before and which of their kit they did not), and for a healer the overhealing share and healing by ability. "difference.rotations" sets each of our players against the same spec in the top kill: output, active time, and every ability's rate on each side with the gap, widest first. The kit lists are the site's own, not the log's: say so in verify. Each side also carries "add_instances": every add that appeared in the pull, one instance at a time -- when it appeared (its first hit), who hit it first, which tank picked it up and how many seconds after it appeared ("never_tanked" when no tank ever hit it), when it died or how much health it had left when the pull ended, the damage into it and by whom, the damage dealers who never hit it, and where the log carried positions, how far it walked and how far from the raid's centre it was when it appeared, at its closest, and at the end; and "add_summary", each kind of add across its instances. Everything computed is fact: refer to it, never recompute it. Where positions were in the log, each death carries yards from the raid's centre and how many raiders stood within eight yards, and each player carries a mean distance from the centre over the pull; the coordinate scale is the log's and the site's yards are a reading of it, so say so in verify.
 
 Answer as a JSON object: overview (Markdown), bosses (one object per boss in the order given, every field a Markdown string), do_these_first (an array of exactly three strings), verify (an array of {item, status, note}; status is "data", "inferred" or "not in data"). Markdown: headings with ###, paragraphs, bullet lists, tables as | a | b | with a header row wherever you list like things (players, abilities, adds, pulls); no raw HTML, no links.
 
@@ -136,14 +161,20 @@ Per boss:
 - dps: a table of damage dealers each side (name, spec, DPS, damage into adds, deaths), sorted by DPS; the gap to the top kill per player and in total; who is not on the adds when they should be; avoidable damage taken by damage dealers with names.
 - positioning: from the deaths' spots and the spread: who died far from the raid or stacked when they should not have been, by name; what the raid's spread says against the top kill's; if the log carried no positions, one line saying so.
 - mechanics: the avoidable abilities by name with who took them and how much, against the top kill's zero; dispels and interrupts stopped against casts on each side; what the top kill did that the raid did not.
-- adds: a table of the adds (name, our mean time to death, theirs, damage into it each side, our top sources); which adds lived too long and who should be on them.
+- adds: the add management breakdown. First a table of every instance on our side (add, #, appeared at, first hit by, picked up by and how late, died at or health left, lifetime, damage into it, top three sources); then a table of each kind of add against the top kill (instances, killed, mean lifetime each side, mean pickup delay each side, never tanked each side); then, by name: the tank who should have picked up each add that was never tanked or was picked up late, and which tank had the other one; the damage dealers who never touched an add that lived too long; the adds that outlived the pull and what that cost; the pathing -- where each add walked against the raid, whether it reached the raid, and whether that was the plan (an add held away from the raid, or one dragged in); then "**Do:**" and the numbered changes for adds: who takes which add, the swap, the target order, the moment. If the log carried no add hits, one line saying so.
 - wipes: for a wall, the deep dive: a table of every pull (pull, length, boss percent left, phase, first deaths and their cause); the pattern -- what ends the pulls, at what point, and who; against the top kill at that point; then "The plan for the next pull", a numbered list of at most seven concrete changes in order, each with the player or role and the moment. For a boss killed first or second pull, one line.
+- tank_plan: for each tank a "#### Name (Spec Class)" heading, then, under it, in this order: a table of their spikes (second, taken, hit by, covered by) and what to press instead -- name the defensive from their kit and the ability to press it before, e.g. "Demon Spikes before Empowering Slam, Fiery Brand on the second Bloodvenom Injection"; the kit defensives never pressed and where they belonged; their cast rates against the top tank of the same spec with the two or three rates to fix; if they died, the last fifteen seconds and what would have lived. Concrete, in the imperative, one line per change.
+- healer_plan: for each healer a "#### Name (Spec Class)" heading, then, under it, in this order: HPS and overhealing against the top kill's same spec; cooldowns pressed and when against where the raid's damage spikes fell (use the deaths and the tanks' spikes as the raid's spikes); which cooldown to move to which moment; whether their throughput or their overhealing says they could flex to damage for this boss, and if the raid runs more healers than the top kill, which one, by the numbers; their cast rates to fix.
+- dps_plan: for each damage dealer a "#### Name (Spec Class)" heading, then, under it, in this order: their DPS against the top kill's same spec with the active time gap; the rotation, from "rotations": the abilities cast too rarely or too often per minute with the numbers -- the answer to "why is their damage low" is here, name the abilities; damage into the adds when they were up; avoidable damage they took and the personal that would have covered it; if they died, the last fifteen seconds, what was pressed and what was not. One line per change, in the imperative.
 
 Rules:
 - Name specific players, abilities and numbers. "Boomy took 1.2M from Living Venom across the pull; nobody in the top kill took any" is useful; "avoid mechanics" is not.
 - Where you infer a cause (a cooldown not used, a position), say so in place and in verify.
 - Never invent a player, ability or number that is not in the data. A section with no data behind it gets one line saying so.
-- About 600 to 900 words per boss, more for a wall.`
+- The plans are the point of the report for the officers: every player on the raid's side gets their lines, with their numbers. A player whose numbers are fine gets one line saying so and what to keep doing.
+- In a plan, open each player with one bold line: the verdict ("**Verdict:** intake unmitigated on four of five spikes; two cooldowns never used"). Then the table of their spikes or rates, then "**Do:**" followed by the numbered changes. Write "Demon Spikes before Empowering Slam", never "before ability 1284109": the hits are named; where one is not, say "an unnamed hit" rather than quoting an id.
+- Use real line breaks between lines. Never write the characters backslash-n.
+- About 900 to 1,400 words per boss, more for a wall.`
 
 // BuildWarRoom writes the user message: a framing line and the night as
 // labelled JSON.

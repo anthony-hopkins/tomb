@@ -1,6 +1,9 @@
 package raid
 
-import "fmt"
+import (
+	"fmt"
+	"strconv"
+)
 
 // sentence is Sprintf under a name that says what the string is for.
 func sentence(format string, args ...any) string { return fmt.Sprintf(format, args...) }
@@ -17,3 +20,7 @@ func human(n int64) string {
 	}
 	return fmt.Sprintf("%d", n)
 }
+
+func itoa(n int) string { return strconv.Itoa(n) }
+
+func formatFloat(x float64) string { return strconv.FormatFloat(x, 'f', 1, 64) }
