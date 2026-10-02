@@ -1,22 +1,48 @@
 name: Infra destroy
 
-# Tears down the Google Cloud infrastructure. Manual only, and deliberately
-# awkward: it tears down the VM serving the site. The Postgres data disk is
-# guarded separately and survives -- see the note in the run summary.
+# Tears down the Google Cloud infrastructure for one or both environments.
+# Manual only, and deliberately awkward: it deletes the VM serving the site and,
+# when asked, the Postgres data with it.
+#
+# What it removes, per environment:
+#   - everything OpenTofu manages in that workspace: VM, network, reserved IP,
+#     secrets, service account, IAM bindings, the data disk
+#   - the data disk's snapshots. The snapshot policy keeps them when the disk
+#     goes (on_source_disk_delete = KEEP_AUTO_SNAPSHOTS in backup.tf, on purpose,
+#     so a bad destroy cannot take the backups with it), which means they keep
+#     billing until someone deletes them. This workflow does, when delete_data
+#     is ticked.
 #
 # Guards, all of which must be satisfied:
 #   1. it is manual only -- nothing triggers this automatically
 #   2. you type the project id into `confirm_project`
 #   3. you type DESTROY into `confirm_phrase`
 #   4. dry_run defaults to true, so the first run only ever produces a plan
+#   5. a live run also needs `delete_data`, because the data disk carries
+#      prevent_destroy and cannot be torn down without deleting every user and
+#      session row. Ticking it is the acknowledgement.
 #
-# A required reviewer on the `production-destroy` environment would be a fifth,
-# and is the right thing to add if this repository goes public or the account
-# moves to a paid plan -- GitHub does not offer environment protection rules on
-# private repositories on the free plan.
+# HOW THE DATA DISK IS HANDLED
 #
-# The state bucket is NOT destroyed, and neither is anything in tofu/bootstrap.
-# Those are removed by hand if you genuinely mean it.
+# `prevent_destroy` is a literal in compute.tf and cannot be turned off by a
+# variable, and while it is in place `tofu destroy` refuses the WHOLE run, not
+# just the disk. This workflow flips it to false in the runner's throwaway
+# checkout (never in the repository) before init. The guard stays in the
+# repository for everything else; only this workflow, behind the five checks
+# above, gets past it. The dry run flips it too, so the plan you review is the
+# plan that would run.
+#
+# WHAT IT DOES NOT TOUCH
+#
+# The state bucket, the Artifact Registry repository, the Workload Identity pool
+# and the deployer service account live in tofu/bootstrap with local state, and
+# the pipeline cannot remove the identity it is running as. The run summary lists
+# what is left and how to finish: deleting the GCP project removes all of it.
+#
+# A required reviewer on the `production-destroy` environment would be a sixth
+# guard, and is the right thing to add if this repository goes public or the
+# account moves to a paid plan -- GitHub does not offer environment protection
+# rules on private repositories on the free plan.
 
 on:
   workflow_dispatch:
@@ -29,6 +55,15 @@ on:
         description: "Type DESTROY to confirm"
         required: true
         type: string
+      environment:
+        description: "Which environment to tear down"
+        type: choice
+        options: [both, production, develop]
+        default: both
+      delete_data:
+        description: "Also DELETE the Postgres data disk and its snapshots. Every user and session row. Cannot be undone. Required for a live run."
+        type: boolean
+        default: false
       dry_run:
         description: "Only show a destroy plan; delete nothing"
         type: boolean
@@ -38,10 +73,6 @@ permissions:
   contents: read
   id-token: write
 
-concurrency:
-  group: deploy-production # same group as deploy.yml: never both at once
-  cancel-in-progress: false
-
 jobs:
   # ---------------------------------------------------------------------------
   # Check the typed confirmations before requesting an approval, so a reviewer
@@ -50,43 +81,153 @@ jobs:
   guard:
     name: Check confirmations
     runs-on: ubuntu-latest
+    outputs:
+      environments: ${{ steps.targets.outputs.environments }}
     steps:
-      - name: Confirmation phrase
+      - name: Confirmations
+        # Inputs reach the shell as environment variables, never interpolated
+        # into the script: `${{ }}` inside a run block is textual substitution.
+        env:
+          CONFIRM_PHRASE: ${{ inputs.confirm_phrase }}
+          CONFIRM_PROJECT: ${{ inputs.confirm_project }}
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          DELETE_DATA: ${{ inputs.delete_data }}
         run: |
-          if [ "${{ inputs.confirm_phrase }}" != "DESTROY" ]; then
+          set -euo pipefail
+
+          if [ "$CONFIRM_PHRASE" != "DESTROY" ]; then
             echo "::error::confirm_phrase must be exactly DESTROY"
             exit 1
           fi
 
-      - name: Project id
-        run: |
-          if [ "${{ inputs.confirm_project }}" != "${{ vars.GCP_PROJECT_ID }}" ]; then
+          if [ -z "$PROJECT_ID" ] || [ "$CONFIRM_PROJECT" != "$PROJECT_ID" ]; then
             echo "::error::confirm_project does not match the configured project"
             exit 1
           fi
 
-      - name: Note the mode
-        run: |
-          if [ "${{ inputs.dry_run }}" = "true" ]; then
-            echo "::notice::Dry run — a destroy plan will be produced and nothing deleted."
+          if [ "$DRY_RUN" = "true" ]; then
+            echo "::notice::Dry run - a destroy plan will be produced and nothing deleted."
+          elif [ "$DELETE_DATA" != "true" ]; then
+            echo "::error::A live destroy deletes the Postgres data disk, because the stack cannot be torn down around it."
+            echo "::error::Tick delete_data to acknowledge that every user and session row is lost, or leave dry_run on."
+            exit 1
           else
-            echo "::warning::LIVE DESTROY requested. The VM, network and secrets will be deleted."
+            echo "::warning::LIVE DESTROY requested, including the Postgres data and its snapshots."
           fi
 
+      - name: Targets
+        id: targets
+        env:
+          ENVIRONMENT: ${{ inputs.environment }}
+        run: |
+          set -euo pipefail
+
+          # Develop first: if anything goes wrong, it should go wrong there.
+          case "$ENVIRONMENT" in
+            both)       targets='["develop","production"]' ;;
+            production) targets='["production"]' ;;
+            develop)    targets='["develop"]' ;;
+            *)
+              echo "::error::Unknown environment '$ENVIRONMENT'."
+              exit 1
+              ;;
+          esac
+
+          echo "environments=$targets" >> "$GITHUB_OUTPUT"
+          echo "::notice::Targets: $targets"
+
   destroy:
-    name: Destroy
+    name: Destroy ${{ matrix.environment }}
     needs: guard
     runs-on: ubuntu-latest
     # Declared so teardown shows in the repository's deployment history as a
     # distinct environment. Add a required reviewer here when the plan allows.
     environment:
       name: production-destroy
+    # The same groups deploy.yml uses per environment: a destroy never runs
+    # underneath a deploy of the environment it is removing.
+    concurrency:
+      group: deploy-${{ matrix.environment }}
+      cancel-in-progress: false
+    strategy:
+      # One at a time, in the order the guard listed them. Independent states,
+      # so a failure in develop must not stop production being attempted -- the
+      # run still ends red, and the summary says which one failed.
+      max-parallel: 1
+      fail-fast: false
+      matrix:
+        environment: ${{ fromJSON(needs.guard.outputs.environments) }}
     defaults:
       run:
         working-directory: tofu
+    env:
+      # Variables the configuration requires. These do not decide what gets
+      # destroyed -- the workspace's state does -- but tofu refuses to plan
+      # without a value for each one that has no default. Passed as TF_VAR_*
+      # rather than -var flags so they are never interpolated into a script.
+      TF_VAR_project_id: ${{ vars.GCP_PROJECT_ID }}
+      TF_VAR_guild_realm: ${{ vars.TOMB_GUILD_REALM }}
+      TF_VAR_bnet_client_id: ${{ vars.BNET_CLIENT_ID }}
+      TF_VAR_guild_ranks: ${{ vars.TOMB_GUILD_RANKS }}
+      TF_VAR_guild_roster_ttl: ${{ vars.TOMB_GUILD_ROSTER_TTL }}
+      TF_VAR_guild_officer_rank: ${{ vars.TOMB_GUILD_OFFICER_RANK }}
+      TF_VAR_timezone: ${{ vars.TOMB_TIMEZONE }}
+      TF_VAR_admin: ${{ vars.TOMB_ADMIN }}
+      TF_VAR_acme_email: ${{ vars.ACME_EMAIL }}
+      TF_VAR_image: ${{ vars.GCP_CURRENT_IMAGE || 'gcr.io/google-containers/pause:3.9' }}
+      PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      DRY_RUN: ${{ inputs.dry_run }}
+      DELETE_DATA: ${{ inputs.delete_data }}
+      ENVIRONMENT: ${{ matrix.environment }}
 
     steps:
       - uses: actions/checkout@v5
+
+      - name: Resolve the workspace
+        id: target
+        env:
+          PROD_DOMAIN: ${{ vars.TOMB_DOMAIN }}
+          DEV_DOMAIN: ${{ vars.TOMB_DEVELOP_DOMAIN }}
+        run: |
+          set -euo pipefail
+
+          # The same mapping deploy.yml and tofu/environments.tf use. Production
+          # is the `default` workspace; develop is its own.
+          case "$ENVIRONMENT" in
+            production)
+              workspace="default"
+              snapshots="true"
+              auto_stop="false"
+              domain="$PROD_DOMAIN"
+              ;;
+            develop)
+              workspace="develop"
+              snapshots="false"
+              auto_stop="true"
+              domain="${DEV_DOMAIN:-}"
+              if [ -z "$domain" ] && [ -n "$PROD_DOMAIN" ]; then
+                domain="dev.$PROD_DOMAIN"
+              fi
+              ;;
+            *)
+              echo "::error::Unknown environment '$ENVIRONMENT'."
+              exit 1
+              ;;
+          esac
+
+          {
+            echo "workspace=$workspace"
+            echo "snapshots=$snapshots"
+            echo "auto_stop=$auto_stop"
+            echo "domain=$domain"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "## Destroy: $ENVIRONMENT"
+            echo ""
+            echo "Workspace \`$workspace\`, dry run: $DRY_RUN, delete data: $DELETE_DATA."
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
@@ -99,56 +240,93 @@ jobs:
       - uses: opentofu/setup-opentofu@v1
         with:
           tofu_version: 1.12.6
+          # The wrapper prints "OpenTofu exited with code N" to stdout on
+          # failure, which `$(tofu ...)` then captures as if it were data. This
+          # workflow reads tofu's output in several places and uses none of the
+          # wrapper's step outputs, so it is off.
+          tofu_wrapper: false
+
+      - name: Lift the data disk guard in this checkout
+        # Edits the runner's copy only; nothing is committed. Fails loudly if
+        # the literal ever changes shape, because a silent no-op here would put
+        # back the exact failure this step exists to fix.
+        run: |
+          set -euo pipefail
+          sed -i 's/prevent_destroy[[:space:]]*=[[:space:]]*true/prevent_destroy = false/' compute.tf
+          if grep -nE 'prevent_destroy[[:space:]]*=[[:space:]]*true' ./*.tf; then
+            echo "::error::A prevent_destroy guard is still set; this workflow could not lift it."
+            exit 1
+          fi
+          grep -n 'prevent_destroy' compute.tf
 
       - name: Init
-        run: tofu init -backend-config="bucket=${{ vars.GCP_STATE_BUCKET }}"
+        run: tofu init -input=false -backend-config="bucket=${{ vars.GCP_STATE_BUCKET }}"
+
+      - name: Select the workspace
+        id: ws
+        env:
+          WORKSPACE: ${{ steps.target.outputs.workspace }}
+        run: |
+          set -euo pipefail
+
+          # develop's workspace exists only if it was ever deployed. Nothing
+          # there means nothing to destroy, which is a success, not an error.
+          #
+          # The listing is captured on its own so that a failure of tofu itself
+          # (a state-bucket error, a permission blip) fails this step. Tested
+          # inside the `if`, as a pipeline, it read as "workspace absent" and the
+          # run went green with the environment still running and billing.
+          workspaces="$(tofu workspace list)"
+          if ! printf '%s\n' "$workspaces" | sed 's/^[* ]*//' | grep -Fxq -- "$WORKSPACE"; then
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No '$WORKSPACE' workspace in state; there is nothing to destroy for $ENVIRONMENT."
+            echo "No \`$WORKSPACE\` workspace exists, so $ENVIRONMENT was never deployed or is already gone." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          tofu workspace select "$WORKSPACE"
+          selected="$(tofu workspace show)"
+          if [ "$selected" != "$WORKSPACE" ]; then
+            echo "::error::Asked for workspace '$WORKSPACE' but '$selected' is selected. Refusing to continue."
+            exit 1
+          fi
+
+          echo "exists=true" >> "$GITHUB_OUTPUT"
 
       - name: Record what exists, for the audit trail
+        id: before
+        if: steps.ws.outputs.exists == 'true'
         run: |
-          {
-            echo "### Resources currently in state"
-            echo ""
-            echo '```'
-            tofu state list || echo "(no state)"
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
+          set -euo pipefail
 
-      - name: Note what destroy cannot remove
-        run: |
-          echo "::warning::The Postgres data disk (tomb-platform-data) carries prevent_destroy."
-          echo "::warning::tofu destroy will REFUSE while that guard is in place - which is the point."
+          # Read now: outputs disappear with the resources. The disk name is
+          # what the snapshots are matched against once the disk is gone.
+          disk="$(tofu output -raw data_disk_name 2>/dev/null || true)"
+          echo "data_disk=$disk" >> "$GITHUB_OUTPUT"
+
+          state="$(tofu state list || true)"
+          count="$(printf '%s' "$state" | grep -c . || true)"
+
           {
+            echo "### Resources in state ($count)"
             echo ""
-            echo "### The data disk survives"
-            echo ""
-            echo "\`tomb-platform-data\` holds every user and session row and is marked"
-            echo "\`prevent_destroy\` in compute.tf, so this workflow cannot delete it."
-            echo "Destroy will tear down the VM, network and secrets and then stop."
-            echo ""
-            echo "To remove the data too, after this run:"
-            echo ""
-            echo "1. snapshot it: \`gcloud compute disks snapshot tomb-platform-data --zone ZONE\`"
-            echo "2. remove the lifecycle block in \`tofu/compute.tf\`"
-            echo "3. re-run this workflow"
-            echo ""
-            echo "That is three deliberate steps rather than one command, on purpose."
+            echo '```'
+            if [ -n "$state" ]; then printf '%s\n' "$state"; else echo "(no state)"; fi
+            echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Destroy plan
+        if: steps.ws.outputs.exists == 'true'
+        env:
+          TF_VAR_domain: ${{ steps.target.outputs.domain }}
+          TF_VAR_enable_snapshots: ${{ steps.target.outputs.snapshots }}
+          TF_VAR_enable_auto_stop: ${{ steps.target.outputs.auto_stop }}
         run: |
-          tofu plan -destroy -no-color -lock-timeout=5m \
-            -var="project_id=${{ vars.GCP_PROJECT_ID }}" \
-            -var="guild_realm=${{ vars.TOMB_GUILD_REALM }}" \
-            -var="bnet_client_id=${{ vars.BNET_CLIENT_ID }}" \
-            -var="guild_ranks=${{ vars.TOMB_GUILD_RANKS }}" \
-            -var="guild_roster_ttl=${{ vars.TOMB_GUILD_ROSTER_TTL }}" \
-            -var="guild_officer_rank=${{ vars.TOMB_GUILD_OFFICER_RANK }}" \
-            -var="timezone=${{ vars.TOMB_TIMEZONE }}" \
-            -var="admin=${{ vars.TOMB_ADMIN }}" \
-            -var="domain=${{ vars.TOMB_DOMAIN }}" \
-            -var="acme_email=${{ vars.ACME_EMAIL }}" \
-            -var="image=${{ vars.GCP_CURRENT_IMAGE || 'gcr.io/google-containers/pause:3.9' }}" \
-            | tee destroy-plan.txt
+          # pipefail: without it the exit status is tee's, and a refused plan
+          # reads as a success. That is how the guard error went unnoticed.
+          set -euo pipefail
+
+          tofu plan -destroy -input=false -no-color -lock-timeout=5m | tee destroy-plan.txt
 
           {
             echo ""
@@ -160,38 +338,118 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Stop here on a dry run
-        if: ${{ inputs.dry_run }}
-        run: echo "::notice::Dry run complete. Nothing was deleted. Re-run with dry_run unchecked to proceed."
+        if: steps.ws.outputs.exists == 'true' && inputs.dry_run
+        run: echo "::notice::Dry run complete. Nothing was deleted. Re-run with dry_run unchecked and delete_data ticked to proceed."
 
       - name: Destroy
-        if: ${{ !inputs.dry_run }}
-        run: |
-          tofu destroy -auto-approve -lock-timeout=5m -input=false \
-            -var="project_id=${{ vars.GCP_PROJECT_ID }}" \
-            -var="guild_realm=${{ vars.TOMB_GUILD_REALM }}" \
-            -var="bnet_client_id=${{ vars.BNET_CLIENT_ID }}" \
-            -var="guild_ranks=${{ vars.TOMB_GUILD_RANKS }}" \
-            -var="guild_roster_ttl=${{ vars.TOMB_GUILD_ROSTER_TTL }}" \
-            -var="guild_officer_rank=${{ vars.TOMB_GUILD_OFFICER_RANK }}" \
-            -var="timezone=${{ vars.TOMB_TIMEZONE }}" \
-            -var="admin=${{ vars.TOMB_ADMIN }}" \
-            -var="domain=${{ vars.TOMB_DOMAIN }}" \
-            -var="acme_email=${{ vars.ACME_EMAIL }}" \
-            -var="image=${{ vars.GCP_CURRENT_IMAGE || 'gcr.io/google-containers/pause:3.9' }}"
+        if: steps.ws.outputs.exists == 'true' && !inputs.dry_run
+        env:
+          TF_VAR_domain: ${{ steps.target.outputs.domain }}
+          TF_VAR_enable_snapshots: ${{ steps.target.outputs.snapshots }}
+          TF_VAR_enable_auto_stop: ${{ steps.target.outputs.auto_stop }}
+        run: tofu destroy -auto-approve -input=false -lock-timeout=5m
 
-      - name: What survived, on purpose
-        if: ${{ !inputs.dry_run }}
+      - name: Delete the data disk's snapshots
+        if: steps.ws.outputs.exists == 'true' && !inputs.dry_run && inputs.delete_data
+        env:
+          DATA_DISK: ${{ steps.before.outputs.data_disk }}
+        run: |
+          set -euo pipefail
+
+          # Snapshots outlive the disk by design (backup.tf), so tofu destroy
+          # leaves them behind and they keep billing. Matched two ways and
+          # unioned: by source disk, which survives the disk's deletion, and by
+          # the labels the snapshot policy stamps on every snapshot it takes.
+          #
+          # Each listing runs on its own, not inside a pipeline ending in
+          # `|| true`: a failed gcloud call (permissions, a flaky API) must fail
+          # this step, because a green run that left snapshots billing is the
+          # outcome this step exists to prevent. Only "none found" is tolerated.
+          by_disk=""
+          if [ -n "$DATA_DISK" ]; then
+            by_disk="$(gcloud compute snapshots list --project "$PROJECT_ID" \
+              --format='value(name,sourceDisk)' |
+              awk -v want="/disks/$DATA_DISK" \
+                'NF >= 2 && substr($2, length($2) - length(want) + 1) == want { print $1 }')"
+          else
+            echo "::warning::No data disk name was recorded; matching on labels only."
+          fi
+
+          by_label="$(gcloud compute snapshots list --project "$PROJECT_ID" \
+            --filter="labels.component=tomb-platform AND labels.environment=$ENVIRONMENT" \
+            --format='value(name)')"
+
+          printf '%s\n%s\n' "$by_disk" "$by_label" | sort -u | grep . > snapshots.txt || true
+
+          count="$(grep -c . snapshots.txt || true)"
+          {
+            echo ""
+            echo "### Snapshots deleted ($count)"
+            echo ""
+            echo '```'
+            if [ "$count" -gt 0 ]; then cat snapshots.txt; else echo "(none found)"; fi
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$count" -gt 0 ]; then
+            xargs -a snapshots.txt gcloud compute snapshots delete --project "$PROJECT_ID" --quiet
+          fi
+
+      - name: What is left
+        if: always() && steps.ws.outputs.exists == 'true' && !inputs.dry_run
+        run: |
+          set -uo pipefail
+
+          # Reporting only. A listing that fails (a permission, a flaky API)
+          # must not turn a finished teardown red.
+          list() {
+            echo "#### $1"
+            echo '```'
+            shift
+            "$@" 2>&1 || echo "(could not list)"
+            echo '```'
+          }
+
+          {
+            echo ""
+            echo "### Left in the project after destroying $ENVIRONMENT"
+            echo ""
+            echo "Anything listed here still bills. Both environments share this"
+            echo "project, so a clean list is only expected once both are gone."
+            echo ""
+            echo "State: \`$(tofu state list 2>/dev/null | grep -c . || true)\` resources remain in this workspace."
+            echo ""
+            list "VM instances"   gcloud compute instances list --project "$PROJECT_ID" --format='table(name,zone.basename(),status)'
+            list "Disks"          gcloud compute disks list --project "$PROJECT_ID" --format='table(name,zone.basename(),sizeGb,status)'
+            list "Reserved IPs"   gcloud compute addresses list --project "$PROJECT_ID" --format='table(name,region.basename(),address,status)'
+            list "Snapshots"      gcloud compute snapshots list --project "$PROJECT_ID" --format='table(name,diskSizeGb,storageBytes)'
+            list "Secrets"        gcloud secrets list --project "$PROJECT_ID" --format='table(name)'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: What survives, on purpose
+        if: steps.ws.outputs.exists == 'true' && !inputs.dry_run
         run: |
           {
             echo ""
-            echo "### Destroyed"
-            echo ""
-            echo "Still present, deliberately:"
+            echo "### Not removed by this workflow"
             echo ""
             echo "- the state bucket \`${{ vars.GCP_STATE_BUCKET }}\` and its version history"
-            echo "- everything in \`tofu/bootstrap\` (WIF pool, deployer service account)"
-            echo "- the Postgres data disk, which carries prevent_destroy"
+            echo "- the Artifact Registry repository \`tomb\` and every image in it"
+            echo "- the Workload Identity pool and the deployer service account"
             echo "- the project itself and its enabled APIs"
+            echo "- the domain registration and its DNS records, which live outside Google Cloud"
             echo ""
-            echo "Remove those by hand if you mean to close the project down entirely."
+            echo "**Disable Deploy now.** A push to \`develop\` runs deploy.yml with apply on, and"
+            echo "it does \`workspace select -or-create develop\` then \`tofu apply\`: it would"
+            echo "rebuild the VM, disk, reserved IP and secrets, because the state bucket,"
+            echo "registry and deployer identity above are all still here. A manual Deploy"
+            echo "from main does the same for production. Run:"
+            echo ""
+            echo "    gh workflow disable deploy.yml"
+            echo "    gh workflow disable dev-lifecycle.yml"
+            echo ""
+            echo "To stop paying for the rest, delete the project once both environments"
+            echo "are gone: \`gcloud projects delete ${{ vars.GCP_PROJECT_ID }}\`. It is"
+            echo "recoverable for 30 days. Then remove the DNS records for the domain,"
+            echo "which would otherwise point at an address Google can hand to someone else."
           } >> "$GITHUB_STEP_SUMMARY"

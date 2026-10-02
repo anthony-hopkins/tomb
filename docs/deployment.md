@@ -169,10 +169,10 @@ could be passed `true` by a typo, so the policy is additionally guarded on
 > destroying the VM but keeping its address, because Google bills an unattached
 > static IP at a higher rate than an attached one.
 >
-> If you do want develop gone entirely for a long break, note that its data disk
-> carries the same `prevent_destroy` guard as production's — OpenTofu requires a
-> literal there, so it cannot be made conditional — and removing it is a
-> deliberate edit.
+> If you do want develop gone entirely for a long break, run **Infra destroy**
+> with `environment=develop`. Its data disk carries the same `prevent_destroy`
+> guard as production's, which the workflow lifts itself in its own checkout, so
+> no edit to `compute.tf` is needed. See [Destroying](#destroying).
 
 The stack runs as a Compose project on one Compute Engine VM — Caddy for TLS,
 the Go app, and self-hosted Postgres on a persistent disk. `deploy.yml` applies
@@ -317,7 +317,7 @@ the approval.**
 - Applying requires someone to run **Deploy** from the Actions tab with
   `apply` checked. That is a deliberate human action, attributed and logged.
 - Destroying additionally requires typing the project id and the word `DESTROY`,
-  and defaults to a dry run.
+  ticking `delete_data` for a live run, and defaults to a dry run.
 
 That is weaker than a second pair of eyes but stronger than unattended
 auto-apply, and it is the best available without changing plan or visibility.
@@ -459,25 +459,51 @@ Run **Infra destroy** manually. It requires:
 1. `confirm_project` — the project id, typed exactly
 2. `confirm_phrase` — `DESTROY`
 3. `dry_run` unchecked, which it is not by default
+4. `delete_data` ticked, for a live run
+
+`environment` picks what to tear down: `both` (the default; develop first, then
+production), `production`, or `develop`. Each is its own OpenTofu workspace with
+its own VM, disk, reserved IP and secrets, so destroying one leaves the other
+billing.
 
 `dry_run` is **checked by default**: the first run produces a destroy plan and
 deletes nothing. Uncheck it only when you have read that plan.
 
-A live destroy tears down the VM, network and secrets — and then **stops at the
-Postgres data disk**, which carries `prevent_destroy` in `compute.tf`. That is
-the only irreplaceable state in the project, so deleting it takes three
-deliberate steps rather than one command: snapshot the disk, remove the
-lifecycle block, re-run the workflow. The run summary spells this out.
+The Postgres data disk carries `prevent_destroy` in `compute.tf`, and while that
+guard is in place `tofu destroy` refuses the **entire** run, not just the disk.
+So a live destroy cannot spare the data: the workflow lifts the guard in its own
+throwaway checkout (the repository is never edited) and removes the disk with
+everything else. That is why `delete_data` exists — ticking it is the explicit
+acknowledgement that every user and session row is lost. If you want a last
+copy, take a `pg_dump` over IAP SSH to your own machine **before** the run. A
+snapshot of the disk made by hand will not survive: the cleanup deletes every
+snapshot whose source is the data disk, including yours.
 
-**Deliberately left behind:** the data disk, the state bucket and its version
-history, everything in `tofu/bootstrap`, and the project itself.
+Daily snapshots outlive the disk by design (`backup.tf`), so a plain
+`tofu destroy` would leave them billing. With `delete_data` the workflow deletes
+them after the destroy and lists what it removed.
+
+**Deliberately left behind:** the state bucket and its version history, the
+Artifact Registry repository, everything in `tofu/bootstrap`, the project itself,
+and the domain registration and DNS records, which live outside Google Cloud. To
+stop paying for the rest, delete the project (`gcloud projects delete PROJECT`,
+recoverable for 30 days; it needs your own credentials, since the deployer
+service account cannot do it) and remove the DNS records so they stop pointing at
+an address Google can reassign.
+
+**Disable Deploy right after a destroy.** Nothing above stops `deploy.yml`: a
+push to `develop` applies automatically, and `workspace select -or-create`
+followed by `tofu apply` would rebuild the VM, disk, reserved IP and secrets
+while the state bucket and deployer identity still exist. Run
+`gh workflow disable deploy.yml` (and `dev-lifecycle.yml`), or delete the
+project promptly.
 
 ## Safety properties worth knowing
 
 - **No keys.** OIDC federation only, restricted to this repository.
 - **State is locked.** The GCS backend locks, and `deploy.yml` and
-  `infra-destroy.yml` share one concurrency group, so an apply and a destroy can
-  never run at once.
+  `infra-destroy.yml` share a concurrency group per environment, so an apply and a
+  destroy of the same environment can never run at once.
 - **No public SSH.** Port 22 is open only to Google's IAP range; the pipeline
   tunnels through it with its own federated credentials.
 - **Applies are never cancelled mid-flight.** `cancel-in-progress: false` on the

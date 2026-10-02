@@ -272,10 +272,11 @@ written down above, which is most of the work, but it has not been rehearsed.
 - **Postgres major version is pinned in two places**, `deploy/compose.yaml` for
   production and the repository-root `compose.yaml` for local development. Change
   both together or the two environments drift.
-- **The data disk carries `prevent_destroy`.** `tofu destroy` will refuse while
-  that guard is in place, which is the point: it is the only irreplaceable state
-  in the project. Removing it is three deliberate steps, documented in the
-  destroy workflow's run summary.
+- **The data disk carries `prevent_destroy`.** `tofu destroy` will refuse the
+  whole run while that guard is in place, which is the point: it is the only
+  irreplaceable state in the project. The destroy workflow lifts it in its own
+  throwaway checkout, and only for a run that also ticks `delete_data`; see
+  "Destroying" in `docs/deployment.md`.
 - **No secret values in state, with one exception.** The Battle.net client
   secret never enters state at all. The generated Postgres password does, which
   is why the state bucket is private with uniform access and public access
